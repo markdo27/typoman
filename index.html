@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TYPOMAN — Kinetic Type Engine</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Bebas+Neue&family=Oswald:wght@700&family=Anton&family=Playfair+Display:wght@900&family=Righteous&family=Archivo+Black&family=Russo+One&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{width:100%;height:100%;background:#0a0a0f;overflow:hidden;font-family:'Inter',sans-serif;}
+:root{
+  --bg:#0a0a0f;--bg2:rgba(18,18,28,0.85);--bg3:rgba(28,28,42,0.9);--bg4:rgba(38,38,55,0.9);
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.1);--border3:rgba(255,255,255,0.15);
+  --text:#f0f0f5;--text2:rgba(240,240,245,0.55);--text3:rgba(240,240,245,0.3);
+  --accent:#6c5ce7;--accent2:#a29bfe;--accent-glow:rgba(108,92,231,0.3);
+  --danger:#ff4757;--danger-bg:rgba(255,71,87,0.12);
+  --success:#2ed573;--warn:#ffa502;
+  --r:10px;--rs:6px;
+  --glass:rgba(18,18,28,0.7);--glass-border:rgba(255,255,255,0.08);
+}
+body{color:var(--text);font-size:12px;}
+
+/* Layout */
+.root{display:flex;flex-direction:column;width:100vw;height:100vh;padding:6px;gap:6px;}
+.top-bar{flex-shrink:0;display:flex;align-items:center;gap:12px;padding:6px 14px;
+  background:var(--glass);backdrop-filter:blur(20px);border:0.5px solid var(--glass-border);border-radius:var(--r);}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:3px;color:var(--accent2);user-select:none;}
+.logo span{color:var(--text);opacity:0.4;font-size:14px;letter-spacing:1px;margin-left:4px;}
+.top-sep{width:1px;height:18px;background:var(--border2);}
+.top-badge{font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--accent);
+  background:var(--accent-glow);padding:3px 8px;border-radius:20px;border:0.5px solid rgba(108,92,231,0.3);}
+.top-keys{margin-left:auto;display:flex;gap:6px;align-items:center;}
+.kbd{font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,0.06);
+  border:0.5px solid var(--border2);color:var(--text3);font-family:'Inter',monospace;}
+
+.main-row{display:flex;gap:6px;flex:1;min-height:0;}
+
+/* Panel */
+.panel{width:240px;flex-shrink:0;background:var(--glass);backdrop-filter:blur(20px);
+  border:0.5px solid var(--glass-border);border-radius:var(--r);overflow-y:auto;overflow-x:hidden;
+  scrollbar-width:thin;scrollbar-color:var(--bg4) transparent;}
+.panel::-webkit-scrollbar{width:3px;}
+.panel::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px;}
+
+.center-col{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;height:100%;}
+
+/* Canvas wrap */
+.canvas-wrap{flex:1;min-height:0;border-radius:var(--r);display:flex;align-items:center;justify-content:center;
+  overflow:hidden;position:relative;
+  background-color:#111118;
+  background-image:linear-gradient(45deg,#181822 25%,transparent 25%),linear-gradient(-45deg,#181822 25%,transparent 25%),
+    linear-gradient(45deg,transparent 75%,#181822 75%),linear-gradient(-45deg,transparent 75%,#181822 75%);
+  background-size:16px 16px;background-position:0 0,0 8px,8px -8px,-8px 0px;
+  border:0.5px solid var(--glass-border);}
+
+/* Motion bar */
+.motion-bar{flex-shrink:0;background:var(--glass);backdrop-filter:blur(20px);
+  border:0.5px solid var(--glass-border);border-radius:8px;padding:8px 14px;
+  display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.mb-label{font-size:9px;color:var(--accent2);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;white-space:nowrap;}
+.presets{display:flex;gap:4px;flex-wrap:wrap;}
+.pbtn{font-size:10px;padding:4px 10px;border-radius:20px;border:0.5px solid var(--border2);
+  background:var(--bg3);color:var(--text2);cursor:pointer;transition:all 0.15s;white-space:nowrap;font-weight:500;}
+.pbtn:hover{background:var(--bg4);color:var(--text);border-color:var(--border3);}
+.pbtn.active{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 0 12px var(--accent-glow);}
+.mb-slider{display:flex;align-items:center;gap:5px;}
+.mb-slider label{font-size:10px;color:var(--text2);white-space:nowrap;font-weight:500;}
+.mb-stop{font-size:10px;padding:4px 10px;border-radius:20px;border:0.5px solid rgba(255,71,87,0.35);
+  background:transparent;color:var(--danger);cursor:pointer;display:none;font-weight:600;transition:all 0.15s;}
+.mb-stop:hover{background:var(--danger-bg);}
+
+/* Audio button */
+.audio-btn{font-size:10px;padding:4px 10px;border-radius:20px;border:0.5px solid rgba(46,213,115,0.35);
+  background:transparent;color:var(--success);cursor:pointer;font-weight:600;transition:all 0.15s;white-space:nowrap;}
+.audio-btn:hover{background:rgba(46,213,115,0.1);}
+.audio-btn.active{background:rgba(46,213,115,0.2);border-color:var(--success);animation:audioPulse 1s infinite alternate;}
+@keyframes audioPulse{0%{box-shadow:0 0 0 rgba(46,213,115,0);}100%{box-shadow:0 0 14px rgba(46,213,115,0.3);}}
+
+/* Webcam mask */
+.mask-btn{font-size:10px;padding:4px 10px;border-radius:20px;border:0.5px solid rgba(255,165,2,0.35);
+  background:transparent;color:var(--warn);cursor:pointer;font-weight:600;transition:all 0.15s;white-space:nowrap;}
+.mask-btn:hover{background:rgba(255,165,2,0.1);}
+.mask-btn.active{background:rgba(255,165,2,0.2);border-color:var(--warn);}
+
+/* Easing graph */
+.graph-wrap{height:48px;background:var(--glass);backdrop-filter:blur(20px);border-radius:8px;
+  border:0.5px solid var(--glass-border);overflow:hidden;flex-shrink:0;cursor:pointer;}
+canvas#graphCanvas{display:block;width:100%;height:100%;}
+
+/* Sections */
+.sh{display:flex;align-items:center;gap:7px;padding:9px 12px;cursor:pointer;user-select:none;
+  border-bottom:0.5px solid var(--border);}
+.sh:hover{background:rgba(255,255,255,0.02);}
+.sh .ico{font-size:11px;opacity:0.4;width:14px;text-align:center;}
+.sh .lbl{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--text2);flex:1;}
+.sh .ar{font-size:8px;color:var(--text3);transition:transform 0.2s;}
+.sh.open .ar{transform:rotate(90deg);}
+.sb{padding:9px 12px;border-bottom:0.5px solid var(--border);display:flex;flex-direction:column;gap:7px;}
+.sb.hidden{display:none;}
+
+/* Word chips */
+.chips-wrap{display:flex;flex-wrap:wrap;gap:5px;min-height:32px;}
+.chip{display:flex;align-items:center;gap:4px;background:var(--bg3);border:0.5px solid var(--border2);
+  border-radius:20px;padding:3px 6px 3px 10px;cursor:grab;user-select:none;transition:all 0.15s;}
+.chip:active{cursor:grabbing;}
+.chip.dragging-chip{opacity:0.3;}
+.chip.drag-over{border-color:var(--accent);}
+.chip-text{font-size:11px;font-weight:700;color:var(--text);outline:none;min-width:12px;max-width:100px;}
+.chip-color{width:14px;height:14px;border-radius:50%;cursor:pointer;border:1.5px solid rgba(255,255,255,0.2);
+  flex-shrink:0;transition:transform 0.12s;}
+.chip-color:hover{transform:scale(1.15);}
+.chip-x{font-size:10px;color:var(--text3);cursor:pointer;padding:0 2px;line-height:1;transition:color 0.1s;}
+.chip-x:hover{color:var(--danger);}
+.chip-add{background:transparent;border:0.5px dashed var(--border2);border-radius:20px;padding:3px 10px;
+  font-size:10px;color:var(--text2);cursor:pointer;transition:all 0.12s;}
+.chip-add:hover{background:var(--bg3);color:var(--text);border-color:var(--accent);}
+
+/* Font presets */
+.font-presets{display:flex;flex-wrap:wrap;gap:4px;}
+.fpbtn{font-size:10px;padding:4px 8px;border-radius:var(--rs);border:0.5px solid var(--border2);
+  background:var(--bg3);color:var(--text2);cursor:pointer;transition:all 0.12s;white-space:nowrap;}
+.fpbtn:hover{background:var(--bg4);color:var(--text);}
+.fpbtn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+/* Sliders & inputs */
+.row{display:flex;align-items:center;gap:5px;}
+.row label{font-size:10px;color:var(--text2);flex:1;min-width:0;font-weight:500;}
+input[type=range]{flex:1.4;min-width:0;height:3px;-webkit-appearance:none;appearance:none;
+  background:var(--bg4);border-radius:2px;outline:none;cursor:pointer;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;
+  background:var(--accent2);cursor:pointer;border:2px solid var(--bg);transition:box-shadow 0.15s;}
+input[type=range]::-webkit-slider-thumb:hover{box-shadow:0 0 8px var(--accent-glow);}
+.ni{width:38px;font-size:10px;font-weight:600;text-align:right;background:var(--bg3);
+  border:0.5px solid var(--border2);border-radius:4px;color:var(--text);padding:2px 4px;outline:none;
+  -moz-appearance:textfield;font-family:'Inter',monospace;}
+.ni:focus{border-color:var(--accent);}
+.mni{width:34px;font-size:10px;font-weight:600;text-align:right;background:var(--bg3);
+  border:0.5px solid var(--border2);border-radius:4px;color:var(--text);padding:2px 3px;outline:none;
+  -moz-appearance:textfield;font-family:'Inter',monospace;}
+.mni:focus{border-color:var(--accent);}
+
+/* Buttons */
+.btn{font-size:10px;padding:4px 8px;border-radius:var(--rs);border:0.5px solid var(--border2);
+  background:var(--bg3);color:var(--text2);cursor:pointer;transition:all 0.12s;font-weight:500;white-space:nowrap;}
+.btn:hover{background:var(--bg4);color:var(--text);border-color:var(--border3);}
+.btn.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+.btn.accent{background:rgba(108,92,231,0.15);color:var(--accent2);border-color:rgba(108,92,231,0.3);}
+.btn.accent:hover{background:rgba(108,92,231,0.25);}
+.btn-row{display:flex;gap:4px;flex-wrap:wrap;}
+
+/* Ratio */
+.ratio-row{display:flex;gap:3px;flex-wrap:wrap;}
+.rbtn{font-size:9px;padding:3px 6px;border-radius:var(--rs);border:0.5px solid var(--border2);
+  background:var(--bg3);color:var(--text2);cursor:pointer;white-space:nowrap;transition:all 0.12s;}
+.rbtn:hover{background:var(--bg4);color:var(--text);}
+.rbtn.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+/* Color grid */
+.color-grid{display:flex;flex-wrap:wrap;gap:5px;}
+.swatch{width:20px;height:20px;border-radius:50%;cursor:pointer;border:2px solid transparent;
+  transition:transform 0.12s,box-shadow 0.15s;flex-shrink:0;}
+.swatch:hover{transform:scale(1.15);}
+.swatch.active{border-color:rgba(255,255,255,0.85);box-shadow:0 0 8px rgba(255,255,255,0.2);}
+
+/* Export */
+.dl-row{display:flex;gap:4px;}
+.dl-btn{flex:1;text-align:center;font-size:10px;padding:6px 0;border-radius:var(--rs);
+  border:0.5px solid var(--border2);background:var(--bg3);color:var(--text2);cursor:pointer;font-weight:500;
+  transition:all 0.12s;}
+.dl-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+/* Row scale */
+.lines-list{display:flex;flex-direction:column;gap:4px;max-height:120px;overflow-y:auto;}
+.line-row{display:flex;align-items:center;gap:4px;}
+.ll{font-size:9px;color:var(--text3);min-width:34px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;}
+
+/* Webcam overlay */
+#webcamVideo{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:none;z-index:0;}
+#mainCanvas{position:relative;z-index:1;}
+
+/* Live indicator */
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--success);animation:livePulse 1.5s infinite;display:none;}
+@keyframes livePulse{0%,100%{opacity:1;box-shadow:0 0 0 rgba(46,213,115,0);}50%{opacity:0.6;box-shadow:0 0 8px rgba(46,213,115,0.5);}}
+.live-dot.on{display:block;}
+
+/* Spectrum bar */
+.spectrum-bar{height:3px;background:var(--bg3);border-radius:2px;overflow:hidden;margin-top:-2px;}
+.spectrum-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--success));
+  transition:width 0.05s;border-radius:2px;}
+
+/* Crazy button */
+.crazy-btn{font-size:10px;padding:4px 10px;border-radius:20px;border:0.5px solid rgba(253,121,168,0.35);
+  background:transparent;color:#fd79a8;cursor:pointer;font-weight:600;transition:all 0.15s;white-space:nowrap;}
+.crazy-btn:hover{background:rgba(253,121,168,0.1);}
+.crazy-btn.active{background:rgba(253,121,168,0.2);border-color:#fd79a8;animation:crazyPulse 0.4s infinite alternate;}
+@keyframes crazyPulse{0%{box-shadow:0 0 0 rgba(253,121,168,0);transform:scale(1);}100%{box-shadow:0 0 14px rgba(253,121,168,0.4);transform:scale(1.05);}}
+
+/* Effect toggles */
+.fx-row{display:flex;gap:4px;flex-wrap:wrap;}
+.fxbtn{font-size:10px;padding:4px 8px;border-radius:var(--rs);border:0.5px solid var(--border2);
+  background:var(--bg3);color:var(--text2);cursor:pointer;transition:all 0.12s;font-weight:500;}
+.fxbtn:hover{background:var(--bg4);color:var(--text);}
+.fxbtn.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+</style>
+</head>
+<body>
+<div class="root">
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="logo">TYPOMAN<span>kinetic type engine</span></div>
+    <div class="top-sep"></div>
+    <div class="top-badge">v1.0</div>
+    <div class="live-dot" id="liveDot"></div>
+    <div class="top-keys">
+      <span class="kbd">Space</span><span style="font-size:9px;color:var(--text3)">play/stop</span>
+      <span class="kbd">R</span><span style="font-size:9px;color:var(--text3)">random</span>
+      <span class="kbd">M</span><span style="font-size:9px;color:var(--text3)">mic</span>
+    </div>
+  </div>
+
+  <div class="main-row">
+    <!-- Left Panel -->
+    <div class="panel">
+      <!-- Typography -->
+      <div class="sh open" data-sec="typo"><span class="ico">A</span><span class="lbl">Typography</span><span class="ar">›</span></div>
+      <div class="sb" id="sec-typo">
+        <div class="chips-wrap" id="chipsWrap"></div>
+        <button class="chip-add" id="chipAddBtn">+ Add word</button>
+        <div style="font-size:9px;color:var(--text3);margin-bottom:-2px;">Fonts</div>
+        <div class="font-presets" id="fontPresets">
+          <button class="fpbtn active" data-font="'Anton', sans-serif">Anton</button>
+          <button class="fpbtn" data-font="'Bebas Neue', sans-serif">Bebas</button>
+          <button class="fpbtn" data-font="'Oswald', sans-serif">Oswald</button>
+          <button class="fpbtn" data-font="'Playfair Display', serif">Playfair</button>
+          <button class="fpbtn" data-font="'Righteous', sans-serif">Righteous</button>
+          <button class="fpbtn" data-font="'Archivo Black', sans-serif">Archivo</button>
+          <button class="fpbtn" data-font="'Russo One', sans-serif">Russo</button>
+          <button class="fpbtn" data-font="Impact, sans-serif">Impact</button>
+        </div>
+      </div>
+
+      <!-- Frame -->
+      <div class="sh open" data-sec="frame"><span class="ico">▣</span><span class="lbl">Frame</span><span class="ar">›</span></div>
+      <div class="sb" id="sec-frame">
+        <div style="font-size:9px;color:var(--text3);margin-bottom:-2px;">Ratio presets</div>
+        <div class="ratio-row" id="ratioRow">
+          <button class="rbtn" data-w="500" data-h="500">1:1</button>
+          <button class="rbtn" data-w="500" data-h="625">4:5</button>
+          <button class="rbtn" data-w="500" data-h="889">9:16</button>
+          <button class="rbtn" data-w="700" data-h="467">3:2</button>
+          <button class="rbtn" data-w="700" data-h="394">16:9</button>
+        </div>
+        <div class="row"><label>Width</label><input type="range" id="cw" min="200" max="1000" step="10" value="500"><input class="ni" id="cwn" type="number" min="200" max="1000" value="500"></div>
+        <div class="row"><label>Height</label><input type="range" id="ch" min="200" max="1000" step="10" value="500"><input class="ni" id="chn" type="number" min="200" max="1000" value="500"></div>
+        <div class="row"><label>Letter spacing</label><input type="range" id="letterSpacing" min="-0.05" max="0.25" step="0.005" value="0"><input class="ni" id="lsn" type="number" step="0.005" value="0"></div>
+        <div class="row"><label>Row gap</label><input type="range" id="rowPad" min="-20" max="40" step="1" value="0"><input class="ni" id="rpn" type="number" value="0"></div>
+      </div>
+
+      <!-- Color -->
+      <div class="sh open" data-sec="color"><span class="ico">◎</span><span class="lbl">Color</span><span class="ar">›</span></div>
+      <div class="sb" id="sec-color">
+        <div style="font-size:9px;color:var(--text3);margin-bottom:-2px;">Background</div>
+        <div class="color-grid" id="bgPresets"></div>
+        <div style="font-size:9px;color:var(--text3);margin-top:3px;margin-bottom:-2px;">Text (global)</div>
+        <div class="color-grid" id="textPresets"></div>
+        <div class="btn-row" style="margin-top:3px;">
+          <button class="btn accent" id="randomBtn" style="flex:1;">⟳ Random</button>
+          <button class="btn" id="swapBtn">↔ Swap</button>
+        </div>
+      </div>
+
+      <!-- Row Scale -->
+      <div class="sh open" data-sec="scale"><span class="ico">≡</span><span class="lbl">Row Scale</span><span class="ar">›</span></div>
+      <div class="sb" id="sec-scale">
+        <div class="lines-list" id="linesList"></div>
+        <button class="btn" id="resetScalesBtn" style="align-self:flex-end;">Reset all</button>
+      </div>
+
+      <!-- Effects -->
+      <div class="sh" data-sec="fx"><span class="ico">✦</span><span class="lbl">Effects</span><span class="ar">›</span></div>
+      <div class="sb hidden" id="sec-fx">
+        <div class="fx-row">
+          <button class="fxbtn" id="fxShadow" data-fx="shadow">Shadow</button>
+          <button class="fxbtn" id="fxGlow" data-fx="glow">Glow</button>
+          <button class="fxbtn" id="fxOutline" data-fx="outline">Outline</button>
+          <button class="fxbtn" id="fxDouble" data-fx="double">Double</button>
+        </div>
+        <div class="row"><label>FX Strength</label><input type="range" id="fxStr" min="0" max="1" step="0.05" value="0.5"><input class="ni" id="fxStrN" type="number" step="0.05" value="0.50"></div>
+      </div>
+
+      <!-- Export -->
+      <div class="sh open" data-sec="export"><span class="ico">↑</span><span class="lbl">Export</span><span class="ar">›</span></div>
+      <div class="sb" id="sec-export">
+        <div class="dl-row">
+          <button class="dl-btn" id="dlPng">↓ PNG</button>
+          <button class="dl-btn" id="dlSvg">⎘ Copy SVG</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Center -->
+    <div class="center-col">
+      <div class="canvas-wrap" id="canvasWrap">
+        <video id="webcamVideo" autoplay playsinline muted></video>
+        <canvas id="mainCanvas"></canvas>
+      </div>
+      <div class="motion-bar">
+        <span class="mb-label">Motion</span>
+        <div class="presets" id="presets">
+          <button class="pbtn" data-preset="wave">Wave</button>
+          <button class="pbtn" data-preset="accordion">Accordion</button>
+          <button class="pbtn" data-preset="cascade">Cascade</button>
+          <button class="pbtn" data-preset="bounce">Bounce</button>
+          <button class="pbtn" data-preset="spring">Spring</button>
+          <button class="pbtn" data-preset="breathe">Breathe</button>
+        </div>
+        <div class="mb-slider">
+          <label>Speed</label>
+          <input type="range" id="motionSpeed" min="0.1" max="3" step="0.05" value="1" style="width:55px;">
+          <input class="mni" id="motionSpeedN" type="number" min="0.1" max="3" step="0.05" value="1.00">
+        </div>
+        <div class="mb-slider">
+          <label>Intensity</label>
+          <input type="range" id="motionIntensity" min="0.1" max="2" step="0.05" value="0.6" style="width:55px;">
+          <input class="mni" id="motionIntN" type="number" min="0.1" max="2" step="0.05" value="0.60">
+        </div>
+        <button class="audio-btn" id="audioBtn">🎤 Audio</button>
+        <button class="mask-btn" id="maskBtn">📷 Mask</button>
+        <button class="crazy-btn" id="crazyBtn">🔥 Crazy</button>
+        <button class="mb-stop" id="stopBtn">■ Stop</button>
+      </div>
+      <div class="spectrum-bar"><div class="spectrum-fill" id="spectrumFill"></div></div>
+      <div class="graph-wrap"><canvas id="graphCanvas"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════
+const canvas = document.getElementById('mainCanvas');
+const ctx = canvas.getContext('2d');
+const graphCanvas = document.getElementById('graphCanvas');
+const gCtx = graphCanvas.getContext('2d');
+const spectrumFill = document.getElementById('spectrumFill');
+
+let words = ['TYPO', 'MAN'];
+let wordColors = [null, null]; // null = use global textColor
+let lineScales = [1.0, 1.0];
+let canvasW = 500, canvasH = 500;
+let bgColor = '#0a0a0f', textColor = '#ffffff';
+let letterSpacing = 0, rowPadPx = 0;
+let currentFont = "'Anton', sans-serif";
+let animFrame = null, activePreset = null;
+let animTime = 0, lastTimestamp = null, motionSpeed = 1, motionIntensity = 0.6;
+
+// Audio reactive
+let audioCtx = null, analyser = null, audioSource = null, audioActive = false;
+let audioData = new Uint8Array(0);
+let audioLevel = 0;
+
+// Webcam mask
+let webcamActive = false, webcamStream = null;
+const webcamVideo = document.getElementById('webcamVideo');
+
+// ═══════════════════════════════════════════════════════════════════════
+// EASING
+// ═══════════════════════════════════════════════════════════════════════
+const E = {
+  sine: t => -(Math.cos(Math.PI * t) - 1) / 2,
+  outQuint: t => 1 - Math.pow(1 - t, 5),
+  inOutCubic: t => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2,
+  inOutQuart: t => t < 0.5 ? 8*t*t*t*t : 1 - Math.pow(-2*t+2, 4)/2,
+  bounce: t => {
+    const n1=7.5625, d1=2.75;
+    if(t<1/d1) return n1*t*t;
+    else if(t<2/d1) return n1*(t-=1.5/d1)*t+0.75;
+    else if(t<2.5/d1) return n1*(t-=2.25/d1)*t+0.9375;
+    else return n1*(t-=2.625/d1)*t+0.984375;
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// SLIDER ↔ NUMBER SYNC
+// ═══════════════════════════════════════════════════════════════════════
+function linkSN(slider, numEl, dec, cb) {
+  slider.addEventListener('input', () => { const v = parseFloat(slider.value); numEl.value = v.toFixed(dec); cb(v); });
+  numEl.addEventListener('change', () => {
+    let v = parseFloat(numEl.value) || 0;
+    v = Math.max(parseFloat(slider.min), Math.min(parseFloat(slider.max), v));
+    slider.value = v; numEl.value = v.toFixed(dec); cb(v);
+  });
+}
+linkSN(document.getElementById('cw'), document.getElementById('cwn'), 0, v => { canvasW = v; if (!activePreset) draw(); });
+linkSN(document.getElementById('ch'), document.getElementById('chn'), 0, v => { canvasH = v; if (!activePreset) draw(); });
+linkSN(document.getElementById('letterSpacing'), document.getElementById('lsn'), 3, v => { letterSpacing = v; if (!activePreset) draw(); });
+linkSN(document.getElementById('rowPad'), document.getElementById('rpn'), 0, v => { rowPadPx = parseInt(v); if (!activePreset) draw(); });
+linkSN(document.getElementById('motionSpeed'), document.getElementById('motionSpeedN'), 2, v => { motionSpeed = v; });
+linkSN(document.getElementById('motionIntensity'), document.getElementById('motionIntN'), 2, v => { motionIntensity = v; });
+
+// ═══════════════════════════════════════════════════════════════════════
+// RATIO & SIZE
+// ═══════════════════════════════════════════════════════════════════════
+document.getElementById('ratioRow').addEventListener('click', e => {
+  const btn = e.target.closest('.rbtn'); if (!btn) return;
+  document.querySelectorAll('.rbtn').forEach(b => b.classList.remove('on')); btn.classList.add('on');
+  canvasW = parseInt(btn.dataset.w); canvasH = parseInt(btn.dataset.h);
+  document.getElementById('cw').value = canvasW; document.getElementById('cwn').value = canvasW;
+  document.getElementById('ch').value = canvasH; document.getElementById('chn').value = canvasH;
+  if (!activePreset) draw();
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// COLOR SYSTEM
+// ═══════════════════════════════════════════════════════════════════════
+const BG_PRESETS = ['#0a0a0f','#ffffff','#1a1a2e','#0f3460','#e94560','#16213e','#533483','#2c3333','#ffd369'];
+const TEXT_PRESETS = ['#ffffff','#000000','#FF4D00','#FF2D55','#6c5ce7','#00d2d3','#feca57','#ff6b6b','#48dbfb','#2ed573','#a29bfe','#fd79a8'];
+let activeBgIdx = 0, activeTextIdx = 0;
+
+function hexLum(hex) { const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255; return 0.2126*r+0.7152*g+0.0722*b; }
+function contrast(a,b) { const la=hexLum(a),lb=hexLum(b); return(Math.max(la,lb)+0.05)/(Math.min(la,lb)+0.05); }
+function hslToHex(h,s,l) { s/=100;l/=100;const a=s*Math.min(l,1-l);const f=n=>{const k=(n+h/30)%12;const c=l-a*Math.max(-1,Math.min(k-3,9-k,1));return Math.round(255*c).toString(16).padStart(2,'0');};return`#${f(0)}${f(8)}${f(4)}`; }
+
+function buildColorPresets() {
+  ['bgPresets', 'textPresets'].forEach((id, ci) => {
+    const el = document.getElementById(id); el.innerHTML = '';
+    const colors = ci === 0 ? BG_PRESETS : TEXT_PRESETS;
+    const active = ci === 0 ? activeBgIdx : activeTextIdx;
+    colors.forEach((c, i) => {
+      const s = document.createElement('div'); s.className = 'swatch' + (i === active ? ' active' : '');
+      const lum = hexLum(c);
+      s.style.cssText = `background:${c};border-color:${i===active?'rgba(255,255,255,0.85)':(lum>0.6?'rgba(0,0,0,0.2)':'rgba(255,255,255,0.1)')};`;
+      s.addEventListener('click', () => {
+        if (ci === 0) { bgColor = c; activeBgIdx = i; } else { textColor = c; activeTextIdx = i; }
+        buildColorPresets(); if (!activePreset) draw();
+      });
+      el.appendChild(s);
+    });
+  });
+}
+
+document.getElementById('randomBtn').addEventListener('click', randomColors);
+document.getElementById('swapBtn').addEventListener('click', () => {
+  [bgColor, textColor] = [textColor, bgColor]; buildColorPresets(); if (!activePreset) draw();
+});
+
+function randomColors() {
+  const bh=Math.random()*360, bs=65+Math.random()*35, bl=Math.random()<0.5?8+Math.random()*25:60+Math.random()*30;
+  bgColor = hslToHex(bh,bs,bl);
+  let tries=0;
+  do { const th=(bh+90+Math.random()*180)%360, ts=55+Math.random()*40, tl=bl>45?8+Math.random()*30:65+Math.random()*30; textColor=hslToHex(th,ts,tl); tries++; }
+  while(contrast(bgColor,textColor)<4.5 && tries<30);
+  activeBgIdx=-1; activeTextIdx=-1; buildColorPresets(); if (!activePreset) draw();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// WORD CHIPS (with per-word color)
+// ═══════════════════════════════════════════════════════════════════════
+let dragSrc = null;
+function rebuildChips() {
+  const wrap = document.getElementById('chipsWrap'); wrap.innerHTML = '';
+  words.forEach((w, i) => {
+    const chip = document.createElement('div'); chip.className = 'chip'; chip.draggable = true;
+
+    // Color dot
+    const colorDot = document.createElement('div'); colorDot.className = 'chip-color';
+    colorDot.style.background = wordColors[i] || textColor;
+    colorDot.title = 'Click to set per-word color';
+    colorDot.addEventListener('click', e => {
+      e.stopPropagation();
+      const c = prompt('Hex color for "' + w + '" (empty = global):', wordColors[i] || '');
+      if (c === null) return;
+      wordColors[i] = c && /^#?[0-9a-f]{3,6}$/i.test(c) ? (c.startsWith('#') ? c : '#'+c) : null;
+      rebuildChips(); if (!activePreset) draw();
+    });
+
+    const span = document.createElement('span'); span.className='chip-text'; span.contentEditable='true'; span.spellcheck=false; span.textContent=w;
+    span.addEventListener('input', () => { words[i]=span.textContent.trim()||''; buildLineControls(); if(!activePreset)draw(); });
+    span.addEventListener('keydown', e => { if(e.key==='Enter'){e.preventDefault();span.blur();} });
+
+    const x = document.createElement('span'); x.className='chip-x'; x.textContent='×';
+    x.addEventListener('click', e => { e.stopPropagation(); words.splice(i,1); wordColors.splice(i,1); lineScales.splice(i,1); rebuildChips(); buildLineControls(); if(!activePreset)draw(); });
+
+    chip.appendChild(colorDot); chip.appendChild(span); chip.appendChild(x);
+
+    chip.addEventListener('dragstart', e => { dragSrc=i; chip.classList.add('dragging-chip'); e.dataTransfer.effectAllowed='move'; });
+    chip.addEventListener('dragend', () => { chip.classList.remove('dragging-chip'); document.querySelectorAll('.chip').forEach(c=>c.classList.remove('drag-over')); });
+    chip.addEventListener('dragover', e => { e.preventDefault(); chip.classList.add('drag-over'); });
+    chip.addEventListener('dragleave', () => chip.classList.remove('drag-over'));
+    chip.addEventListener('drop', e => {
+      e.preventDefault(); chip.classList.remove('drag-over');
+      if (dragSrc===null||dragSrc===i) return;
+      const tw=words.splice(dragSrc,1)[0]; words.splice(i,0,tw);
+      const tc=wordColors.splice(dragSrc,1)[0]; wordColors.splice(i,0,tc);
+      const ts=lineScales.splice(dragSrc,1)[0]; lineScales.splice(i,0,ts);
+      rebuildChips(); buildLineControls(); if(!activePreset)draw(); dragSrc=null;
+    });
+    wrap.appendChild(chip);
+  });
+}
+
+document.getElementById('chipAddBtn').addEventListener('click', () => {
+  words.push('NEW'); wordColors.push(null); lineScales.push(1.0);
+  rebuildChips(); buildLineControls(); if(!activePreset) draw();
+  const chips = document.querySelectorAll('.chip-text'); if(chips.length) chips[chips.length-1].focus();
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// FONT PRESETS
+// ═══════════════════════════════════════════════════════════════════════
+document.getElementById('fontPresets').addEventListener('click', e => {
+  const btn = e.target.closest('.fpbtn'); if (!btn) return;
+  document.querySelectorAll('.fpbtn').forEach(b => b.classList.remove('active')); btn.classList.add('active');
+  currentFont = btn.dataset.font;
+  if (!activePreset) draw();
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// LINE CONTROLS
+// ═══════════════════════════════════════════════════════════════════════
+function getLines() { return words.filter(w => w.trim() !== ''); }
+
+function buildLineControls() {
+  const lines = getLines();
+  while (lineScales.length < lines.length) lineScales.push(1.0);
+  lineScales = lineScales.slice(0, lines.length);
+  const list = document.getElementById('linesList'); list.innerHTML = '';
+  lines.forEach((line, i) => {
+    const row = document.createElement('div'); row.className='line-row';
+    const lbl = document.createElement('span'); lbl.className='ll'; lbl.textContent=line;
+    const sl = document.createElement('input'); sl.type='range'; sl.min='0.1'; sl.max='1.8'; sl.step='0.05'; sl.value=lineScales[i]; sl.style.flex='1'; sl.style.minWidth='0';
+    const ni = document.createElement('input'); ni.type='text'; ni.className='ni'; ni.readOnly=true; ni.style.width='34px';
+    const updatePct = () => { const tot=lineScales.reduce((a,s)=>a+(s||1),0); ni.value=Math.round((lineScales[i]||1)/tot*100)+'%'; };
+    updatePct();
+    sl.addEventListener('input', () => {
+      lineScales[i]=parseFloat(sl.value); updatePct();
+      document.querySelectorAll('#linesList .ni').forEach((el,j)=>{const tot=lineScales.reduce((a,s)=>a+(s||1),0);el.value=Math.round((lineScales[j]||1)/tot*100)+'%';});
+      if(!activePreset) draw();
+    });
+    row.appendChild(lbl); row.appendChild(sl); row.appendChild(ni); list.appendChild(row);
+  });
+}
+document.getElementById('resetScalesBtn').addEventListener('click', () => { lineScales=lineScales.map(()=>1.0); buildLineControls(); draw(); });
+
+// ═══════════════════════════════════════════════════════════════════════
+// RENDER ENGINE
+// ═══════════════════════════════════════════════════════════════════════
+function computeLayout(scales) {
+  const lines = getLines(); if (!lines.length) return [];
+  const n = lines.length, total = scales.reduce((a,s) => a+(s||1), 0);
+  const totalPad = rowPadPx * (n-1);
+  const unitH = (canvasH - totalPad) / Math.max(total, 0.001);
+  let y = 0;
+  return lines.map((line, i) => {
+    const lineH = unitH * (scales[i] || 1);
+    const gap = i < n-1 ? rowPadPx : 0;
+    const r = { y, lineH, text: line.trim() || ' ', gap };
+    y += lineH + gap;
+    return r;
+  });
+}
+
+function getFont(sz) { return `900 ${sz}px ${currentFont}`; }
+
+function renderScene(dctx, W, H, scales, forExport) {
+  dctx.fillStyle = bgColor;
+  dctx.fillRect(0, 0, W, H);
+
+  // If webcam mask is active and not exporting, draw webcam first
+  if (webcamActive && !forExport && webcamVideo.readyState >= 2) {
+    dctx.save();
+    dctx.globalCompositeOperation = 'source-over';
+    // Scale webcam to fill
+    const vw = webcamVideo.videoWidth, vh = webcamVideo.videoHeight;
+    const scale = Math.max(W/vw, H/vh);
+    const sw = vw*scale, sh = vh*scale;
+    dctx.drawImage(webcamVideo, (W-sw)/2, (H-sh)/2, sw, sh);
+    dctx.restore();
+  }
+
+  const layout = computeLayout(scales);
+  const lines = getLines();
+
+  layout.forEach((row, i) => {
+    const { y, lineH, text } = row;
+    const sz = Math.max(Math.ceil(lineH * 1.15), 10);
+    const ls = letterSpacing * sz;
+    const color = wordColors[i] || textColor;
+    const chars = [...text];
+
+    // Create offscreen canvas for this row
+    const off = document.createElement('canvas');
+    const tH = Math.max(Math.ceil(sz * 2), 4);
+    off.width = W; off.height = tH;
+    const oc = off.getContext('2d');
+    oc.font = getFont(sz);
+
+    // Pre-measure all character widths BEFORE any scale transform
+    const charWidths = chars.map(c => oc.measureText(c).width);
+    let nw = 0;
+    charWidths.forEach((w, k) => { nw += w + (k < chars.length-1 ? ls : 0); });
+    nw = Math.max(nw, 1);
+    const scaleX = W / nw;
+
+    // Draw text stretched horizontally on offscreen canvas
+    oc.fillStyle = color;
+    oc.textBaseline = 'top';
+    oc.save();
+    oc.scale(scaleX, 1);
+    let cx = 0;
+    chars.forEach((c, k) => {
+      oc.fillText(c, cx, 0);
+      cx += charWidths[k] + (k < chars.length-1 ? ls : 0);
+    });
+    oc.restore();
+
+    // Scan for actual pixel bounds (crop whitespace)
+    const id = oc.getImageData(0, 0, W, tH);
+    const px = id.data;
+    let minR = tH, maxR = 0;
+    for (let py = 0; py < tH; py++) {
+      for (let px2 = 0; px2 < W; px2++) {
+        if (px[(py * W + px2) * 4 + 3] > 8) {
+          if (py < minR) minR = py;
+          if (py > maxR) maxR = py;
+        }
+      }
+    }
+    if (minR > maxR) { minR = 0; maxR = Math.ceil(lineH); }
+    const glyphH = maxR - minR + 1;
+
+    // Draw offscreen canvas cropped glyph strip into the main canvas row
+    dctx.drawImage(off, 0, minR, W, glyphH, 0, y, W, lineH);
+  });
+
+  // Apply effects (shadow, glow, outline, double)
+  applyFx(dctx, W, H);
+  if (webcamActive && !forExport) {
+    // Redraw: webcam bg → text mask overlay
+    // Clear and redo with proper compositing
+    dctx.clearRect(0, 0, W, H);
+    dctx.fillStyle = bgColor;
+    dctx.fillRect(0, 0, W, H);
+
+    // Create offscreen for text mask
+    const offMask = document.createElement('canvas');
+    offMask.width = W; offMask.height = H;
+    const mCtx = offMask.getContext('2d');
+
+    // Draw webcam
+    if (webcamVideo.readyState >= 2) {
+      const vw = webcamVideo.videoWidth, vh = webcamVideo.videoHeight;
+      const scale = Math.max(W/vw, H/vh);
+      const sw = vw*scale, sh = vh*scale;
+      mCtx.drawImage(webcamVideo, (W-sw)/2, (H-sh)/2, sw, sh);
+    }
+
+    // Cut with text (destination-in)
+    mCtx.globalCompositeOperation = 'destination-in';
+    layout.forEach((row, i) => {
+      const { y, lineH, text } = row;
+      const sz = Math.max(Math.ceil(lineH * 1.15), 10);
+      const ls = letterSpacing * sz;
+      const chars = [...text];
+
+      const off = document.createElement('canvas');
+      const tH = Math.max(Math.ceil(sz * 2), 4);
+      off.width = W; off.height = tH;
+      const oc = off.getContext('2d');
+      oc.font = getFont(sz);
+      const charWidths = chars.map(c => oc.measureText(c).width);
+      let nw = 0;
+      charWidths.forEach((w, k) => { nw += w + (k < chars.length-1 ? ls : 0); });
+      const scaleX = W / Math.max(nw, 1);
+
+      oc.fillStyle = '#fff';
+      oc.textBaseline = 'top';
+      oc.save(); oc.scale(scaleX, 1);
+      let cx = 0;
+      chars.forEach((c, k) => {
+        oc.fillText(c, cx, 0);
+        cx += charWidths[k] + (k < chars.length-1 ? ls : 0);
+      });
+      oc.restore();
+
+      const id = oc.getImageData(0, 0, W, tH);
+      const px = id.data;
+      let minR = tH, maxR = 0;
+      for (let py = 0; py < tH; py++)
+        for (let px2 = 0; px2 < W; px2++)
+          if (px[(py*W+px2)*4+3] > 8) { if(py<minR) minR=py; if(py>maxR) maxR=py; }
+      if (minR > maxR) { minR = 0; maxR = Math.ceil(lineH); }
+      const glyphH = maxR - minR + 1;
+
+      mCtx.drawImage(off, 0, minR, W, glyphH, 0, y, W, lineH);
+    });
+
+    // Composite masked webcam onto main canvas
+    dctx.drawImage(offMask, 0, 0);
+  }
+}
+
+function draw() {
+  canvas.width = canvasW; canvas.height = canvasH;
+  renderScene(ctx, canvasW, canvasH, lineScales, false);
+  drawGraph();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MOTION PRESETS
+// ═══════════════════════════════════════════════════════════════════════
+const motionPresets = {
+  wave: (t,i,n,I) => { const ph=i/Math.max(n,1); const s=(Math.sin((t-ph)*Math.PI*2)+1)/2; return 1+I*0.35*(E.sine(s)*2-1); },
+  accordion: (t,i,n,I) => { const sign=i%2===0?1:-1; const s=(Math.sin(t*Math.PI*2)+1)/2; return 1+sign*I*0.45*(s*2-1); },
+  cascade: (t,i,n,I) => { const ph=i/Math.max(n,1)*0.55; const raw=(t-ph+10)%1; const s=(Math.sin(raw*Math.PI*2)+1)/2; return 1+I*0.45*(E.inOutQuart(s)*2-1); },
+  bounce: (t,i,n,I) => { const ph=i/Math.max(n,1)*0.4; const raw=(t-ph+10)%1; return 1+I*0.5*(E.bounce(raw)-0.5); },
+  spring: (t,i,n,I) => {
+    const ph = i/Math.max(n,1)*0.3;
+    const raw = (t-ph+10)%1;
+    const decay = Math.exp(-raw*4);
+    const osc = Math.sin(raw*Math.PI*8)*decay;
+    return 1 + I*0.6*osc;
+  },
+  breathe: (t,i,n,I) => {
+    const s = (Math.sin(t*Math.PI*2)+1)/2;
+    const breathe = E.sine(s);
+    const ph = i/Math.max(n,1)*0.2;
+    return 1 + I*0.3*(breathe + Math.sin((t+ph)*Math.PI*4)*0.15 - 0.5);
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// ANIMATION LOOP
+// ═══════════════════════════════════════════════════════════════════════
+function animLoop(ts) {
+  if (!lastTimestamp) lastTimestamp = ts;
+  const dt = Math.min((ts - lastTimestamp) / 1000, 0.05);
+  animTime += dt * motionSpeed; lastTimestamp = ts;
+
+  const lines = getLines(), n = lines.length, I = motionIntensity;
+  const period = 3.5, cycleT = (animTime / period) % 1;
+
+  // Audio reactive overlay
+  let audioScales = null;
+  if (audioActive && analyser) {
+    analyser.getByteFrequencyData(audioData);
+    const bands = n || 1;
+    audioScales = [];
+    const bandSize = Math.floor(audioData.length / bands);
+    let totalLevel = 0;
+    for (let b = 0; b < bands; b++) {
+      let sum = 0;
+      for (let j = b*bandSize; j < (b+1)*bandSize && j < audioData.length; j++) sum += audioData[j];
+      const avg = sum / bandSize / 255;
+      totalLevel += avg;
+      audioScales.push(1 + avg * I * 1.5);
+    }
+    audioLevel = totalLevel / bands;
+    spectrumFill.style.width = (audioLevel * 100) + '%';
+  } else {
+    spectrumFill.style.width = '0%';
+  }
+
+  // Compute final scales
+  let finalScales;
+  if (audioActive && audioScales) {
+    finalScales = lines.map((_, i) => Math.max(0.05, (lineScales[i]||1) * (audioScales[i]||1)));
+  } else {
+    const fn = motionPresets[activePreset];
+    if (fn) {
+      finalScales = lines.map((_, i) => Math.max(0.05, (lineScales[i]||1) * fn(cycleT, i, n, I)));
+    } else {
+      finalScales = lineScales.slice();
+    }
+  }
+
+  canvas.width = canvasW; canvas.height = canvasH;
+  renderScene(ctx, canvasW, canvasH, finalScales, false);
+  drawGraph();
+  animFrame = requestAnimationFrame(animLoop);
+}
+
+function stopAnim() {
+  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+  lastTimestamp = null; activePreset = null;
+  document.querySelectorAll('.pbtn').forEach(b => b.classList.remove('active'));
+  document.getElementById('stopBtn').style.display = 'none';
+  document.getElementById('liveDot').classList.remove('on');
+  draw();
+}
+
+function startPreset(preset) {
+  if (activePreset === preset) { stopAnim(); return; }
+  stopAnim(); activePreset = preset; animTime = 0; lastTimestamp = null;
+  document.querySelectorAll('.pbtn').forEach(b => b.classList.toggle('active', b.dataset.preset === preset));
+  document.getElementById('stopBtn').style.display = '';
+  document.getElementById('liveDot').classList.add('on');
+  animFrame = requestAnimationFrame(animLoop);
+}
+
+document.getElementById('presets').addEventListener('click', e => {
+  const btn = e.target.closest('.pbtn'); if (!btn) return;
+  startPreset(btn.dataset.preset);
+});
+document.getElementById('stopBtn').addEventListener('click', stopAnim);
+
+// ═══════════════════════════════════════════════════════════════════════
+// AUDIO REACTIVE
+// ═══════════════════════════════════════════════════════════════════════
+document.getElementById('audioBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('audioBtn');
+  if (audioActive) {
+    audioActive = false; btn.classList.remove('active'); btn.textContent = '🎤 Audio';
+    if (audioSource) { audioSource.disconnect(); audioSource = null; }
+    document.getElementById('liveDot').classList.remove('on');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    audioData = new Uint8Array(analyser.frequencyBinCount);
+    audioSource = audioCtx.createMediaStreamSource(stream);
+    audioSource.connect(analyser);
+    audioActive = true;
+    btn.classList.add('active'); btn.textContent = '🎤 Live';
+    document.getElementById('liveDot').classList.add('on');
+    // Start animation if not running
+    if (!animFrame) {
+      activePreset = activePreset || 'wave';
+      lastTimestamp = null;
+      animFrame = requestAnimationFrame(animLoop);
+    }
+  } catch (err) {
+    console.warn('Mic access denied:', err);
+    btn.textContent = '🎤 Denied';
+    setTimeout(() => btn.textContent = '🎤 Audio', 2000);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// WEBCAM MASK
+// ═══════════════════════════════════════════════════════════════════════
+document.getElementById('maskBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('maskBtn');
+  if (webcamActive) {
+    webcamActive = false; btn.classList.remove('active');
+    webcamVideo.style.display = 'none';
+    if (webcamStream) { webcamStream.getTracks().forEach(t => t.stop()); webcamStream = null; }
+    if (!activePreset && !audioActive) draw(); return;
+  }
+  try {
+    webcamStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 } });
+    webcamVideo.srcObject = webcamStream;
+    webcamActive = true;
+    btn.classList.add('active');
+    // Start animation if not running
+    if (!animFrame) {
+      activePreset = activePreset || 'breathe';
+      lastTimestamp = null;
+      document.querySelectorAll('.pbtn').forEach(b => b.classList.toggle('active', b.dataset.preset === activePreset));
+      document.getElementById('stopBtn').style.display = '';
+      document.getElementById('liveDot').classList.add('on');
+      animFrame = requestAnimationFrame(animLoop);
+    }
+  } catch (err) {
+    console.warn('Camera access denied:', err);
+    btn.textContent = '📷 Denied';
+    setTimeout(() => btn.textContent = '📷 Mask', 2000);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// GRAPH
+// ═══════════════════════════════════════════════════════════════════════
+function drawGraph() {
+  const gw = graphCanvas.offsetWidth || 400, gh = graphCanvas.offsetHeight || 48;
+  if (graphCanvas.width !== gw) graphCanvas.width = gw;
+  if (graphCanvas.height !== gh) graphCanvas.height = gh;
+  gCtx.fillStyle = 'rgba(10,10,15,0.9)'; gCtx.fillRect(0, 0, gw, gh);
+
+  if (!activePreset && !audioActive) {
+    gCtx.fillStyle = 'rgba(255,255,255,0.1)'; gCtx.font = '10px Inter,sans-serif';
+    gCtx.textAlign = 'center'; gCtx.textBaseline = 'middle';
+    gCtx.fillText('Select a motion preset or enable audio', gw/2, gh/2);
+    return;
+  }
+
+  const lines = getLines(), n = Math.max(lines.length, 1), I = motionIntensity;
+  const period = 3.5, loopSecs = period / motionSpeed;
+
+  if (audioActive && analyser) {
+    // Draw spectrum bars
+    analyser.getByteFrequencyData(audioData);
+    const barW = gw / audioData.length;
+    for (let i = 0; i < audioData.length; i++) {
+      const h = (audioData[i] / 255) * gh;
+      const hue = (i / audioData.length) * 120 + 220;
+      gCtx.fillStyle = `hsla(${hue}, 80%, 65%, 0.6)`;
+      gCtx.fillRect(i * barW, gh - h, barW - 1, h);
+    }
+    return;
+  }
+
+  const fn = motionPresets[activePreset]; if (!fn) return;
+  const rc = Math.min(n, 4);
+  for (let ri = 0; ri < rc; ri++) {
+    const alpha = ri === 0 ? 0.6 : Math.max(0.08, 0.18 - ri*0.04);
+    const hue = 260 + ri * 30;
+    gCtx.strokeStyle = `hsla(${hue}, 70%, 70%, ${alpha})`;
+    gCtx.lineWidth = ri === 0 ? 1.5 : 0.8;
+    gCtx.beginPath();
+    for (let px = 0; px <= gw; px++) {
+      const tv = (px/gw) * loopSecs + animTime - loopSecs;
+      const cyc = (tv / period) % 1;
+      const v = fn(cyc, ri, n, I);
+      const y = gh - ((v - 0.5) * gh * 0.7 + gh * 0.5);
+      px === 0 ? gCtx.moveTo(px, y) : gCtx.lineTo(px, y);
+    }
+    gCtx.stroke();
+  }
+
+  // Playhead
+  gCtx.strokeStyle = 'rgba(108,92,231,0.3)'; gCtx.lineWidth = 1;
+  gCtx.setLineDash([3,3]); gCtx.beginPath(); gCtx.moveTo(gw, 0); gCtx.lineTo(gw, gh); gCtx.stroke(); gCtx.setLineDash([]);
+  const v0 = fn((animTime/period)%1, 0, n, I);
+  const cy = gh - ((v0-0.5)*gh*0.7+gh*0.5);
+  gCtx.beginPath(); gCtx.arc(gw, cy, 5, 0, Math.PI*2); gCtx.fillStyle = 'rgba(108,92,231,0.3)'; gCtx.fill();
+  gCtx.beginPath(); gCtx.arc(gw, cy, 3, 0, Math.PI*2); gCtx.fillStyle = '#a29bfe'; gCtx.fill();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// COLLAPSIBLE SECTIONS
+// ═══════════════════════════════════════════════════════════════════════
+document.querySelectorAll('.sh').forEach(h => {
+  h.addEventListener('click', () => {
+    const body = document.getElementById('sec-' + h.dataset.sec);
+    const open = h.classList.toggle('open');
+    body.classList.toggle('hidden', !open);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════════════════
+document.getElementById('dlPng').addEventListener('click', () => {
+  const exp = document.createElement('canvas'); exp.width = canvasW; exp.height = canvasH;
+  renderScene(exp.getContext('2d'), canvasW, canvasH, lineScales, true);
+  const a = document.createElement('a'); a.download = `typoman-${canvasW}x${canvasH}.png`;
+  a.href = exp.toDataURL('image/png'); a.click();
+});
+
+document.getElementById('dlSvg').addEventListener('click', () => {
+  // Build basic SVG from current state
+  const lines = getLines();
+  const layout = computeLayout(lineScales);
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvasW}" height="${canvasH}" viewBox="0 0 ${canvasW} ${canvasH}">`;
+  svg += `<rect width="${canvasW}" height="${canvasH}" fill="${bgColor}"/>`;
+  layout.forEach((row, i) => {
+    const color = wordColors[i] || textColor;
+    svg += `<text x="${canvasW/2}" y="${row.y + row.lineH*0.78}" text-anchor="middle" fill="${color}" font-family="${currentFont.replace(/'/g,'')}" font-weight="900" font-size="${row.lineH*1.1}" textLength="${canvasW}" lengthAdjust="spacingAndGlyphs">${row.text}</text>`;
+  });
+  svg += '</svg>';
+  navigator.clipboard.writeText(svg).then(() => {
+    const btn = document.getElementById('dlSvg');
+    const orig = btn.textContent; btn.textContent = '✓ Copied';
+    setTimeout(() => btn.textContent = orig, 1800);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// EFFECTS SYSTEM
+// ═══════════════════════════════════════════════════════════════════════
+let activeFx = null; // 'shadow' | 'glow' | 'outline' | 'double'
+let fxStrength = 0.5;
+
+linkSN(document.getElementById('fxStr'), document.getElementById('fxStrN'), 2, v => { fxStrength = v; if (!activePreset) draw(); });
+
+document.querySelectorAll('.fxbtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const fx = btn.dataset.fx;
+    if (activeFx === fx) { activeFx = null; btn.classList.remove('on'); }
+    else {
+      document.querySelectorAll('.fxbtn').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      activeFx = fx;
+    }
+    if (!activePreset) draw();
+  });
+});
+
+function applyFx(dctx, W, H) {
+  if (!activeFx) return;
+  const s = fxStrength;
+  if (activeFx === 'shadow') {
+    dctx.save();
+    dctx.globalCompositeOperation = 'destination-over';
+    dctx.shadowColor = 'rgba(0,0,0,' + (0.6*s) + ')';
+    dctx.shadowBlur = 20 * s;
+    dctx.shadowOffsetX = 6 * s;
+    dctx.shadowOffsetY = 6 * s;
+    dctx.drawImage(dctx.canvas, 0, 0);
+    dctx.restore();
+  } else if (activeFx === 'glow') {
+    dctx.save();
+    dctx.globalCompositeOperation = 'lighter';
+    dctx.filter = `blur(${Math.round(12*s)}px)`;
+    dctx.globalAlpha = 0.4 * s;
+    dctx.drawImage(dctx.canvas, 0, 0);
+    dctx.restore();
+    dctx.filter = 'none';
+  } else if (activeFx === 'outline') {
+    // Draw text again behind with slight offset in contrasting color
+    dctx.save();
+    dctx.globalCompositeOperation = 'destination-over';
+    dctx.filter = `blur(${Math.max(1, Math.round(3*s))}px)`;
+    dctx.globalAlpha = 0.8;
+    dctx.drawImage(dctx.canvas, 2*s, 2*s);
+    dctx.drawImage(dctx.canvas, -2*s, -2*s);
+    dctx.drawImage(dctx.canvas, 2*s, -2*s);
+    dctx.drawImage(dctx.canvas, -2*s, 2*s);
+    dctx.restore();
+    dctx.filter = 'none';
+  } else if (activeFx === 'double') {
+    dctx.save();
+    dctx.globalAlpha = 0.25 * s;
+    dctx.globalCompositeOperation = 'lighter';
+    const dx = Math.round(8*s), dy = Math.round(8*s);
+    dctx.drawImage(dctx.canvas, dx, dy);
+    dctx.restore();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CRAZY MODE
+// ═══════════════════════════════════════════════════════════════════════
+let crazyMode = false, crazyTimer = null;
+const PRESETS_LIST = ['wave','accordion','cascade','bounce','spring','breathe'];
+const FONTS_LIST = Array.from(document.querySelectorAll('.fpbtn')).map(b => b.dataset.font);
+
+function runCrazyStep() {
+  if (!crazyMode) return;
+
+  // Random colors
+  randomColors();
+
+  // Random row scales
+  lineScales = lineScales.map(() => 0.3 + Math.random() * 1.4);
+  buildLineControls();
+
+  // Random speed/intensity
+  const spd = 0.3 + Math.random() * 2.5;
+  motionSpeed = spd;
+  document.getElementById('motionSpeed').value = spd;
+  document.getElementById('motionSpeedN').value = spd.toFixed(2);
+  const inten = 0.2 + Math.random() * 1.6;
+  motionIntensity = inten;
+  document.getElementById('motionIntensity').value = inten;
+  document.getElementById('motionIntN').value = inten.toFixed(2);
+
+  // Random preset
+  const p = PRESETS_LIST[Math.floor(Math.random() * PRESETS_LIST.length)];
+  activePreset = p;
+  animTime = Math.random() * 10;
+  document.querySelectorAll('.pbtn').forEach(b => b.classList.toggle('active', b.dataset.preset === p));
+  document.getElementById('stopBtn').style.display = '';
+  document.getElementById('liveDot').classList.add('on');
+  if (!animFrame) { lastTimestamp = null; animFrame = requestAnimationFrame(animLoop); }
+
+  // Random font
+  if (FONTS_LIST.length) {
+    const f = FONTS_LIST[Math.floor(Math.random() * FONTS_LIST.length)];
+    currentFont = f;
+    document.querySelectorAll('.fpbtn').forEach(b => b.classList.toggle('active', b.dataset.font === f));
+  }
+
+  // Random effect
+  if (Math.random() > 0.5) {
+    const fxOpts = ['shadow','glow','outline','double'];
+    activeFx = fxOpts[Math.floor(Math.random() * fxOpts.length)];
+    document.querySelectorAll('.fxbtn').forEach(b => b.classList.toggle('on', b.dataset.fx === activeFx));
+    fxStrength = 0.3 + Math.random() * 0.7;
+    document.getElementById('fxStr').value = fxStrength;
+    document.getElementById('fxStrN').value = fxStrength.toFixed(2);
+  } else {
+    activeFx = null;
+    document.querySelectorAll('.fxbtn').forEach(b => b.classList.remove('on'));
+  }
+
+  crazyTimer = setTimeout(runCrazyStep, 1500 + Math.random() * 1500);
+}
+
+document.getElementById('crazyBtn').addEventListener('click', () => {
+  crazyMode = !crazyMode;
+  document.getElementById('crazyBtn').classList.toggle('active', crazyMode);
+  if (crazyMode) runCrazyStep();
+  else clearTimeout(crazyTimer);
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// KEYBOARD SHORTCUTS
+// ═══════════════════════════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.contentEditable === 'true') return;
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (activePreset || animFrame) stopAnim();
+    else startPreset('wave');
+  }
+  if (e.code === 'KeyR' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); randomColors(); }
+  if (e.code === 'KeyM' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); document.getElementById('audioBtn').click(); }
+  if (e.code === 'KeyC' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); document.getElementById('crazyBtn').click(); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════
+buildColorPresets();
+rebuildChips();
+buildLineControls();
+draw();
+</script>
+</body>
+</html>
