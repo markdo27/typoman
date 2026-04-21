@@ -188,10 +188,10 @@ input[type=range]::-webkit-slider-thumb:hover{background:#fff;}
   border:1px solid var(--border2);color:var(--text);outline:none;font-family:'JetBrains Mono',monospace;}
 .sidebar-input:focus{border-color:var(--accent);}
 .fx-row{display:flex;gap:4px;flex-wrap:wrap;}
-.fxbtn{font-size:10px;padding:4px 8px;border-radius:0px;border:1px solid var(--border2);
+.fxbtn, .scbtn{font-size:10px;padding:4px 8px;border-radius:0px;border:1px solid var(--border2);
   background:var(--bg3);color:var(--text2);cursor:pointer;transition:background 0.1s;font-weight:700;text-transform:uppercase;}
-.fxbtn:hover{background:var(--border2);color:var(--text);}
-.fxbtn.on{background:var(--accent);color:#000;border-color:var(--accent);}
+.fxbtn:hover, .scbtn:hover{background:var(--border2);color:var(--text);}
+.fxbtn.on, .scbtn.on{background:var(--accent);color:#000;border-color:var(--accent);}
 .font-upload{display:flex;align-items:center;gap:4px;}
 .font-upload-btn{background:transparent;border:0.5px dashed var(--border2);border-radius:var(--rs);
   padding:4px 8px;font-size:9px;color:var(--accent2);cursor:pointer;transition:all 0.12s;white-space:nowrap;}
@@ -429,6 +429,25 @@ input[type=range]::-webkit-slider-thumb:hover{background:#fff;}
         </div>
         <div class="row"><label for="fxStr">FX Strength</label><input type="range" id="fxStr" min="0" max="1" step="0.05" value="0.5"><input class="ni" id="fxStrN" type="number" step="0.05" value="0.50"></div>
       </div>
+
+      <!-- STROBE SCENES -->
+      <div class="sh" data-sec="strobe"><span class="ico">⚡</span><span class="lbl">Strobe Scenes</span><span class="ar">›</span></div>
+      <div class="sb hidden" id="sec-strobe">
+        <div class="btn-row">
+          <button class="btn" id="strobeToggle" style="flex:1;">⚡ Enable MatchCut</button>
+        </div>
+        <div class="row">
+          <label style="color:var(--danger)">Pace (BPM)</label>
+          <input type="range" id="strobeBpm" min="40" max="240" step="5" value="120">
+          <input class="ni" id="strobeBpmN" type="number" value="120">
+        </div>
+        <div style="font-size:9px;color:var(--text3);margin-bottom:-2px;">Scene Filters </div>
+        <div class="fx-row">
+          <button class="scbtn" data-scene="shutter">Shutter</button>
+          <button class="scbtn" data-scene="split">Split</button>
+          <button class="scbtn" data-scene="bugEye">Bug Eye</button>
+        </div>
+      </div>
     </div>
 
     <!-- Center -->
@@ -549,6 +568,13 @@ const webcamVideo = document.getElementById('webcamVideo');
 let noiseCanvas = null;
 let exportRes = 1;
 let activeFx = null, fxStrength = 0.5;
+
+// Strobe & Scenes
+let strobeEnabled = false;
+let strobeBpm = 120;
+let lastBeatOffset = 0; // accumulated time for beat checking
+let activeScenes = new Set();
+let splitPhase = 0, shutterPhase = 0; // Persistent animated phases for scenes
 
 // Warp state
 let warpEnabled = false, warpOpacity = 0.7;
@@ -1031,6 +1057,7 @@ function renderScene(dctx,W,H,scales,forExport){
 
   if(webcamActive&&!forExport){dctx.clearRect(0,0,W,H);dctx.fillStyle=bgColor;dctx.fillRect(0,0,W,H);drawBgPattern(dctx,W,H);const offMask=document.createElement('canvas');offMask.width=W;offMask.height=H;const mCtx=offMask.getContext('2d');if(webcamVideo.readyState>=2){const vw=webcamVideo.videoWidth,vh=webcamVideo.videoHeight;const scale=Math.max(W/vw,H/vh);const sw=vw*scale,sh=vh*scale;mCtx.drawImage(webcamVideo,(W-sw)/2,(H-sh)/2,sw,sh);}mCtx.globalCompositeOperation='destination-in';layout.forEach((row,i)=>{const{y,lineH,text,xOffset,usableW:rW}=row;const displayText=applyCase(text);const sz=Math.max(Math.ceil(lineH*1.15),10);const ls=letterSpacing*sz;const chars=[...displayText];const condense=wordCondense[i]||1;const align=wordAlign[i]||'fill';const off=document.createElement('canvas');const tH=Math.max(Math.ceil(sz*2),4);off.width=rW;off.height=tH;const oc=off.getContext('2d');oc.font=getFont(sz,i);const cw2=chars.map(c=>oc.measureText(c).width);let nw2=0;cw2.forEach((w,k)=>{nw2+=w+(k<chars.length-1?ls:0);});let sx2;if(align==='fill')sx2=(rW/Math.max(nw2,1))*condense;else sx2=condense;oc.fillStyle='#fff';oc.textBaseline='top';oc.save();oc.scale(sx2,1);let cx2=0;chars.forEach((c,k)=>{oc.fillText(c,cx2,0);cx2+=cw2[k]+(k<chars.length-1?ls:0);});oc.restore();const id2=oc.getImageData(0,0,rW,tH);const px2=id2.data;let mr=tH,xr=0;for(let py=0;py<tH;py++)for(let px3=0;px3<rW;px3++)if(px2[(py*rW+px3)*4+3]>8){if(py<mr)mr=py;if(py>xr)xr=py;}if(mr>xr){mr=0;xr=Math.ceil(lineH);}mCtx.drawImage(off,0,mr,rW,xr-mr+1,xOffset,y,rW,lineH);});dctx.drawImage(offMask,0,0);}
   drawSidebarText(dctx,W,H);
+  window.lastSnapshotDataURL = dctx.canvas.toDataURL('image/png');
 }
 
 function draw(){canvas.width=canvasW;canvas.height=canvasH;renderScene(ctx,canvasW,canvasH,lineScales,false);drawGraph();drawWarpOverlay();}
@@ -1070,6 +1097,29 @@ function animLoop(ts){
     });
   } else {
     motionSkews=[];
+  }
+
+  // STROBE MATCHCUT LOGIC
+  if(strobeEnabled){
+    const beatInterval = 60 / strobeBpm;
+    lastBeatOffset += dt;
+    if(lastBeatOffset >= beatInterval){
+      lastBeatOffset = lastBeatOffset % beatInterval;
+      // Fire MatchCut modifications
+      if(Math.random() > 0.4) randomColors();
+      if(Math.random() > 0.4) lineScales = lineScales.map(() => 0.5 + Math.random() * 2.0);
+      if(Math.random() > 0.7) wordAlign = words.map(()=>{const o=['fill','fill','left','center','right'];return o[Math.floor(Math.random()*o.length)];});
+      if(Math.random() > 0.7) {
+        const pats=['none','none','grid','dots','pixels','lines'];
+        bgPattern=pats[Math.floor(Math.random()*pats.length)];
+        document.querySelectorAll('.pat-btn').forEach(b=>b.classList.toggle('on',b.dataset.pat===bgPattern));
+      }
+      buildLineControls();
+      
+      // Update scene animated phases
+      splitPhase = Math.random();
+      shutterPhase = Math.random();
+    }
   }
 
   canvas.width=canvasW;canvas.height=canvasH;
@@ -1155,9 +1205,10 @@ document.getElementById('recordBtn').addEventListener('click',()=>{
 document.querySelectorAll('.fxbtn').forEach(btn=>{btn.addEventListener('click',()=>{const fx=btn.dataset.fx;if(activeFx===fx){activeFx=null;btn.classList.remove('on');}else{document.querySelectorAll('.fxbtn').forEach(b=>b.classList.remove('on'));btn.classList.add('on');activeFx=fx;}if(!activePreset)draw();});});
 
 function applyFx(dctx,W,H){
-  if(!activeFx)return;const s=fxStrength;
-  if(activeFx==='shadow'){dctx.save();dctx.globalCompositeOperation='destination-over';dctx.shadowColor='rgba(0,0,0,'+(0.6*s)+')';dctx.shadowBlur=20*s;dctx.shadowOffsetX=6*s;dctx.shadowOffsetY=6*s;dctx.drawImage(dctx.canvas,0,0);dctx.restore();}
-  else if(activeFx==='glow'){dctx.save();dctx.globalCompositeOperation='lighter';dctx.filter=`blur(${Math.round(12*s)}px)`;dctx.globalAlpha=0.4*s;dctx.drawImage(dctx.canvas,0,0);dctx.restore();dctx.filter='none';}
+  if(activeFx){
+    const s=fxStrength;
+    if(activeFx==='shadow'){dctx.save();dctx.globalCompositeOperation='destination-over';dctx.shadowColor='rgba(0,0,0,'+(0.6*s)+')';dctx.shadowBlur=20*s;dctx.shadowOffsetX=6*s;dctx.shadowOffsetY=6*s;dctx.drawImage(dctx.canvas,0,0);dctx.restore();}
+    else if(activeFx==='glow'){dctx.save();dctx.globalCompositeOperation='lighter';dctx.filter=`blur(${Math.round(12*s)}px)`;dctx.globalAlpha=0.4*s;dctx.drawImage(dctx.canvas,0,0);dctx.restore();dctx.filter='none';}
   else if(activeFx==='outline'){dctx.save();dctx.globalCompositeOperation='destination-over';dctx.filter=`blur(${Math.max(1,Math.round(3*s))}px)`;dctx.globalAlpha=0.8;dctx.drawImage(dctx.canvas,2*s,2*s);dctx.drawImage(dctx.canvas,-2*s,-2*s);dctx.drawImage(dctx.canvas,2*s,-2*s);dctx.drawImage(dctx.canvas,-2*s,2*s);dctx.restore();dctx.filter='none';}
   else if(activeFx==='double'){dctx.save();dctx.globalAlpha=0.25*s;dctx.globalCompositeOperation='lighter';dctx.drawImage(dctx.canvas,Math.round(8*s),Math.round(8*s));dctx.restore();}
   else if(activeFx==='glitch'){const sliceCount=Math.round(8+12*s);const maxDisp=Math.round(25*s);const snapshot=dctx.getImageData(0,0,W,H);for(let sl=0;sl<sliceCount;sl++){const y=Math.floor(Math.random()*H);const h=Math.floor(3+Math.random()*15*s);const dx=Math.round((Math.random()-0.5)*2*maxDisp);if(y+h<=H){const strip=dctx.getImageData(0,y,W,h);dctx.putImageData(snapshot,0,0);dctx.putImageData(strip,dx,y);}}for(let l=0;l<Math.round(3*s);l++){const y=Math.floor(Math.random()*H);dctx.fillStyle=Math.random()>0.5?'rgba(255,0,80,0.3)':'rgba(0,200,255,0.3)';dctx.fillRect(0,y,W,1+Math.random()*2);}}
@@ -1204,6 +1255,67 @@ function applyFx(dctx,W,H){
   }
 }
 
+  // ==== STROBE SCENES (Geometric Operations) ====
+  
+  if(activeScenes.has('shutter')){
+    const bands=14;
+    const bandH=Math.ceil(H/bands);
+    const snap=document.createElement('canvas');snap.width=W;snap.height=H;
+    snap.getContext('2d').drawImage(dctx.canvas,0,0);
+    dctx.clearRect(0,0,W,H);
+    for(let i=0;i<bands;i++){
+      const y=i*bandH;
+      const h=Math.min(bandH, H-y);
+      if(h<=0)continue;
+      const offX=((i%2===0)?1:-1)*(shutterPhase*W*0.25);
+      dctx.drawImage(snap,0,y,W,h,offX,y,W,h);
+    }
+  }
+
+  if(activeScenes.has('split')){
+    const snap=document.createElement('canvas');snap.width=W;snap.height=H;
+    snap.getContext('2d').drawImage(dctx.canvas,0,0);
+    dctx.clearRect(0,0,W,H);
+    // 3 blocks split vertically
+    const offY1=(splitPhase-0.5)*H*0.4;
+    const offY2=-(splitPhase-0.5)*H*0.4;
+    const wTop=Math.floor(W*0.33), wMid=Math.floor(W*0.33), wBot=W-wTop-wMid;
+    dctx.drawImage(snap,0,0,wTop,H,0,offY1,wTop,H);
+    dctx.drawImage(snap,wTop,0,wMid,H,wTop,offY2,wMid,H);
+    dctx.drawImage(snap,wTop+wMid,0,wBot,H,wTop+wMid,offY1,wBot,H);
+  }
+
+  if(activeScenes.has('bugEye')){
+    const snap=dctx.getImageData(0,0,W,H);
+    const src=snap.data;
+    const dst=new Uint8ClampedArray(src.length);
+    const cx=W/2, cy=H/2;
+    const maxR=Math.min(W,H)*0.8;
+    for(let y=0;y<H;y++){
+      for(let x=0;x<W;x++){
+        const dx=x-cx, dy=y-cy;
+        const r=Math.sqrt(dx*dx+dy*dy);
+        if(r<maxR && r>0){
+          // Extreme Bulge: points closer to center are mapped to points much closer
+          const nr=(r*r)/maxR;
+          const indX=Math.round(cx+(dx/r)*nr);
+          const indY=Math.round(cy+(dy/r)*nr);
+          if(indX>=0&&indX<W&&indY>=0&&indY<H){
+             const si=(indY*W+indX)*4;
+             const di=(y*W+x)*4;
+             dst[di]=src[si];dst[di+1]=src[si+1];dst[di+2]=src[si+2];dst[di+3]=src[si+3];
+          }
+        }else{
+           const i=(y*W+x)*4;
+           dst[i]=src[i];dst[i+1]=src[i+1];dst[i+2]=src[i+2];dst[i+3]=src[i+3];
+        }
+      }
+    }
+    const id=new ImageData(dst,W,H);
+    dctx.putImageData(id,0,0);
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // CRAZY & SHUFFLE
 // ═══════════════════════════════════════════════════════════════════════
@@ -1232,6 +1344,18 @@ document.getElementById('shuffleBtn').addEventListener('click',()=>{
   rowPadPx=Math.round((Math.random()-0.3)*20);document.getElementById('rowPad').value=rowPadPx;document.getElementById('rpn').value=rowPadPx;
   noiseCanvas=null;rebuildChips();buildLineControls();buildTransformControls();if(!activePreset)draw();
 });
+
+document.querySelectorAll('.scbtn').forEach(btn=>{btn.addEventListener('click',()=>{const sc=btn.dataset.scene;if(activeScenes.has(sc)){activeScenes.delete(sc);btn.classList.remove('on');}else{activeScenes.add(sc);btn.classList.add('on');}if(!activePreset)draw();});});
+document.getElementById('strobeToggle').addEventListener('click',()=>{
+  strobeEnabled=!strobeEnabled;
+  document.getElementById('strobeToggle').classList.toggle('on',strobeEnabled);
+  if(strobeEnabled && !animFrame){
+    lastTimestamp=null;
+    animFrame=requestAnimationFrame(animLoop);
+  }
+});
+document.getElementById('strobeBpm').addEventListener('input',e=>{strobeBpm=parseInt(e.target.value);document.getElementById('strobeBpmN').value=strobeBpm;});
+document.getElementById('strobeBpmN').addEventListener('input',e=>{strobeBpm=parseInt(e.target.value);document.getElementById('strobeBpm').value=strobeBpm;});
 
 // Keyboard shortcuts
 document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.contentEditable==='true')return;if(e.code==='Space'){e.preventDefault();if(activePreset||animFrame)stopAnim();else startPreset('wave');}if(e.code==='KeyR'&&!e.metaKey&&!e.ctrlKey){e.preventDefault();randomColors();}if(e.code==='KeyM'&&!e.metaKey&&!e.ctrlKey){e.preventDefault();document.getElementById('audioBtn').click();}if(e.code==='KeyC'&&!e.metaKey&&!e.ctrlKey){e.preventDefault();document.getElementById('crazyBtn').click();}if(e.code==='KeyS'&&!e.metaKey&&!e.ctrlKey){e.preventDefault();document.getElementById('shuffleBtn').click();}});
