@@ -425,6 +425,7 @@ input[type=range]::-webkit-slider-thumb:hover{background:#fff;}
           <button class="fxbtn" data-fx="double">Double</button>
           <button class="fxbtn" data-fx="glitch">Glitch</button>
           <button class="fxbtn" data-fx="chromatic">Chroma</button>
+          <button class="fxbtn" data-fx="smear">Smear</button>
         </div>
         <div class="row"><label for="fxStr">FX Strength</label><input type="range" id="fxStr" min="0" max="1" step="0.05" value="0.5"><input class="ni" id="fxStrN" type="number" step="0.05" value="0.50"></div>
       </div>
@@ -975,6 +976,11 @@ function renderScene(dctx,W,H,scales,forExport){
   dctx.fillStyle=bgColor;dctx.fillRect(0,0,W,H);
   drawBgPattern(dctx,W,H);
   if(webcamActive&&!forExport&&webcamVideo.readyState>=2){dctx.save();const vw=webcamVideo.videoWidth,vh=webcamVideo.videoHeight;const scale=Math.max(W/vw,H/vh);const sw=vw*scale,sh=vh*scale;dctx.drawImage(webcamVideo,(W-sw)/2,(H-sh)/2,sw,sh);dctx.restore();}
+  
+  const textCanvas=document.createElement('canvas');
+  textCanvas.width=W;textCanvas.height=H;
+  const tctx=textCanvas.getContext('2d');
+  
   const layout=computeLayout(scales);
 
   layout.forEach((row,i)=>{
@@ -1013,13 +1019,14 @@ function renderScene(dctx,W,H,scales,forExport){
     if(minR>maxR){minR=0;maxR=Math.ceil(lineH);}
     const glyphH=maxR-minR+1;
 
-    dctx.save();
-    if(skewDeg!==0){const skewRad=skewDeg*Math.PI/180;dctx.transform(1,0,Math.tan(skewRad),1,xOffset+drawX,0);dctx.drawImage(off,0,minR,rW,glyphH,0,y,rW,lineH);}
-    else dctx.drawImage(off,0,minR,rW,glyphH,xOffset+drawX,y,rW,lineH);
-    dctx.restore();
+    tctx.save();
+    if(skewDeg!==0){const skewRad=skewDeg*Math.PI/180;tctx.transform(1,0,Math.tan(skewRad),1,xOffset+drawX,0);tctx.drawImage(off,0,minR,rW,glyphH,0,y,rW,lineH);}
+    else tctx.drawImage(off,0,minR,rW,glyphH,xOffset+drawX,y,rW,lineH);
+    tctx.restore();
   });
 
-  applyFx(dctx,W,H);
+  applyFx(tctx,W,H);
+  dctx.drawImage(textCanvas,0,0);
   if(warpPoints.length&&!webcamActive)applyWarp(dctx,W,H);
 
   if(webcamActive&&!forExport){dctx.clearRect(0,0,W,H);dctx.fillStyle=bgColor;dctx.fillRect(0,0,W,H);drawBgPattern(dctx,W,H);const offMask=document.createElement('canvas');offMask.width=W;offMask.height=H;const mCtx=offMask.getContext('2d');if(webcamVideo.readyState>=2){const vw=webcamVideo.videoWidth,vh=webcamVideo.videoHeight;const scale=Math.max(W/vw,H/vh);const sw=vw*scale,sh=vh*scale;mCtx.drawImage(webcamVideo,(W-sw)/2,(H-sh)/2,sw,sh);}mCtx.globalCompositeOperation='destination-in';layout.forEach((row,i)=>{const{y,lineH,text,xOffset,usableW:rW}=row;const displayText=applyCase(text);const sz=Math.max(Math.ceil(lineH*1.15),10);const ls=letterSpacing*sz;const chars=[...displayText];const condense=wordCondense[i]||1;const align=wordAlign[i]||'fill';const off=document.createElement('canvas');const tH=Math.max(Math.ceil(sz*2),4);off.width=rW;off.height=tH;const oc=off.getContext('2d');oc.font=getFont(sz,i);const cw2=chars.map(c=>oc.measureText(c).width);let nw2=0;cw2.forEach((w,k)=>{nw2+=w+(k<chars.length-1?ls:0);});let sx2;if(align==='fill')sx2=(rW/Math.max(nw2,1))*condense;else sx2=condense;oc.fillStyle='#fff';oc.textBaseline='top';oc.save();oc.scale(sx2,1);let cx2=0;chars.forEach((c,k)=>{oc.fillText(c,cx2,0);cx2+=cw2[k]+(k<chars.length-1?ls:0);});oc.restore();const id2=oc.getImageData(0,0,rW,tH);const px2=id2.data;let mr=tH,xr=0;for(let py=0;py<tH;py++)for(let px3=0;px3<rW;px3++)if(px2[(py*rW+px3)*4+3]>8){if(py<mr)mr=py;if(py>xr)xr=py;}if(mr>xr){mr=0;xr=Math.ceil(lineH);}mCtx.drawImage(off,0,mr,rW,xr-mr+1,xOffset,y,rW,lineH);});dctx.drawImage(offMask,0,0);}
@@ -1155,6 +1162,46 @@ function applyFx(dctx,W,H){
   else if(activeFx==='double'){dctx.save();dctx.globalAlpha=0.25*s;dctx.globalCompositeOperation='lighter';dctx.drawImage(dctx.canvas,Math.round(8*s),Math.round(8*s));dctx.restore();}
   else if(activeFx==='glitch'){const sliceCount=Math.round(8+12*s);const maxDisp=Math.round(25*s);const snapshot=dctx.getImageData(0,0,W,H);for(let sl=0;sl<sliceCount;sl++){const y=Math.floor(Math.random()*H);const h=Math.floor(3+Math.random()*15*s);const dx=Math.round((Math.random()-0.5)*2*maxDisp);if(y+h<=H){const strip=dctx.getImageData(0,y,W,h);dctx.putImageData(snapshot,0,0);dctx.putImageData(strip,dx,y);}}for(let l=0;l<Math.round(3*s);l++){const y=Math.floor(Math.random()*H);dctx.fillStyle=Math.random()>0.5?'rgba(255,0,80,0.3)':'rgba(0,200,255,0.3)';dctx.fillRect(0,y,W,1+Math.random()*2);}}
   else if(activeFx==='chromatic'){const offR=Math.round(4*s);const offB=Math.round(-4*s);const imgData=dctx.getImageData(0,0,W,H);const src=new Uint8ClampedArray(imgData.data);const dst=imgData.data;for(let y=0;y<H;y++)for(let x=0;x<W;x++){const idx=(y*W+x)*4;const rx=Math.min(W-1,Math.max(0,x+offR));dst[idx]=src[(y*W+rx)*4];dst[idx+1]=src[idx+1];const bx=Math.min(W-1,Math.max(0,x+offB));dst[idx+2]=src[(y*W+bx)*4+2];dst[idx+3]=src[idx+3];}dctx.putImageData(imgData,0,0);}
+  else if(activeFx==='smear'){
+    const steps=Math.max(30,Math.round(200*s));
+    const snapshot=document.createElement('canvas');snapshot.width=W;snapshot.height=H;
+    snapshot.getContext('2d').drawImage(dctx.canvas,0,0);
+    
+    // DEBUG: Put snapshot on screen so puppeteer can see exactly what it is.
+    window.lastSnapshotDataURL = snapshot.toDataURL('image/png');
+    
+    const trailCanvas=document.createElement('canvas');trailCanvas.width=W;trailCanvas.height=H;
+    const trctx=trailCanvas.getContext('2d');
+    
+    const tintCanvas=document.createElement('canvas');tintCanvas.width=W;tintCanvas.height=H;
+    const tictx=tintCanvas.getContext('2d');
+    
+    for(let i=1;i<=steps;i++){
+      const t=i/steps;
+      const waveOffset=Math.sin(t*Math.PI*2);
+      const dx=waveOffset*40*s*t;
+      const dy=t*600*s; // Cascading downward trail
+      
+      const alpha=0.05*Math.pow(1-t, 2);
+      if(alpha<0.002)continue;
+      
+      tictx.clearRect(0,0,W,H);tictx.drawImage(snapshot,0,0);
+      tictx.globalCompositeOperation='source-in';
+      tictx.fillStyle=`hsl(${Math.round(t*1200)},100%,50%)`;
+      tictx.fillRect(0,0,W,H);
+      tictx.globalCompositeOperation='source-over';
+      
+      trctx.save();trctx.translate(dx,dy);
+      trctx.globalAlpha=alpha;
+      trctx.globalCompositeOperation='lighter';
+      trctx.drawImage(tintCanvas,0,0);
+      trctx.restore();
+    }
+    
+    dctx.clearRect(0,0,W,H);
+    dctx.drawImage(trailCanvas,0,0);
+    dctx.drawImage(snapshot,0,0);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1164,7 +1211,7 @@ let crazyMode=false,crazyTimer=null;
 const PRESETS_LIST=Object.keys(motionPresets);
 const FONTS_LIST_FN=()=>getAllFonts().map(f=>f.css);
 
-function runCrazyStep(){if(!crazyMode)return;randomColors();lineScales=lineScales.map(()=>0.3+Math.random()*1.4);buildLineControls();const spd=0.3+Math.random()*2.5;motionSpeed=spd;document.getElementById('motionSpeed').value=spd;document.getElementById('motionSpeedN').value=spd.toFixed(2);const inten=0.2+Math.random()*1.6;motionIntensity=inten;document.getElementById('motionIntensity').value=inten;document.getElementById('motionIntN').value=inten.toFixed(2);const p=PRESETS_LIST[Math.floor(Math.random()*PRESETS_LIST.length)];activePreset=p;animTime=Math.random()*10;document.querySelectorAll('.pbtn').forEach(b=>b.classList.toggle('active',b.dataset.preset===p));document.getElementById('stopBtn').style.display='';document.getElementById('liveDot').classList.add('on');if(!animFrame){lastTimestamp=null;animFrame=requestAnimationFrame(animLoop);}const fl=FONTS_LIST_FN();if(fl.length){currentFont=fl[Math.floor(Math.random()*fl.length)];document.querySelectorAll('.fpbtn').forEach(b=>b.classList.toggle('active',b.dataset.font===currentFont));}if(Math.random()>0.5){const fxOpts=['shadow','glow','outline','double','glitch','chromatic'];activeFx=fxOpts[Math.floor(Math.random()*fxOpts.length)];document.querySelectorAll('.fxbtn').forEach(b=>b.classList.toggle('on',b.dataset.fx===activeFx));fxStrength=0.3+Math.random()*0.7;document.getElementById('fxStr').value=fxStrength;document.getElementById('fxStrN').value=fxStrength.toFixed(2);}else{activeFx=null;document.querySelectorAll('.fxbtn').forEach(b=>b.classList.remove('on'));}crazyTimer=setTimeout(runCrazyStep,1500+Math.random()*1500);}
+function runCrazyStep(){if(!crazyMode)return;randomColors();lineScales=lineScales.map(()=>0.3+Math.random()*1.4);buildLineControls();const spd=0.3+Math.random()*2.5;motionSpeed=spd;document.getElementById('motionSpeed').value=spd;document.getElementById('motionSpeedN').value=spd.toFixed(2);const inten=0.2+Math.random()*1.6;motionIntensity=inten;document.getElementById('motionIntensity').value=inten;document.getElementById('motionIntN').value=inten.toFixed(2);const p=PRESETS_LIST[Math.floor(Math.random()*PRESETS_LIST.length)];activePreset=p;animTime=Math.random()*10;document.querySelectorAll('.pbtn').forEach(b=>b.classList.toggle('active',b.dataset.preset===p));document.getElementById('stopBtn').style.display='';document.getElementById('liveDot').classList.add('on');if(!animFrame){lastTimestamp=null;animFrame=requestAnimationFrame(animLoop);}const fl=FONTS_LIST_FN();if(fl.length){currentFont=fl[Math.floor(Math.random()*fl.length)];document.querySelectorAll('.fpbtn').forEach(b=>b.classList.toggle('active',b.dataset.font===currentFont));}if(Math.random()>0.5){const fxOpts=['shadow','glow','outline','double','glitch','chromatic','smear'];activeFx=fxOpts[Math.floor(Math.random()*fxOpts.length)];document.querySelectorAll('.fxbtn').forEach(b=>b.classList.toggle('on',b.dataset.fx===activeFx));fxStrength=0.3+Math.random()*0.7;document.getElementById('fxStr').value=fxStrength;document.getElementById('fxStrN').value=fxStrength.toFixed(2);}else{activeFx=null;document.querySelectorAll('.fxbtn').forEach(b=>b.classList.remove('on'));}crazyTimer=setTimeout(runCrazyStep,1500+Math.random()*1500);}
 document.getElementById('crazyBtn').addEventListener('click',()=>{crazyMode=!crazyMode;document.getElementById('crazyBtn').classList.toggle('active',crazyMode);if(crazyMode)runCrazyStep();else clearTimeout(crazyTimer);});
 
 document.getElementById('shuffleBtn').addEventListener('click',()=>{
@@ -1179,7 +1226,7 @@ document.getElementById('shuffleBtn').addEventListener('click',()=>{
   if(fillMode==='gradient'){gradColor1=randHex();gradColor2=randHex();gradAngle=Math.floor(Math.random()*360);document.getElementById('grad1').value=gradColor1;document.getElementById('grad2').value=gradColor2;document.getElementById('gradAngle').value=gradAngle;}
   const cases=['upper','lower','title','none'];textCase=cases[Math.floor(Math.random()*cases.length)];document.querySelectorAll('.case-btn').forEach(b=>b.classList.toggle('on',b.dataset.case===textCase));
   const pats=['none','none','grid','dots','pixels','lines'];bgPattern=pats[Math.floor(Math.random()*pats.length)];document.querySelectorAll('.pat-btn').forEach(b=>b.classList.toggle('on',b.dataset.pat===bgPattern));patOpacity=0.05+Math.random()*0.25;document.getElementById('patOpacity').value=patOpacity;document.getElementById('patOpN').value=patOpacity.toFixed(2);
-  if(Math.random()>0.4){const fxOpts=['shadow','glow','outline','double','glitch','chromatic'];activeFx=fxOpts[Math.floor(Math.random()*fxOpts.length)];fxStrength=0.3+Math.random()*0.7;}else{activeFx=null;}document.querySelectorAll('.fxbtn').forEach(b=>b.classList.toggle('on',b.dataset.fx===activeFx));document.getElementById('fxStr').value=fxStrength;document.getElementById('fxStrN').value=fxStrength.toFixed(2);
+  if(Math.random()>0.4){const fxOpts=['shadow','glow','outline','double','glitch','chromatic','smear'];activeFx=fxOpts[Math.floor(Math.random()*fxOpts.length)];fxStrength=0.3+Math.random()*0.7;}else{activeFx=null;}document.querySelectorAll('.fxbtn').forEach(b=>b.classList.toggle('on',b.dataset.fx===activeFx));document.getElementById('fxStr').value=fxStrength;document.getElementById('fxStrN').value=fxStrength.toFixed(2);
   sidebarEnabled=Math.random()>0.65;document.getElementById('sideToggle').classList.toggle('on',sidebarEnabled);document.getElementById('sideToggle').textContent=sidebarEnabled?'Enabled':'Enable';
   currentFont=fl[Math.floor(Math.random()*fl.length)];document.querySelectorAll('.fpbtn').forEach(b=>b.classList.toggle('active',b.dataset.font===currentFont));
   rowPadPx=Math.round((Math.random()-0.3)*20);document.getElementById('rowPad').value=rowPadPx;document.getElementById('rpn').value=rowPadPx;
