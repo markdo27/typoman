@@ -12,14 +12,14 @@ html,body{width:100%;height:100%;background:#0a0a0f;overflow:hidden;font-family:
 :root{
   --bg:#0a0a0f;--bg2:rgba(18,18,28,0.85);--bg3:rgba(28,28,42,0.9);--bg4:rgba(38,38,55,0.9);
   --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.1);--border3:rgba(255,255,255,0.15);
-  --text:#f0f0f5;--text2:rgba(240,240,245,0.55);--text3:rgba(240,240,245,0.3);
+  --text:#f0f0f5;--text2:rgba(240,240,245,0.55);--text3:rgba(240,240,245,0.50);
   --accent:#6c5ce7;--accent2:#a29bfe;--accent-glow:rgba(108,92,231,0.3);
   --danger:#ff4757;--danger-bg:rgba(255,71,87,0.12);
   --success:#2ed573;--warn:#ffa502;
   --r:10px;--rs:6px;
   --glass:rgba(18,18,28,0.7);--glass-border:rgba(255,255,255,0.08);
 }
-body{color:var(--text);font-size:12px;}
+body{color:var(--text);font-size:13px;}
 .root{display:flex;flex-direction:column;width:100vw;height:100vh;padding:6px;gap:6px;}
 .top-bar{flex-shrink:0;display:flex;align-items:center;gap:12px;padding:6px 14px;
   background:var(--glass);backdrop-filter:blur(20px);border:0.5px solid var(--glass-border);border-radius:var(--r);}
@@ -81,14 +81,14 @@ body{color:var(--text);font-size:12px;}
 .graph-wrap{height:48px;background:var(--glass);backdrop-filter:blur(20px);border-radius:8px;
   border:0.5px solid var(--glass-border);overflow:hidden;flex-shrink:0;cursor:pointer;}
 canvas#graphCanvas{display:block;width:100%;height:100%;}
-.sh{display:flex;align-items:center;gap:7px;padding:9px 12px;cursor:pointer;user-select:none;
+.sh{display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;user-select:none;
   border-bottom:0.5px solid var(--border);}
 .sh:hover{background:rgba(255,255,255,0.02);}
 .sh .ico{font-size:11px;opacity:0.4;width:14px;text-align:center;}
 .sh .lbl{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--text2);flex:1;}
 .sh .ar{font-size:8px;color:var(--text3);transition:transform 0.2s;}
 .sh.open .ar{transform:rotate(90deg);}
-.sb{padding:9px 12px;border-bottom:0.5px solid var(--border);display:flex;flex-direction:column;gap:7px;}
+.sb{padding:8px 12px;border-bottom:0.5px solid var(--border);display:flex;flex-direction:column;gap:8px;}
 .sb.hidden{display:none;}
 .chips-wrap{display:flex;flex-wrap:wrap;gap:5px;min-height:32px;}
 .chip{display:flex;align-items:center;gap:4px;background:var(--bg3);border:0.5px solid var(--border2);
@@ -99,7 +99,7 @@ canvas#graphCanvas{display:block;width:100%;height:100%;}
 .chip-text{font-size:11px;font-weight:700;color:var(--text);outline:none;min-width:12px;max-width:100px;}
 .chip-color{width:14px;height:14px;border-radius:50%;cursor:pointer;border:1.5px solid rgba(255,255,255,0.2);flex-shrink:0;transition:transform 0.12s;}
 .chip-color:hover{transform:scale(1.15);}
-.chip-font{font-size:8px;color:var(--accent2);cursor:pointer;padding:1px 4px;border-radius:3px;
+.chip-font{font-size:9px;color:var(--accent2);cursor:pointer;padding:1px 4px;border-radius:3px;
   background:rgba(108,92,231,0.15);border:0.5px solid rgba(108,92,231,0.25);white-space:nowrap;
   transition:all 0.12s;max-width:50px;overflow:hidden;text-overflow:ellipsis;}
 .chip-font:hover{background:rgba(108,92,231,0.3);color:#fff;}
@@ -191,7 +191,7 @@ input[type=range]::-webkit-slider-thumb:hover{box-shadow:0 0 8px var(--accent-gl
 .font-upload-btn{background:transparent;border:0.5px dashed var(--border2);border-radius:var(--rs);
   padding:4px 8px;font-size:9px;color:var(--accent2);cursor:pointer;transition:all 0.12s;white-space:nowrap;}
 .font-upload-btn:hover{background:rgba(108,92,231,0.1);border-color:var(--accent);}
-.custom-font-tag{font-size:8px;padding:1px 5px;border-radius:3px;background:rgba(46,213,115,0.15);
+.custom-font-tag{font-size:9px;padding:2px 6px;border-radius:3px;background:rgba(46,213,115,0.15);
   color:var(--success);border:0.5px solid rgba(46,213,115,0.25);display:inline-flex;align-items:center;gap:3px;}
 .custom-font-tag .cfx{cursor:pointer;opacity:0.5;transition:opacity 0.1s;}
 .custom-font-tag .cfx:hover{opacity:1;}
@@ -204,9 +204,31 @@ input[type=range]::-webkit-slider-thumb:hover{box-shadow:0 0 8px var(--accent-gl
 #mainCanvas{position:relative;z-index:1;}
 .warp-overlay{position:absolute;top:0;left:0;width:100%;height:100%;z-index:2;pointer-events:none;}
 .warp-overlay.active{pointer-events:auto;cursor:crosshair;}
+.skip-link{position:absolute;top:-40px;left:8px;z-index:9999;background:var(--accent);color:#fff;
+  padding:8px 16px;border-radius:0 0 var(--rs) var(--rs);font-size:12px;font-weight:600;
+  text-decoration:none;transition:top 0.2s;}
+.skip-link:focus{top:0;}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+@media (max-width: 900px) {
+  .panel{width:200px;}
+  .motion-bar{flex-wrap:wrap;gap:6px;padding:6px 10px;}
+  .pbtn,.audio-btn,.mask-btn,.crazy-btn,.shuffle-btn{font-size:9px;padding:3px 8px;}
+}
+@media (max-width: 640px) {
+  .main-row{flex-direction:column;}
+  .panel{width:100%;max-height:35vh;overflow-y:auto;}
+  .center-col{min-height:50vh;}
+}
 </style>
 </head>
 <body>
+<a href="#mainCanvas" class="skip-link">Skip to canvas</a>
 <div class="root">
   <div class="top-bar">
     <div class="logo">TYPOMAN<span>kinetic type engine</span></div>
@@ -289,10 +311,10 @@ input[type=range]::-webkit-slider-thumb:hover{box-shadow:0 0 8px var(--accent-gl
           <button class="rbtn" data-w="889" data-h="500">4:3</button>
         </div>
         <button class="btn" id="flipBtn" style="align-self:flex-start;">⇄ Flip W/H</button>
-        <div class="row"><label>Width</label><input type="range" id="cw" min="200" max="1200" step="10" value="500"><input class="ni" id="cwn" type="number" min="200" max="1200" value="500"></div>
-        <div class="row"><label>Height</label><input type="range" id="ch" min="200" max="1200" step="10" value="500"><input class="ni" id="chn" type="number" min="200" max="1200" value="500"></div>
-        <div class="row"><label>Letter spacing</label><input type="range" id="letterSpacing" min="-0.05" max="0.25" step="0.005" value="0"><input class="ni" id="lsn" type="number" step="0.005" value="0"></div>
-        <div class="row"><label>Row gap</label><input type="range" id="rowPad" min="-20" max="40" step="1" value="0"><input class="ni" id="rpn" type="number" value="0"></div>
+        <div class="row"><label for="cw">Width</label><input type="range" id="cw" min="200" max="1200" step="10" value="500"><input class="ni" id="cwn" type="number" min="200" max="1200" value="500"></div>
+        <div class="row"><label for="ch">Height</label><input type="range" id="ch" min="200" max="1200" step="10" value="500"><input class="ni" id="chn" type="number" min="200" max="1200" value="500"></div>
+        <div class="row"><label for="letterSpacing">Letter spacing</label><input type="range" id="letterSpacing" min="-0.05" max="0.25" step="0.005" value="0"><input class="ni" id="lsn" type="number" step="0.005" value="0"></div>
+        <div class="row"><label for="rowPad">Row gap</label><input type="range" id="rowPad" min="-20" max="40" step="1" value="0"><input class="ni" id="rpn" type="number" value="0"></div>
       </div>
 
       <!-- Color -->
@@ -322,7 +344,7 @@ input[type=range]::-webkit-slider-thumb:hover{box-shadow:0 0 8px var(--accent-gl
           <button class="btn" id="gridToggle">Grid off</button>
           <button class="btn" id="resetWarpBtn">Reset warp</button>
         </div>
-        <div class="row"><label>Opacity</label><input type="range" id="warpOpacity" min="0" max="1" step="0.05" value="0.7"><input class="ni" id="warpOpN" type="number" step="0.05" value="0.70"></div>
+        <div class="row"><label for="warpOpacity">Opacity</label><input type="range" id="warpOpacity" min="0" max="1" step="0.05" value="0.7"><input class="ni" id="warpOpN" type="number" step="0.05" value="0.70"></div>
       </div>
 
       <!-- Fill Mode -->
@@ -343,8 +365,8 @@ input[type=range]::-webkit-slider-thumb:hover{box-shadow:0 0 8px var(--accent-gl
           </div>
         </div>
         <div id="stripeOpts" style="display:none;">
-          <div class="row"><label>Stripe Width</label><input type="range" id="stripeW" min="2" max="30" step="1" value="8"><input class="ni" id="stripeWN" type="number" value="8"></div>
-          <div class="row"><label>Stripe Angle</label><input type="range" id="stripeA" min="0" max="180" step="5" value="45"><input class="ni" id="stripeAN" type="number" value="45"></div>
+          <div class="row"><label for="stripeW">Stripe Width</label><input type="range" id="stripeW" min="2" max="30" step="1" value="8"><input class="ni" id="stripeWN" type="number" value="8"></div>
+          <div class="row"><label for="stripeA">Stripe Angle</label><input type="range" id="stripeA" min="0" max="180" step="5" value="45"><input class="ni" id="stripeAN" type="number" value="45"></div>
         </div>
       </div>
 
@@ -366,8 +388,8 @@ input[type=range]::-webkit-slider-thumb:hover{box-shadow:0 0 8px var(--accent-gl
           <button class="pat-btn" data-pat="pixels">Pixels</button>
           <button class="pat-btn" data-pat="lines">Lines</button>
         </div>
-        <div class="row"><label>Pattern opacity</label><input type="range" id="patOpacity" min="0" max="1" step="0.05" value="0.15"><input class="ni" id="patOpN" type="number" step="0.05" value="0.15"></div>
-        <div class="row"><label>Pattern scale</label><input type="range" id="patScale" min="0.5" max="4" step="0.1" value="1"><input class="ni" id="patScN" type="number" step="0.1" value="1.0"></div>
+        <div class="row"><label for="patOpacity">Pattern opacity</label><input type="range" id="patOpacity" min="0" max="1" step="0.05" value="0.15"><input class="ni" id="patOpN" type="number" step="0.05" value="0.15"></div>
+        <div class="row"><label for="patScale">Pattern scale</label><input type="range" id="patScale" min="0.5" max="4" step="0.1" value="1"><input class="ni" id="patScN" type="number" step="0.1" value="1.0"></div>
       </div>
 
       <!-- Sidebar Text -->
@@ -381,7 +403,7 @@ input[type=range]::-webkit-slider-thumb:hover{box-shadow:0 0 8px var(--accent-gl
           </div>
         </div>
         <input class="sidebar-input" id="sideText" placeholder="Sidebar text..." value="TYPOMAN">
-        <div class="row"><label>Width</label><input type="range" id="sideW" min="20" max="80" step="2" value="36"><input class="ni" id="sideWN" type="number" value="36"></div>
+        <div class="row"><label for="sideW">Width</label><input type="range" id="sideW" min="20" max="80" step="2" value="36"><input class="ni" id="sideWN" type="number" value="36"></div>
       </div>
 
       <!-- Effects -->
@@ -395,7 +417,7 @@ input[type=range]::-webkit-slider-thumb:hover{box-shadow:0 0 8px var(--accent-gl
           <button class="fxbtn" data-fx="glitch">Glitch</button>
           <button class="fxbtn" data-fx="chromatic">Chroma</button>
         </div>
-        <div class="row"><label>FX Strength</label><input type="range" id="fxStr" min="0" max="1" step="0.05" value="0.5"><input class="ni" id="fxStrN" type="number" step="0.05" value="0.50"></div>
+        <div class="row"><label for="fxStr">FX Strength</label><input type="range" id="fxStr" min="0" max="1" step="0.05" value="0.5"><input class="ni" id="fxStrN" type="number" step="0.05" value="0.50"></div>
       </div>
     </div>
 
@@ -553,6 +575,11 @@ document.getElementById('fontFileInput').addEventListener('change', async e => {
       if (!activePreset) draw();
     } catch (err) {
       console.warn('Font load failed:', err);
+      const notice = document.createElement('div');
+      notice.textContent = `⚠ Failed to load: ${name}`;
+      notice.style.cssText = 'font-size:10px;color:var(--danger);padding:2px 8px;margin-top:2px;';
+      document.getElementById('customFontsList').appendChild(notice);
+      setTimeout(() => notice.remove(), 4000);
     }
   }
   e.target.value = '';
@@ -673,7 +700,7 @@ function buildColorPresets() {
     const colors=ci===0?BG_PRESETS:TEXT_PRESETS;
     const active=ci===0?activeBgIdx:activeTextIdx;
     colors.forEach((c,i)=>{
-      const s=document.createElement('div'); s.className='swatch'+(i===active?' active':'');
+      const s=document.createElement('div'); s.className='swatch'+(i===active?' active':''); s.setAttribute('role','button'); s.setAttribute('aria-label','Select color '+c);
       const lum=hexLum(c);
       s.style.cssText=`background:${c};border-color:${i===active?'rgba(255,255,255,0.85)':(lum>0.6?'rgba(0,0,0,0.2)':'rgba(255,255,255,0.1)')};`;
       s.addEventListener('click',()=>{ if(ci===0){bgColor=c;activeBgIdx=i;noiseCanvas=null;}else{textColor=c;activeTextIdx=i;} buildColorPresets();if(!activePreset)draw(); });
@@ -1175,6 +1202,19 @@ document.getElementById('shuffleBtn').addEventListener('click',()=>{
 document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.contentEditable==='true')return;if(e.code==='Space'){e.preventDefault();if(activePreset||animFrame)stopAnim();else startPreset('wave');}if(e.code==='KeyR'&&!e.metaKey&&!e.ctrlKey){e.preventDefault();randomColors();}if(e.code==='KeyM'&&!e.metaKey&&!e.ctrlKey){e.preventDefault();document.getElementById('audioBtn').click();}if(e.code==='KeyC'&&!e.metaKey&&!e.ctrlKey){e.preventDefault();document.getElementById('crazyBtn').click();}if(e.code==='KeyS'&&!e.metaKey&&!e.ctrlKey){e.preventDefault();document.getElementById('shuffleBtn').click();}});
 
 // INIT
+// Section header a11y: add role, tabindex, aria-expanded, keyboard handler
+document.querySelectorAll('.sh').forEach(sh => {
+  sh.setAttribute('role', 'button');
+  sh.setAttribute('tabindex', '0');
+  sh.setAttribute('aria-expanded', sh.classList.contains('open') ? 'true' : 'false');
+  sh.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sh.click(); }
+  });
+  sh.addEventListener('click', () => {
+    sh.setAttribute('aria-expanded', sh.classList.contains('open') ? 'true' : 'false');
+  });
+});
+
 buildColorPresets();rebuildChips();buildLineControls();buildTransformControls();draw();
 </script>
 </body>
