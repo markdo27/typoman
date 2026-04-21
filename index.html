@@ -673,17 +673,6 @@ document.getElementById('caseRow').addEventListener('click', e => {
   if (!activePreset) draw();
 });
 
-// ═══════════════════════════════════════════════════════════════════════
-// EASING
-// ═══════════════════════════════════════════════════════════════════════
-const E = {
-  sine: t => -(Math.cos(Math.PI * t) - 1) / 2,
-  outQuint: t => 1 - Math.pow(1 - t, 5),
-  inOutCubic: t => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2,
-  inOutQuart: t => t < 0.5 ? 8*t*t*t*t : 1 - Math.pow(-2*t+2, 4)/2,
-  bounce: t => { const n1=7.5625,d1=2.75; if(t<1/d1) return n1*t*t; else if(t<2/d1) return n1*(t-=1.5/d1)*t+0.75; else if(t<2.5/d1) return n1*(t-=2.25/d1)*t+0.9375; else return n1*(t-=2.625/d1)*t+0.984375; },
-  elastic: t => t===0?0:t===1?1:Math.pow(2,-10*t)*Math.sin((t*10-0.75)*(2*Math.PI)/3)+1,
-};
 
 // ═══════════════════════════════════════════════════════════════════════
 // SLIDER ↔ NUMBER SYNC
@@ -1038,44 +1027,6 @@ function renderScene(dctx,W,H,scales,forExport){
 }
 
 function draw(){canvas.width=canvasW;canvas.height=canvasH;renderScene(ctx,canvasW,canvasH,lineScales,false);drawGraph();drawWarpOverlay();}
-
-function stopAnim(){if(animFrame){cancelAnimationFrame(animFrame);animFrame=null;}activePreset=null;document.querySelectorAll('.pbtn').forEach(b=>b.classList.remove('active'));document.getElementById('stopBtn').style.display='none';document.getElementById('liveDot').classList.remove('on');draw();}  spring: (t,i,n,I)=>{const ph=i/Math.max(n,1)*0.3;const raw=(t-ph+10)%1;const decay=Math.exp(-raw*4);const osc=Math.sin(raw*Math.PI*8)*decay;return 1+I*0.6*osc;},
-  breathe: (t,i,n,I)=>{const s=(Math.sin(t*Math.PI*2)+1)/2;const breathe=E.sine(s);const ph=i/Math.max(n,1)*0.2;return 1+I*0.3*(breathe+Math.sin((t+ph)*Math.PI*4)*0.15-0.5);},
-  // NEW: Warp Flow — fluid rotation/perspective distortion via asymmetric scaling
-  warpFlow: (t,i,n,I)=>{
-    const ph=i/Math.max(n,1)*0.6;
-    const raw=(t-ph+10)%1;
-    const wave1=Math.sin(raw*Math.PI*2)*0.5+0.5;
-    const wave2=Math.cos((raw+0.3)*Math.PI*2)*0.3;
-    const skewFactor=Math.sin(raw*Math.PI*4)*I*0.2;
-    return 1+I*0.4*(E.sine(wave1)*2-1+wave2)+skewFactor;
-  },
-  // NEW: Block In — rows slam in from alternating sides like blocks stacking
-  blockIn: (t,i,n,I)=>{
-    const ph=i/Math.max(n,1)*0.7;
-    const raw=((t-ph+10)%1);
-    // Quick slam then hold
-    const slam=raw<0.3?E.outQuint(raw/0.3):1;
-    const overshoot=raw<0.3?0:raw<0.5?Math.sin((raw-0.3)/0.2*Math.PI)*0.15*I:0;
-    return 0.2+(slam*0.8+overshoot)*(1+I*0.2*(i%2===0?0.1:-0.1));
-  },
-  // NEW: Typewriter — sequential reveal with scale pop
-  typewriter: (t,i,n,I)=>{
-    const ph=i/Math.max(n,1);
-    const delay=ph*0.8;
-    const raw=((t-delay+10)%1);
-    if(raw<0.1)return 0.01;
-    const pop=raw<0.3?E.elastic((raw-0.1)/0.2):1;
-    return pop*(1+I*0.1);
-  },
-  // NEW: Elastic — bouncy overshoot
-  elastic: (t,i,n,I)=>{
-    const ph=i/Math.max(n,1)*0.5;
-    const raw=(t-ph+10)%1;
-    const v=E.elastic(raw);
-    return 0.3+v*0.7+I*0.2*Math.sin(raw*Math.PI*6)*Math.exp(-raw*3);
-  }
-};
 
 // ═══════════════════════════════════════════════════════════════════════
 // ANIMATION LOOP (with Warp Flow skew support)
