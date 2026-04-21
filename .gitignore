@@ -1,2 +1,4 @@
 node_modules/
 strobe_test.png
+test_strobe.js
+check_smear.js

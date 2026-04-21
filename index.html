@@ -240,7 +240,8 @@ input[type=range]::-webkit-slider-thumb:hover{background:#fff;}
     <div class="top-sep"></div>
     <div class="top-info">Editorial Kinetic Engine</div>
     <div style="flex-grow:1"></div>
-    <div class="top-actions">
+    <div class="top-actions" style="display:flex;gap:12px;align-items:center;">
+      <a href="flash.html" style="color:#000;text-decoration:none;font-size:10px;letter-spacing:2px;font-weight:800;background:var(--accent);padding:3px 10px;text-transform:uppercase;">⚡ FLASH</a>
       <a href="https://github.com/markdo27/typoman" target="_blank" style="color:inherit;text-decoration:none;opacity:0.6;font-size:11px;letter-spacing:1px;font-weight:700;">SOURCE</a>
     </div>
     <div class="live-dot" id="liveDot"></div>
@@ -1057,7 +1058,6 @@ function renderScene(dctx,W,H,scales,forExport){
 
   if(webcamActive&&!forExport){dctx.clearRect(0,0,W,H);dctx.fillStyle=bgColor;dctx.fillRect(0,0,W,H);drawBgPattern(dctx,W,H);const offMask=document.createElement('canvas');offMask.width=W;offMask.height=H;const mCtx=offMask.getContext('2d');if(webcamVideo.readyState>=2){const vw=webcamVideo.videoWidth,vh=webcamVideo.videoHeight;const scale=Math.max(W/vw,H/vh);const sw=vw*scale,sh=vh*scale;mCtx.drawImage(webcamVideo,(W-sw)/2,(H-sh)/2,sw,sh);}mCtx.globalCompositeOperation='destination-in';layout.forEach((row,i)=>{const{y,lineH,text,xOffset,usableW:rW}=row;const displayText=applyCase(text);const sz=Math.max(Math.ceil(lineH*1.15),10);const ls=letterSpacing*sz;const chars=[...displayText];const condense=wordCondense[i]||1;const align=wordAlign[i]||'fill';const off=document.createElement('canvas');const tH=Math.max(Math.ceil(sz*2),4);off.width=rW;off.height=tH;const oc=off.getContext('2d');oc.font=getFont(sz,i);const cw2=chars.map(c=>oc.measureText(c).width);let nw2=0;cw2.forEach((w,k)=>{nw2+=w+(k<chars.length-1?ls:0);});let sx2;if(align==='fill')sx2=(rW/Math.max(nw2,1))*condense;else sx2=condense;oc.fillStyle='#fff';oc.textBaseline='top';oc.save();oc.scale(sx2,1);let cx2=0;chars.forEach((c,k)=>{oc.fillText(c,cx2,0);cx2+=cw2[k]+(k<chars.length-1?ls:0);});oc.restore();const id2=oc.getImageData(0,0,rW,tH);const px2=id2.data;let mr=tH,xr=0;for(let py=0;py<tH;py++)for(let px3=0;px3<rW;px3++)if(px2[(py*rW+px3)*4+3]>8){if(py<mr)mr=py;if(py>xr)xr=py;}if(mr>xr){mr=0;xr=Math.ceil(lineH);}mCtx.drawImage(off,0,mr,rW,xr-mr+1,xOffset,y,rW,lineH);});dctx.drawImage(offMask,0,0);}
   drawSidebarText(dctx,W,H);
-  window.lastSnapshotDataURL = dctx.canvas.toDataURL('image/png');
 }
 
 function draw(){canvas.width=canvasW;canvas.height=canvasH;renderScene(ctx,canvasW,canvasH,lineScales,false);drawGraph();drawWarpOverlay();}

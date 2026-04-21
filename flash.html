@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TYPOMAN — Flash Kinetic Engine</title>
+<meta name="description" content="Stroboscopic kinetic typography engine with BPM-driven scene cuts and geometric distortions.">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Bebas+Neue&family=Oswald:wght@700&family=Anton&family=Archivo+Black&family=Russo+One&family=Monoton&family=Rubik+Mono+One&family=Black+Ops+One&family=Bungee&family=Ultra&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{width:100%;height:100%;overflow:hidden;font-family:'JetBrains Mono',monospace;}
+:root{
+  --bg:#050505;--bg2:#0a0a0a;--bg3:#111111;--bg4:#1a1a1a;
+  --border:#2a2a2a;--border2:#333333;--border3:#444444;
+  --text:#f4f4f4;--text2:#aaaaaa;--text3:#777777;
+  --accent:#FF2020;--accent2:#FF4040;--accent-glow:rgba(255,32,32,0.3);
+  --danger:#FF2020;--success:#00FF9D;--warn:#FFD700;
+}
+body{color:var(--text);font-size:11px;background:#000;cursor:crosshair;}
+
+/* Grain overlay */
+body::after{content:'';position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  opacity:0.03;z-index:99999;mix-blend-mode:overlay;}
+
+/* Custom Cursor */
+.cursor{position:fixed;width:24px;height:24px;border:1px solid var(--accent);border-radius:50%;
+  pointer-events:none;z-index:100000;transform:translate(-50%,-50%);transition:transform 0.1s ease-out,width 0.2s,height 0.2s;
+  mix-blend-mode:difference;background:rgba(255,255,255,0.05);backdrop-filter:blur(2px);}
+.cursor.active{width:48px;height:48px;background:var(--accent);border-color:transparent;}
+
+/* Full-screen canvas */
+#flashCanvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;}
+
+/* Sidebar panel */
+.panel{position:fixed;top:0;left:0;width:260px;height:100vh;z-index:10;
+  background:rgba(5,5,5,0.92);backdrop-filter:blur(12px);
+  border-right:1px solid var(--border);overflow-y:auto;overflow-x:hidden;
+  scrollbar-width:thin;scrollbar-color:var(--bg4) transparent;
+  transition:transform 0.25s cubic-bezier(.4,0,.2,1);}
+.panel.collapsed{transform:translateX(-260px);}
+.panel::-webkit-scrollbar{width:4px;}
+.panel::-webkit-scrollbar-thumb{background:var(--border3);}
+
+/* Panel toggle button */
+.panel-toggle{position:fixed;top:12px;left:12px;z-index:11;
+  font-size:18px;background:rgba(5,5,5,0.7);backdrop-filter:blur(8px);
+  border:1px solid var(--border2);color:var(--text);
+  width:32px;height:32px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:all 0.2s;}
+.panel-toggle:hover{background:var(--accent);color:#000;border-color:var(--accent);}
+.panel.collapsed ~ .panel-toggle{left:12px;}
+.panel:not(.collapsed) ~ .panel-toggle{left:268px;}
+
+/* Header */
+.panel-header{padding:16px 14px 12px;border-bottom:1px solid var(--border);}
+.panel-title{font-family:'Anton',sans-serif;font-size:22px;letter-spacing:4px;text-transform:uppercase;color:var(--text);}
+.panel-title .flash-tag{color:var(--accent);font-size:11px;letter-spacing:2px;margin-left:8px;font-family:'JetBrains Mono',monospace;font-weight:700;}
+.panel-sub{font-size:9px;color:var(--text3);margin-top:4px;text-transform:uppercase;letter-spacing:1px;}
+
+/* Section headers */
+.sh{display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;user-select:none;border-bottom:1px solid var(--border);}
+.sh:hover{background:rgba(255,255,255,0.03);}
+.sh .ico{font-size:11px;width:14px;text-align:center;color:var(--accent);}
+.sh .lbl{font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text);flex:1;}
+.sh .ar{font-size:10px;color:var(--text);transition:transform 0.15s;font-family:'JetBrains Mono',monospace;}
+.sh.open .ar{transform:rotate(90deg);}
+
+/* Section body */
+.sb{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px;}
+.sb.hidden{display:none;}
+
+/* Rows */
+.row{display:flex;align-items:center;gap:8px;}
+.row label{font-size:10px;color:var(--text2);flex-shrink:0;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
+
+/* Inputs */
+input[type=range]{flex:1;min-width:0;height:4px;-webkit-appearance:none;appearance:none;
+  background:var(--border2);outline:none;cursor:crosshair;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:6px;height:16px;background:var(--accent);cursor:crosshair;border:none;}
+input[type=range]::-webkit-slider-thumb:hover{background:#fff;}
+.ni{width:42px;font-size:10px;font-weight:700;text-align:right;background:var(--bg3);
+  border:1px solid var(--border2);color:var(--text);padding:3px 4px;outline:none;
+  -moz-appearance:textfield;font-family:'JetBrains Mono',monospace;}
+.ni:focus{border-color:var(--accent);}
+
+/* Radio row */
+.radio-row{display:flex;gap:8px;align-items:center;}
+.radio-row label{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text2);cursor:pointer;font-weight:700;text-transform:uppercase;}
+.radio-row input[type=radio]{accent-color:var(--accent);cursor:pointer;}
+
+/* Textarea */
+.txt-input{width:100%;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;
+  background:var(--bg3);border:1px solid var(--border2);color:var(--text);
+  padding:8px;resize:vertical;min-height:60px;outline:none;text-align:center;}
+.txt-input:focus{border-color:var(--accent);}
+
+/* Font select */
+.font-select{width:100%;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;
+  background:var(--bg3);border:1px solid var(--border2);color:var(--text);
+  padding:4px;outline:none;cursor:pointer;text-transform:uppercase;}
+.font-select:focus{border-color:var(--accent);}
+
+/* Color row */
+.color-row{display:flex;align-items:center;gap:8px;}
+.color-swatch{width:28px;height:28px;border:1px solid var(--border3);cursor:pointer;flex-shrink:0;}
+.color-label{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-weight:700;}
+input[type=color]{width:28px;height:28px;padding:0;border:1px solid var(--border3);background:none;cursor:pointer;}
+
+/* Checkbox */
+.chk-row{display:flex;align-items:center;gap:6px;}
+.chk-row label{font-size:10px;color:var(--text2);cursor:pointer;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;}
+.chk-row input[type=checkbox]{accent-color:var(--accent);cursor:pointer;width:14px;height:14px;}
+
+/* Scene grid */
+.scene-grid{display:grid;grid-template-columns:1fr 1fr;gap:3px;}
+.scene-chk{display:flex;align-items:center;gap:4px;}
+.scene-chk label{font-size:10px;color:var(--text2);cursor:pointer;font-weight:700;text-transform:uppercase;}
+.scene-chk input[type=checkbox]{accent-color:var(--accent);cursor:pointer;width:12px;height:12px;}
+.scene-chk input:checked + label{color:var(--accent);}
+
+/* Buttons */
+.btn{font-size:10px;padding:6px 10px;border:1px solid var(--border2);
+  background:var(--bg3);color:var(--text2);cursor:pointer;transition:background 0.1s;
+  font-weight:700;text-transform:uppercase;letter-spacing:1px;width:100%;text-align:center;}
+.btn:hover{background:var(--border2);color:var(--text);}
+.btn.on{background:var(--accent);color:#000;border-color:var(--accent);}
+.btn-accent{font-size:10px;padding:6px 10px;border:1px solid var(--accent);
+  background:rgba(255,32,32,0.15);color:var(--accent);cursor:pointer;transition:all 0.15s;
+  font-weight:800;text-transform:uppercase;letter-spacing:2px;width:100%;text-align:center;}
+.btn-accent:hover{background:var(--accent);color:#000;}
+
+/* Aspect radios */
+.aspect-row{display:flex;gap:8px;}
+.aspect-row label{display:flex;align-items:center;gap:4px;font-size:9px;color:var(--text3);cursor:pointer;font-weight:700;text-transform:uppercase;}
+.aspect-row input[type=radio]{accent-color:var(--accent);cursor:pointer;}
+
+/* Master play toggle */
+.play-bar{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:20;
+  display:flex;align-items:center;gap:12px;}
+.play-toggle{width:56px;height:28px;background:var(--bg3);border:1px solid var(--border2);
+  border-radius:14px;cursor:pointer;position:relative;transition:all 0.25s;}
+.play-toggle.on{background:var(--accent);border-color:var(--accent);}
+.play-toggle::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;
+  background:#fff;border-radius:50%;transition:transform 0.25s cubic-bezier(.4,0,.2,1);}
+.play-toggle.on::after{transform:translateX(28px);}
+.play-label{font-size:9px;font-weight:800;letter-spacing:2px;text-transform:uppercase;
+  color:var(--text3);user-select:none;}
+
+/* Back link */
+.back-link{position:fixed;top:12px;right:16px;z-index:20;
+  font-size:10px;font-weight:700;color:var(--text3);text-decoration:none;
+  text-transform:uppercase;letter-spacing:1px;padding:6px 12px;
+  border:1px solid var(--border2);background:rgba(5,5,5,0.7);backdrop-filter:blur(8px);
+  transition:all 0.15s;}
+.back-link:hover{color:var(--accent);border-color:var(--accent);}
+
+/* Live dot */
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--border3);flex-shrink:0;}
+.live-dot.on{background:var(--accent);animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+</style>
+</head>
+<body>
+
+<canvas id="flashCanvas"></canvas>
+
+<!-- Sidebar Panel -->
+<div class="panel" id="mainPanel">
+  <div class="panel-header">
+    <div class="panel-title">TYPOMAN<span class="flash-tag">v.FLASH</span></div>
+    <div class="panel-sub">Stroboscopic Kinetic Engine</div>
+  </div>
+
+  <!-- TEXT Section -->
+  <div class="sh open" data-sec="text"><span class="ico">T</span><span class="lbl">Text</span><span class="ar">›</span></div>
+  <div class="sb" id="sec-text">
+    <div class="radio-row">
+      <label><input type="radio" name="textMode" value="text" checked> Text</label>
+      <label><input type="radio" name="textMode" value="clock"> Clock</label>
+    </div>
+    <textarea class="txt-input" id="textInput" rows="4">THE
+COLLECTIVE
+POWER
+OF
+TINY</textarea>
+    <select class="font-select" id="fontSelect">
+      <option value="'Anton', sans-serif">Anton</option>
+      <option value="'Bebas Neue', sans-serif">Bebas Neue</option>
+      <option value="'Oswald', sans-serif">Oswald</option>
+      <option value="'Archivo Black', sans-serif">Archivo Black</option>
+      <option value="'Russo One', sans-serif">Russo One</option>
+      <option value="'Monoton', sans-serif">Monoton</option>
+      <option value="'Rubik Mono One', sans-serif">Rubik Mono One</option>
+      <option value="'Black Ops One', sans-serif">Black Ops One</option>
+      <option value="'Bungee', sans-serif">Bungee</option>
+      <option value="'Ultra', serif">Ultra</option>
+      <option value="Impact, sans-serif">Impact</option>
+    </select>
+    <div class="color-row">
+      <div>
+        <div class="color-label">Background</div>
+        <input type="color" id="bgColor" value="#000000">
+      </div>
+      <div>
+        <div class="color-label">Foreground</div>
+        <input type="color" id="fgColor" value="#ffffff">
+      </div>
+      <div style="flex:1"></div>
+    </div>
+    <div class="chk-row">
+      <input type="checkbox" id="randomSwap" checked>
+      <label for="randomSwap">Random Color Swap</label>
+    </div>
+  </div>
+
+  <!-- SCENES Section -->
+  <div class="sh open" data-sec="scenes"><span class="ico">⚡</span><span class="lbl">Scenes</span><span class="ar">›</span></div>
+  <div class="sb" id="sec-scenes">
+    <div class="radio-row">
+      <label><input type="radio" name="cutMode" value="matchcut" checked> MatchCut</label>
+      <label><input type="radio" name="cutMode" value="easyease"> EasyEase</label>
+      <div class="live-dot" id="liveDot"></div>
+    </div>
+    <div class="row">
+      <label>Pace</label>
+      <input type="range" id="paceSlider" min="30" max="300" step="5" value="120">
+      <span class="ni" id="paceVal" style="pointer-events:none;">120</span>
+    </div>
+    <div class="scene-grid" id="sceneGrid">
+      <div class="scene-chk"><input type="checkbox" id="sc-arc" checked><label for="sc-arc">Arc</label></div>
+      <div class="scene-chk"><input type="checkbox" id="sc-shutter2" checked><label for="sc-shutter2">Shutter2</label></div>
+      <div class="scene-chk"><input type="checkbox" id="sc-bend" checked><label for="sc-bend">Bend</label></div>
+      <div class="scene-chk"><input type="checkbox" id="sc-slots" checked><label for="sc-slots">Slots</label></div>
+      <div class="scene-chk"><input type="checkbox" id="sc-box" checked><label for="sc-box">Box</label></div>
+      <div class="scene-chk"><input type="checkbox" id="sc-snap" checked><label for="sc-snap">Snap</label></div>
+      <div class="scene-chk"><input type="checkbox" id="sc-bugeye" checked><label for="sc-bugeye">Bug Eye</label></div>
+      <div class="scene-chk"><input type="checkbox" id="sc-split" checked><label for="sc-split">Split</label></div>
+      <div class="scene-chk"><input type="checkbox" id="sc-halo" checked><label for="sc-halo">Halo</label></div>
+      <div class="scene-chk"><input type="checkbox" id="sc-star" checked><label for="sc-star">Star</label></div>
+      <div class="scene-chk"><input type="checkbox" id="sc-sun" checked><label for="sc-sun">Sun</label></div>
+      <div class="scene-chk"><input type="checkbox" id="sc-twist" checked><label for="sc-twist">Twist</label></div>
+      <div class="scene-chk"><input type="checkbox" id="sc-shutter1" checked><label for="sc-shutter1">Shutter1</label></div>
+    </div>
+    <button class="btn" id="clearAll">Clear All</button>
+  </div>
+
+  <!-- SAVE Section -->
+  <div class="sh" data-sec="save"><span class="ico">⬇</span><span class="lbl">Save</span><span class="ar">›</span></div>
+  <div class="sb hidden" id="sec-save">
+    <div class="row">
+      <label>Repeat</label>
+      <input type="range" id="repeatSlider" min="1" max="10" step="1" value="3">
+      <span class="ni" id="repeatVal" style="pointer-events:none;">3</span>
+    </div>
+    <div class="aspect-row">
+      <label><input type="radio" name="aspect" value="window" checked> Window</label>
+      <label><input type="radio" name="aspect" value="vertical"> 9:16</label>
+      <label><input type="radio" name="aspect" value="square"> 1:1</label>
+    </div>
+    <button class="btn-accent" id="saveLoop">⬇ Save Loop</button>
+  </div>
+</div>
+
+<!-- Panel toggle -->
+<button class="panel-toggle" id="panelToggle">☰</button>
+
+<!-- Back to main -->
+<a class="back-link" href="index.html">← Typoman</a>
+
+<!-- Play/Pause toggle -->
+<div class="play-bar">
+  <span class="play-label">Engine</span>
+  <div class="play-toggle on" id="playToggle"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════
+const canvas = document.getElementById('flashCanvas');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+let playing = true;
+let textMode = 'text';
+let cutMode = 'matchcut';
+let pace = 120; // BPM
+let bgColor = '#000000';
+let fgColor = '#ffffff';
+let randomSwap = true;
+let currentFont = "'Anton', sans-serif";
+let repeatCount = 3;
+let aspectMode = 'window';
+
+// Scene state
+const SCENES = ['arc','shutter2','bend','slots','box','snap','bugeye','split','halo','star','sun','twist','shutter1'];
+let activeScenes = new Set(SCENES);
+let currentScene = null;
+let scenePhase = 0; // 0-1 progress within beat
+let lastBeatTime = 0;
+let beatAccum = 0;
+let swapped = false;
+let easeT = 0; // For EasyEase interpolation
+
+// Offscreen buffers
+let textCanvas, tctx;
+
+function resize() {
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W;
+  canvas.height = H;
+  textCanvas = document.createElement('canvas');
+  textCanvas.width = W;
+  textCanvas.height = H;
+  tctx = textCanvas.getContext('2d');
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ═══════════════════════════════════════════════════════════════════════
+// TEXT RENDERING
+// ═══════════════════════════════════════════════════════════════════════
+function getLines() {
+  if (textMode === 'clock') {
+    const now = new Date();
+    return [
+      String(now.getHours()).padStart(2, '0'),
+      String(now.getMinutes()).padStart(2, '0'),
+      String(now.getSeconds()).padStart(2, '0')
+    ];
+  }
+  return document.getElementById('textInput').value.split('\n').filter(l => l.trim());
+}
+
+function renderText(bg, fg) {
+  tctx.clearRect(0, 0, W, H);
+  tctx.fillStyle = bg;
+  tctx.fillRect(0, 0, W, H);
+
+  const lines = getLines();
+  if (!lines.length) return;
+
+  const n = lines.length;
+  const lineH = H / n;
+
+  tctx.fillStyle = fg;
+  tctx.textBaseline = 'top';
+
+  lines.forEach((line, i) => {
+    const text = line.trim().toUpperCase();
+    const sz = Math.ceil(lineH * 1.15);
+    tctx.font = `900 ${sz}px ${currentFont}`;
+    const measured = tctx.measureText(text);
+    const textW = measured.width || 1;
+    const scaleX = W / textW;
+    const y = i * lineH;
+
+    tctx.save();
+    tctx.translate(0, y);
+    tctx.scale(scaleX, 1);
+    tctx.fillText(text, 0, 0);
+    tctx.restore();
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SCENE EFFECTS (Pixel-Level Geometric Distortions)
+// ═══════════════════════════════════════════════════════════════════════
+
+function applyScene(sceneName, srcCanvas, phase) {
+  const sw = srcCanvas.width, sh = srcCanvas.height;
+  const out = document.createElement('canvas');
+  out.width = sw; out.height = sh;
+  const octx = out.getContext('2d');
+
+  switch(sceneName) {
+    case 'shutter1': {
+      const bands = 12;
+      const bandH = Math.ceil(sh / bands);
+      octx.drawImage(srcCanvas, 0, 0);
+      const snap = octx.getImageData(0, 0, sw, sh);
+      octx.clearRect(0, 0, sw, sh);
+      octx.putImageData(snap, 0, 0);
+      octx.clearRect(0, 0, sw, sh);
+      for (let i = 0; i < bands; i++) {
+        const y = i * bandH;
+        const h = Math.min(bandH, sh - y);
+        const offX = ((i % 2 === 0) ? 1 : -1) * phase * sw * 0.3;
+        octx.drawImage(srcCanvas, 0, y, sw, h, offX, y, sw, h);
+      }
+      break;
+    }
+    case 'shutter2': {
+      const bands = 8;
+      const bandW = Math.ceil(sw / bands);
+      for (let i = 0; i < bands; i++) {
+        const x = i * bandW;
+        const w = Math.min(bandW, sw - x);
+        const offY = ((i % 2 === 0) ? 1 : -1) * phase * sh * 0.3;
+        octx.drawImage(srcCanvas, x, 0, w, sh, x, offY, w, sh);
+      }
+      break;
+    }
+    case 'split': {
+      const thirds = Math.floor(sw / 3);
+      const offY = (phase - 0.5) * sh * 0.5;
+      octx.drawImage(srcCanvas, 0, 0, thirds, sh, 0, offY, thirds, sh);
+      octx.drawImage(srcCanvas, thirds, 0, thirds, sh, thirds, -offY, thirds, sh);
+      octx.drawImage(srcCanvas, thirds*2, 0, sw-thirds*2, sh, thirds*2, offY, sw-thirds*2, sh);
+      break;
+    }
+    case 'bugeye': {
+      octx.drawImage(srcCanvas, 0, 0);
+      const imgData = octx.getImageData(0, 0, sw, sh);
+      const src = new Uint8ClampedArray(imgData.data);
+      const dst = imgData.data;
+      const cx = sw / 2, cy = sh / 2;
+      const maxR = Math.min(sw, sh) * 0.7;
+      for (let y = 0; y < sh; y++) {
+        for (let x = 0; x < sw; x++) {
+          const dx = x - cx, dy = y - cy;
+          const r = Math.sqrt(dx*dx + dy*dy);
+          const di = (y * sw + x) * 4;
+          if (r < maxR && r > 0) {
+            const nr = (r * r) / maxR;
+            const sx = Math.round(cx + (dx/r) * nr);
+            const sy = Math.round(cy + (dy/r) * nr);
+            if (sx >= 0 && sx < sw && sy >= 0 && sy < sh) {
+              const si = (sy * sw + sx) * 4;
+              dst[di]=src[si]; dst[di+1]=src[si+1]; dst[di+2]=src[si+2]; dst[di+3]=src[si+3];
+            }
+          }
+        }
+      }
+      octx.putImageData(imgData, 0, 0);
+      break;
+    }
+    case 'arc': {
+      // Circular arc distortion — maps rows into an arc
+      octx.drawImage(srcCanvas, 0, 0);
+      const imgData = octx.getImageData(0, 0, sw, sh);
+      const src = new Uint8ClampedArray(imgData.data);
+      const dst = imgData.data;
+      dst.fill(0);
+      const cx = sw / 2, cy = sh;
+      const rOuter = sh * 0.95;
+      const rInner = sh * 0.2;
+      for (let y = 0; y < sh; y++) {
+        for (let x = 0; x < sw; x++) {
+          const dx = x - cx, dy = y - cy;
+          const r = Math.sqrt(dx*dx + dy*dy);
+          const theta = Math.atan2(dx, -dy);
+          if (r >= rInner && r <= rOuter) {
+            const srcX = Math.round(((theta / Math.PI) + 1) / 2 * sw);
+            const srcY = Math.round(((r - rInner) / (rOuter - rInner)) * sh);
+            if (srcX >= 0 && srcX < sw && srcY >= 0 && srcY < sh) {
+              const di = (y * sw + x) * 4;
+              const si = (srcY * sw + srcX) * 4;
+              dst[di]=src[si]; dst[di+1]=src[si+1]; dst[di+2]=src[si+2]; dst[di+3]=src[si+3];
+            }
+          }
+        }
+      }
+      octx.putImageData(imgData, 0, 0);
+      break;
+    }
+    case 'halo': {
+      // Full ring/halo — text mapped around a circle
+      octx.drawImage(srcCanvas, 0, 0);
+      const imgData = octx.getImageData(0, 0, sw, sh);
+      const src = new Uint8ClampedArray(imgData.data);
+      const dst = imgData.data;
+      dst.fill(0);
+      const cx = sw / 2, cy = sh / 2;
+      const rOuter = Math.min(sw, sh) * 0.48;
+      const rInner = rOuter * 0.3;
+      for (let y = 0; y < sh; y++) {
+        for (let x = 0; x < sw; x++) {
+          const dx = x - cx, dy = y - cy;
+          const r = Math.sqrt(dx*dx + dy*dy);
+          const theta = Math.atan2(dy, dx);
+          if (r >= rInner && r <= rOuter) {
+            const srcX = Math.round(((theta / Math.PI + 1) / 2) * sw) % sw;
+            const srcY = Math.round(((r - rInner) / (rOuter - rInner)) * sh);
+            if (srcX >= 0 && srcX < sw && srcY >= 0 && srcY < sh) {
+              const di = (y * sw + x) * 4;
+              const si = (srcY * sw + srcX) * 4;
+              dst[di]=src[si]; dst[di+1]=src[si+1]; dst[di+2]=src[si+2]; dst[di+3]=src[si+3];
+            }
+          }
+        }
+      }
+      octx.putImageData(imgData, 0, 0);
+      break;
+    }
+    case 'star': {
+      // Star burst — radial expansion from center
+      const points = 12;
+      octx.save();
+      octx.translate(sw/2, sh/2);
+      for (let i = 0; i < points; i++) {
+        const angle = (i / points) * Math.PI * 2;
+        octx.save();
+        octx.rotate(angle);
+        const scaleW = 0.08 + phase * 0.05;
+        octx.scale(scaleW, 1.2);
+        octx.drawImage(srcCanvas, -sw/2, -sh/2, sw, sh);
+        octx.restore();
+      }
+      octx.restore();
+      break;
+    }
+    case 'sun': {
+      // Radial rays from center
+      const rays = 16;
+      octx.save();
+      octx.translate(sw/2, sh/2);
+      for (let i = 0; i < rays; i++) {
+        const angle = (i / rays) * Math.PI * 2 + phase * 0.5;
+        octx.save();
+        octx.rotate(angle);
+        octx.scale(0.06, 1.5);
+        octx.drawImage(srcCanvas, -sw/2, -sh/2, sw, sh);
+        octx.restore();
+      }
+      octx.restore();
+      break;
+    }
+    case 'twist': {
+      // Swirl/twist distortion
+      octx.drawImage(srcCanvas, 0, 0);
+      const imgData = octx.getImageData(0, 0, sw, sh);
+      const src = new Uint8ClampedArray(imgData.data);
+      const dst = imgData.data;
+      const cx = sw / 2, cy = sh / 2;
+      const maxR = Math.min(sw, sh) * 0.6;
+      const twistAmount = (phase - 0.5) * Math.PI * 2;
+      for (let y = 0; y < sh; y++) {
+        for (let x = 0; x < sw; x++) {
+          const dx = x - cx, dy = y - cy;
+          const r = Math.sqrt(dx*dx + dy*dy);
+          const di = (y * sw + x) * 4;
+          if (r < maxR) {
+            const factor = 1 - (r / maxR);
+            const angle = Math.atan2(dy, dx) + twistAmount * factor;
+            const sx = Math.round(cx + Math.cos(angle) * r);
+            const sy = Math.round(cy + Math.sin(angle) * r);
+            if (sx >= 0 && sx < sw && sy >= 0 && sy < sh) {
+              const si = (sy * sw + sx) * 4;
+              dst[di]=src[si]; dst[di+1]=src[si+1]; dst[di+2]=src[si+2]; dst[di+3]=src[si+3];
+            }
+          }
+        }
+      }
+      octx.putImageData(imgData, 0, 0);
+      break;
+    }
+    case 'bend': {
+      // Vertical wave bend
+      const amplitude = phase * sh * 0.15;
+      const freq = 2 + phase * 3;
+      for (let x = 0; x < sw; x++) {
+        const offY = Math.sin((x / sw) * Math.PI * freq) * amplitude;
+        octx.drawImage(srcCanvas, x, 0, 1, sh, x, offY, 1, sh);
+      }
+      break;
+    }
+    case 'box': {
+      // Tile/box grid of the text
+      const cols = 3 + Math.floor(phase * 4);
+      const rows = 3 + Math.floor(phase * 4);
+      const cellW = sw / cols, cellH = sh / rows;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const scale = 0.5 + Math.random() * 0.6;
+          const ox = c * cellW + cellW * (1 - scale) / 2;
+          const oy = r * cellH + cellH * (1 - scale) / 2;
+          octx.drawImage(srcCanvas, 0, 0, sw, sh, ox, oy, cellW * scale, cellH * scale);
+        }
+      }
+      break;
+    }
+    case 'snap': {
+      // Scale snap — extreme zoom in/out
+      const scale = 0.3 + phase * 2.5;
+      const nw = sw * scale, nh = sh * scale;
+      octx.drawImage(srcCanvas, (sw - nw) / 2, (sh - nh) / 2, nw, nh);
+      break;
+    }
+    case 'slots': {
+      // Slot machine — each row scrolls independently
+      const lines = getLines();
+      const n = Math.max(lines.length, 1);
+      const slotH = Math.ceil(sh / n);
+      for (let i = 0; i < n; i++) {
+        const y = i * slotH;
+        const h = Math.min(slotH, sh - y);
+        const offX = ((i % 2 === 0) ? 1 : -1) * (phase - 0.5) * sw * 0.6;
+        octx.drawImage(srcCanvas, 0, y, sw, h, offX, y, sw, h);
+      }
+      break;
+    }
+    default:
+      octx.drawImage(srcCanvas, 0, 0);
+  }
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ANIMATION ENGINE
+// ═══════════════════════════════════════════════════════════════════════
+let animFrame = null;
+let lastTs = null;
+
+function pickScene() {
+  const arr = [...activeScenes];
+  if (!arr.length) return null;
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function animLoop(ts) {
+  if (!playing) { animFrame = requestAnimationFrame(animLoop); return; }
+  if (!lastTs) lastTs = ts;
+  const dt = Math.min((ts - lastTs) / 1000, 0.1);
+  lastTs = ts;
+
+  const beatInterval = 60 / pace;
+  beatAccum += dt;
+
+  if (cutMode === 'matchcut') {
+    if (beatAccum >= beatInterval) {
+      beatAccum = beatAccum % beatInterval;
+      // Hard cut: pick new scene, new phase
+      currentScene = pickScene();
+      scenePhase = Math.random();
+      if (randomSwap && Math.random() > 0.4) {
+        swapped = !swapped;
+      }
+    }
+  } else {
+    // EasyEase: smooth interpolation
+    easeT += dt / beatInterval;
+    if (easeT >= 1) {
+      easeT = easeT % 1;
+      currentScene = pickScene();
+      if (randomSwap && Math.random() > 0.4) {
+        swapped = !swapped;
+      }
+    }
+    // Smooth ease in-out
+    scenePhase = easeT < 0.5
+      ? 4 * easeT * easeT * easeT
+      : 1 - Math.pow(-2 * easeT + 2, 3) / 2;
+  }
+
+  // Render text with current colors
+  const bg = swapped ? fgColor : bgColor;
+  const fg = swapped ? bgColor : fgColor;
+  renderText(bg, fg);
+
+  // Apply current scene
+  ctx.clearRect(0, 0, W, H);
+  if (currentScene && activeScenes.has(currentScene)) {
+    const result = applyScene(currentScene, textCanvas, scenePhase);
+    ctx.drawImage(result, 0, 0, W, H);
+  } else {
+    ctx.drawImage(textCanvas, 0, 0);
+  }
+
+  animFrame = requestAnimationFrame(animLoop);
+}
+
+// Start
+currentScene = pickScene();
+animFrame = requestAnimationFrame(animLoop);
+
+// ═══════════════════════════════════════════════════════════════════════
+// UI WIRING
+// ═══════════════════════════════════════════════════════════════════════
+
+// Sections accordion
+document.querySelectorAll('.sh').forEach(h => {
+  h.addEventListener('click', () => {
+    const body = document.getElementById('sec-' + h.dataset.sec);
+    const open = h.classList.toggle('open');
+    body.classList.toggle('hidden', !open);
+  });
+});
+
+// Panel toggle
+document.getElementById('panelToggle').addEventListener('click', () => {
+  document.getElementById('mainPanel').classList.toggle('collapsed');
+});
+
+// Play toggle
+document.getElementById('playToggle').addEventListener('click', function() {
+  playing = !playing;
+  this.classList.toggle('on', playing);
+  document.getElementById('liveDot').classList.toggle('on', playing);
+  if (playing) { lastTs = null; }
+});
+document.getElementById('liveDot').classList.add('on');
+
+// Text mode
+document.querySelectorAll('input[name="textMode"]').forEach(r => {
+  r.addEventListener('change', () => { textMode = r.value; });
+});
+
+// Cut mode
+document.querySelectorAll('input[name="cutMode"]').forEach(r => {
+  r.addEventListener('change', () => { cutMode = r.value; easeT = 0; });
+});
+
+// Pace
+document.getElementById('paceSlider').addEventListener('input', e => {
+  pace = parseInt(e.target.value);
+  document.getElementById('paceVal').textContent = pace;
+});
+
+// Font
+document.getElementById('fontSelect').addEventListener('change', e => {
+  currentFont = e.target.value;
+});
+
+// Colors
+document.getElementById('bgColor').addEventListener('input', e => { bgColor = e.target.value; });
+document.getElementById('fgColor').addEventListener('input', e => { fgColor = e.target.value; });
+document.getElementById('randomSwap').addEventListener('change', e => { randomSwap = e.target.checked; });
+
+// Scene checkboxes
+SCENES.forEach(sc => {
+  const el = document.getElementById('sc-' + sc);
+  if (el) {
+    el.addEventListener('change', () => {
+      if (el.checked) activeScenes.add(sc);
+      else activeScenes.delete(sc);
+    });
+  }
+});
+
+// Clear all
+document.getElementById('clearAll').addEventListener('click', () => {
+  activeScenes.clear();
+  SCENES.forEach(sc => {
+    const el = document.getElementById('sc-' + sc);
+    if (el) el.checked = false;
+  });
+});
+
+// Repeat
+document.getElementById('repeatSlider').addEventListener('input', e => {
+  repeatCount = parseInt(e.target.value);
+  document.getElementById('repeatVal').textContent = repeatCount;
+});
+
+// Aspect
+document.querySelectorAll('input[name="aspect"]').forEach(r => {
+  r.addEventListener('change', () => { aspectMode = r.value; });
+});
+
+// Save loop
+document.getElementById('saveLoop').addEventListener('click', () => {
+  const btn = document.getElementById('saveLoop');
+  btn.textContent = '⏺ Recording...';
+  btn.style.pointerEvents = 'none';
+
+  const stream = canvas.captureStream(30);
+  const recorder = new MediaRecorder(stream, {
+    mimeType: 'video/webm;codecs=vp9',
+    videoBitsPerSecond: 8000000
+  });
+  const chunks = [];
+  recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+  recorder.onstop = () => {
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    const a = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    a.download = 'typoman-flash-loop.webm';
+    a.href = url;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    btn.textContent = '⬇ Save Loop';
+    btn.style.pointerEvents = '';
+  };
+  recorder.start();
+  const loopDuration = (60 / pace) * SCENES.filter(s => activeScenes.has(s)).length * repeatCount;
+  const dur = Math.max(loopDuration, 2) * 1000;
+  setTimeout(() => recorder.stop(), Math.min(dur, 30000));
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.code === 'Space') {
+    e.preventDefault();
+    document.getElementById('playToggle').click();
+  }
+});
+
+// Custom cursor
+const cursor = document.createElement('div');
+cursor.className = 'cursor';
+document.body.appendChild(cursor);
+document.addEventListener('mousemove', e => {
+  cursor.style.left = e.clientX + 'px';
+  cursor.style.top = e.clientY + 'px';
+});
+document.addEventListener('mousedown', () => cursor.classList.add('active'));
+document.addEventListener('mouseup', () => cursor.classList.remove('active'));
+</script>
+</body>
+</html>
