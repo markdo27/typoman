@@ -19,10 +19,20 @@ html,body{width:100%;height:100%;background:#0a0a0f;overflow:hidden;font-family:
   --r:10px;--rs:6px;
   --glass:rgba(18,18,28,0.7);--glass-border:rgba(255,255,255,0.08);
 }
-body{color:var(--text);font-size:13px;}
-.root{display:flex;flex-direction:column;width:100vw;height:100vh;padding:6px;gap:6px;}
-.top-bar{flex-shrink:0;display:flex;align-items:center;gap:12px;padding:6px 14px;
-  background:var(--glass);backdrop-filter:blur(20px);border:0.5px solid var(--glass-border);border-radius:var(--r);}
+body{color:var(--text);font-size:13px;overflow:hidden;background:var(--bg);cursor:none;}
+.root{display:flex;flex-direction:column;width:100vw;height:100vh;padding:8px;gap:8px;position:relative;z-index:1;}
+/* Global Grain Texture */
+body::after{content:'';position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  opacity:0.045;z-index:99999;mix-blend-mode:overlay;}
+/* Custom Cursor */
+.cursor{position:fixed;width:24px;height:24px;border:1px solid var(--accent);border-radius:50%;
+  pointer-events:none;z-index:100000;transform:translate(-50%,-50%);transition:transform 0.1s ease-out,width 0.2s,height 0.2s;
+  mix-blend-mode:difference;background:rgba(255,255,255,0.05);backdrop-filter:blur(2px);}
+.cursor.active{width:48px;height:48px;background:var(--accent);border-color:transparent;}
+
+.top-bar{flex-shrink:0;display:flex;align-items:center;gap:12px;padding:8px 16px;
+  background:var(--glass);backdrop-filter:blur(24px);border:0.5px solid var(--glass-border);border-radius:var(--r);}
 .logo{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:3px;color:var(--accent2);user-select:none;}
 .logo span{color:var(--text);opacity:0.4;font-size:14px;letter-spacing:1px;margin-left:4px;}
 .top-sep{width:1px;height:18px;background:var(--border2);}
@@ -231,9 +241,13 @@ input[type=range]::-webkit-slider-thumb:hover{box-shadow:0 0 8px var(--accent-gl
 <a href="#mainCanvas" class="skip-link">Skip to canvas</a>
 <div class="root">
   <div class="top-bar">
-    <div class="logo">TYPOMAN<span>kinetic type engine</span></div>
+    <div class="logo">TYPOMAN <span>v3.0 — KINETIC CONSTRUCTIVISM</span></div>
     <div class="top-sep"></div>
-    <div class="top-badge">v2.0</div>
+    <div class="top-info">Editorial Kinetic Engine</div>
+    <div style="flex-grow:1"></div>
+    <div class="top-actions">
+      <a href="https://github.com/markdo27/typoman" target="_blank" style="color:inherit;text-decoration:none;opacity:0.6;font-size:11px;letter-spacing:1px;font-weight:700;">SOURCE</a>
+    </div>
     <div class="live-dot" id="liveDot"></div>
     <div class="top-keys">
       <span class="kbd">Space</span><span style="font-size:9px;color:var(--text3)">play/stop</span>
@@ -441,6 +455,8 @@ input[type=range]::-webkit-slider-thumb:hover{box-shadow:0 0 8px var(--accent-gl
           <button class="pbtn" data-preset="breathe">Breathe</button>
           <button class="pbtn" data-preset="typewriter">Typewriter</button>
           <button class="pbtn" data-preset="elastic">Elastic</button>
+          <button class="pbtn" data-preset="entropy">Entropy Field</button>
+          <button class="pbtn" data-preset="quantum">Quantum Resonance</button>
         </div>
         <div class="mb-slider">
           <label>Speed</label>
@@ -475,6 +491,40 @@ const gCtx = graphCanvas.getContext('2d');
 const spectrumFill = document.getElementById('spectrumFill');
 const warpOverlay = document.getElementById('warpOverlay');
 const warpCtx = warpOverlay.getContext('2d');
+
+// ═══════════════════════════════════════════════════════════════════════
+// MATH & GENERATIVE UTILS (Kinetic Constructivism)
+// ═══════════════════════════════════════════════════════════════════════
+const E = {
+  sine: t => 1 - Math.cos((t * Math.PI) / 2),
+  outQuint: t => 1 - Math.pow(1 - t, 5),
+  inOutQuart: t => t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2,
+  bounce: t => { const n1 = 7.5625, d1 = 2.75; if (t < 1 / d1) return n1 * t * t; if (t < 2 / d1) return n1 * (t -= 1.5 / d1) * t + 0.75; if (t < 2.5 / d1) return n1 * (t -= 2.25 / d1) * t + 0.9375; return n1 * (t -= 2.625 / d1) * t + 0.984375; },
+  elastic: t => { const c4 = (2 * Math.PI) / 3; return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1; },
+  spring: t => { const c4 = (2 * Math.PI) / 3; return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1; }
+};
+
+let noiseData = new Float32Array(256 * 256);
+for(let i=0; i<noiseData.length; i++) noiseData[i] = Math.random() * 2 - 1;
+function getNoise(x, y) {
+  const ix = Math.floor(Math.abs(x) % 256), iy = Math.floor(Math.abs(y) % 256);
+  return noiseData[iy * 256 + ix];
+}
+
+const motionPresets = {
+  wave: (t, i, n, I) => Math.sin(t * 3 + i * 0.5) * (0.4 * I) + 0.6,
+  accordion: (t, i, n, I) => { const ph = (t * 2 + i * 0.3) % 4; const v = ph < 2 ? 0.3 + ph * 0.7 : 1.7 - (ph - 2) * 0.7; return 1 + (v - 1) * I; },
+  cascade: (t, i, n, I) => { const delay = i * 0.15, p = (t * 0.8 - delay) % 2.5; const v = p < 0 ? 0.2 : p < 0.4 ? 0.2 + (p/0.4)*1.1 : p < 1.0 ? 1.3 - ((p-0.4)/0.6)*1.1 : 0.2; return 1 + (v - 1) * I; },
+  warpFlow: (t, i, n, I) => 0.7 + (Math.sin(t * 1.5 + i * 0.8) + Math.sin(t * 4.2 + i * 1.2) * 0.3) * (0.4 * I),
+  blockIn: (t, i, n, I) => { const c = (t * 0.8) % 3; const v = c < 1 ? E.outQuint(c) : c < 2 ? 1.0 : 1.0 - E.outQuint(c - 2); return 1 + (v - 1) * I; },
+  bounce: (t, i, n, I) => { const tt = (t * 1.2 + i * 0.1) % 2; const v = tt < 1 ? E.bounce(tt) : 1 - E.bounce(tt - 1); return 1 + (v - 1) * I; },
+  spring: (t, i, n, I) => { const tt = (t * 0.7 + i * 0.05) % 2.5; const v = tt < 1.5 ? E.spring(tt/1.5) : 1; return 1 + (v - 1) * I; },
+  breathe: (t, i, n, I) => 0.8 + Math.sin(t * 1.2) * (0.35 * I),
+  typewriter: (t, i, n, I) => (t * 0.8 - i * 0.05) % 2 < 1 ? 1 : 0.01,
+  elastic: (t, i, n, I) => { const tt = (t * 0.6 + i * 0.1) % 2; const v = tt < 1 ? E.elastic(tt) : 1 - E.elastic(tt - 1); return 1 + (v - 1) * I; },
+  entropy: (t, i, n, I) => 1.0 + (getNoise(i * 10, t * 2) * 0.5 + getNoise(t * 1.5, i * 8) * 0.5) * I,
+  quantum: (t, i, n, I) => 1.0 + (Math.sin(t * 3.5 + i * 0.4) * Math.sin(t * 7.2 + i * 0.9) * 0.5) * I
+};
 
 let words = ['TYPO', 'MAN'];
 let wordColors = [null, null];
@@ -964,11 +1014,11 @@ function renderScene(dctx,W,H,scales,forExport){
 
     let scaleX,drawX=0;
     if(align==='fill'){scaleX=(rW/nw)*condense;if(condense<1)drawX=(rW-rW*condense)/2;}
-    else{scaleX=condense;const totalW=nw*condense;if(align==='center')drawX=(rW-totalW)/2;else if(align==='right')drawX=rW-totalW;}
+    else{scaleX=condense;if(align==='center')drawX=(rW-nw*condense)/2;else if(align==='right')drawX=rW-nw*condense;}
 
     const fillStyle=createTextFill(oc,color,rW,H,y,lineH);
     oc.fillStyle=fillStyle;oc.textBaseline='top';oc.save();
-    if(align==='fill')oc.scale(scaleX,1);else{oc.translate(drawX,0);oc.scale(scaleX,1);}
+    oc.scale(scaleX,1);
     let cx=0;chars.forEach((c,k)=>{oc.fillText(c,cx,0);cx+=charWidths[k]+(k<chars.length-1?ls:0);});oc.restore();
 
     if(fillMode==='stripe'){oc.save();oc.globalCompositeOperation='source-atop';const sA=stripeAngle*Math.PI/180;oc.fillStyle=bgColor;oc.fillRect(0,0,rW,tH);oc.strokeStyle=color;oc.lineWidth=stripeWidth*0.6;const diag=Math.sqrt(rW*rW+tH*tH);oc.translate(rW/2,tH/2);oc.rotate(sA);for(let s=-diag;s<diag;s+=stripeWidth){oc.beginPath();oc.moveTo(s,-diag);oc.lineTo(s,diag);oc.stroke();}oc.restore();}
@@ -980,8 +1030,8 @@ function renderScene(dctx,W,H,scales,forExport){
     const glyphH=maxR-minR+1;
 
     dctx.save();
-    if(skewDeg!==0){const skewRad=skewDeg*Math.PI/180;dctx.transform(1,0,Math.tan(skewRad),1,xOffset,0);dctx.drawImage(off,0,minR,rW,glyphH,0,y,rW,lineH);}
-    else dctx.drawImage(off,0,minR,rW,glyphH,xOffset,y,rW,lineH);
+    if(skewDeg!==0){const skewRad=skewDeg*Math.PI/180;dctx.transform(1,0,Math.tan(skewRad),1,xOffset+drawX,0);dctx.drawImage(off,0,minR,rW,glyphH,0,y,rW,lineH);}
+    else dctx.drawImage(off,0,minR,rW,glyphH,xOffset+drawX,y,rW,lineH);
     dctx.restore();
   });
 
@@ -994,15 +1044,7 @@ function renderScene(dctx,W,H,scales,forExport){
 
 function draw(){canvas.width=canvasW;canvas.height=canvasH;renderScene(ctx,canvasW,canvasH,lineScales,false);drawGraph();drawWarpOverlay();}
 
-// ═══════════════════════════════════════════════════════════════════════
-// MOTION PRESETS (10 total with new ones)
-// ═══════════════════════════════════════════════════════════════════════
-const motionPresets = {
-  wave: (t,i,n,I)=>{const ph=i/Math.max(n,1);const s=(Math.sin((t-ph)*Math.PI*2)+1)/2;return 1+I*0.35*(E.sine(s)*2-1);},
-  accordion: (t,i,n,I)=>{const sign=i%2===0?1:-1;const s=(Math.sin(t*Math.PI*2)+1)/2;return 1+sign*I*0.45*(s*2-1);},
-  cascade: (t,i,n,I)=>{const ph=i/Math.max(n,1)*0.55;const raw=(t-ph+10)%1;const s=(Math.sin(raw*Math.PI*2)+1)/2;return 1+I*0.45*(E.inOutQuart(s)*2-1);},
-  bounce: (t,i,n,I)=>{const ph=i/Math.max(n,1)*0.4;const raw=(t-ph+10)%1;return 1+I*0.5*(E.bounce(raw)-0.5);},
-  spring: (t,i,n,I)=>{const ph=i/Math.max(n,1)*0.3;const raw=(t-ph+10)%1;const decay=Math.exp(-raw*4);const osc=Math.sin(raw*Math.PI*8)*decay;return 1+I*0.6*osc;},
+function stopAnim(){if(animFrame){cancelAnimationFrame(animFrame);animFrame=null;}activePreset=null;document.querySelectorAll('.pbtn').forEach(b=>b.classList.remove('active'));document.getElementById('stopBtn').style.display='none';document.getElementById('liveDot').classList.remove('on');draw();}  spring: (t,i,n,I)=>{const ph=i/Math.max(n,1)*0.3;const raw=(t-ph+10)%1;const decay=Math.exp(-raw*4);const osc=Math.sin(raw*Math.PI*8)*decay;return 1+I*0.6*osc;},
   breathe: (t,i,n,I)=>{const s=(Math.sin(t*Math.PI*2)+1)/2;const breathe=E.sine(s);const ph=i/Math.max(n,1)*0.2;return 1+I*0.3*(breathe+Math.sin((t+ph)*Math.PI*4)*0.15-0.5);},
   // NEW: Warp Flow — fluid rotation/perspective distortion via asymmetric scaling
   warpFlow: (t,i,n,I)=>{
@@ -1216,6 +1258,17 @@ document.querySelectorAll('.sh').forEach(sh => {
 });
 
 buildColorPresets();rebuildChips();buildLineControls();buildTransformControls();draw();
+
+// Custom Cursor Logic
+const cursor = document.createElement('div');
+cursor.className = 'cursor';
+document.body.appendChild(cursor);
+document.addEventListener('mousemove', e => {
+  cursor.style.left = e.clientX + 'px';
+  cursor.style.top = e.clientY + 'px';
+});
+document.addEventListener('mousedown', () => cursor.classList.add('active'));
+document.addEventListener('mouseup', () => cursor.classList.remove('active'));
 </script>
 </body>
 </html>
