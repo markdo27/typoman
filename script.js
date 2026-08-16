@@ -136,7 +136,9 @@ document.getElementById('fontFileInput').addEventListener('change', async e => {
       btn.className = 'fpbtn';
       btn.dataset.font = fontEntry.css;
       btn.textContent = name;
-      btn.style.borderColor = 'rgba(46,213,115,0.3)';
+      // Marks this preset as a user-uploaded font; a 30% tint was invisible
+      // against the paper panel.
+      btn.style.borderColor = 'var(--success)';
       document.getElementById('fontPresets').appendChild(btn);
 
       buildCustomFontsList();
@@ -259,7 +261,9 @@ function buildColorPresets() {
     colors.forEach((c,i)=>{
       const s=document.createElement('div'); s.className='swatch'+(i===active?' active':''); s.setAttribute('role','button'); s.setAttribute('aria-label','Select color '+c);
       const lum=hexLum(c);
-      s.style.cssText=`background:${c};border-color:${i===active?'rgba(255,255,255,0.85)':(lum>0.6?'rgba(0,0,0,0.2)':'rgba(255,255,255,0.1)')};`;
+      // Ink outline for the active swatch; light swatches also need a visible
+      // edge now that the panel behind them is paper rather than near-black.
+      s.style.cssText=`background:${c};border-color:${i===active?'#0a0a0a':(lum>0.6?'#d4d4d4':'rgba(10,10,10,0.25)')};`;
       s.addEventListener('click',()=>{ if(ci===0){bgColor=c;activeBgIdx=i;noiseCanvas=null;}else{textColor=c;activeTextIdx=i;} buildColorPresets();if(!activePreset)draw(); });
       el.appendChild(s);
     });
