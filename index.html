@@ -95,6 +95,17 @@ canvas#graphCanvas{display:block;width:100%;height:100%;}
 .sh.open .ar{transform:rotate(90deg);}
 .sb{padding:8px 12px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px;}
 .sb.hidden{display:none;}
+/* About & licence, set with the panel's own label treatment. */
+.about{margin:0;}
+.about dt{font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase;
+  color:var(--text3);margin-top:8px;}
+.about dt:first-child{margin-top:0;}
+.about dd{margin:3px 0 0;font-size:10px;line-height:1.55;color:var(--text2);}
+.about a{color:var(--accent);text-decoration:underline;text-underline-offset:2px;}
+.about a:hover{color:var(--accent2);}
+.about-note{margin:0;padding-top:8px;border-top:1px solid var(--border);
+  font-size:9px;color:var(--text3);}
+
 .chips-wrap{display:flex;flex-wrap:wrap;gap:2px;min-height:32px;}
 .chip{display:flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--border2);
   border-radius:0px;padding:3px 6px 3px 6px;cursor:grab;user-select:none;transition:background 0.1s;}
@@ -448,6 +459,22 @@ input[type=range]::-webkit-slider-thumb:hover{background:#fff;}
           <button class="scbtn" data-scene="split">Split</button>
           <button class="scbtn" data-scene="bugEye">Bug Eye</button>
         </div>
+      </div>
+
+      <!-- About & Licence -->
+      <div class="sh" data-sec="about"><span class="ico">&#9432;</span><span class="lbl">About &amp; Licence</span><span class="ar">›</span></div>
+      <div class="sb hidden" id="sec-about">
+        <dl class="about">
+          <dt>Author</dt>
+          <dd>Mark Do</dd>
+          <dt>Contact</dt>
+          <dd><a href="mailto:dtcmark@gmail.com">dtcmark@gmail.com</a></dd>
+          <dt>Personal use</dt>
+          <dd>Free. Use this tool, and anything you make with it, for personal, study and other non commercial work. No permission needed.</dd>
+          <dt>Commercial use</dt>
+          <dd>Ask first. Client, brand, resale and any other paid work needs written permission: <a href="mailto:dtcmark@gmail.com?subject=Commercial%20use%20request">request a licence</a>.</dd>
+        </dl>
+        <p class="about-note">&copy; 2026 Mark Do. Provided as is, with no warranty.</p>
       </div>
     </div>
 
