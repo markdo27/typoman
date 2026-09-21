@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cavalry: 7 Days of Beginner Motion Graphics — Satriyo Atmojo</title>
+<meta name="description" content="High-performance procedural kinetic typography recreation of Satriyo Atmojo's Cavalry 7-day motion graphics series.">
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Syne:wght@700;800;900&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
+
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Lucide Icons -->
+<script src="https://unpkg.com/lucide@latest"></script>
+
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        cavalry: {
+          navy: '#030373',
+          darkSlate: '#02024A',
+          electric: '#0100EC',
+          indigo: '#5C5AFB',
+          lightIndigo: '#A3A2FF',
+          chalk: '#F2F8FC',
+        }
+      },
+      fontFamily: {
+        syne: ['Syne', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
+        display: ['Space Grotesk', 'sans-serif']
+      }
+    }
+  }
+}
+</script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{width:100%;height:100%;overflow:hidden;background:#030373;color:#F2F8FC;font-family:'JetBrains Mono',monospace;-webkit-font-smoothing:antialiased;}
+
+/* Custom Range Slider */
+input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255,255,255,0.15);
+  height: 4px;
+  border-radius: 2px;
+  outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #5C5AFB;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(92,90,251,0.8);
+  transition: transform 0.1s, background 0.1s;
+}
+input[type=range]::-webkit-slider-thumb:hover {
+  transform: scale(1.3);
+  background: #A3A2FF;
+}
+
+/* Glassmorphic Panel */
+.glass-panel {
+  background: rgba(3, 3, 115, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(163, 162, 255, 0.18);
+  box-shadow: 0 20px 50px rgba(0, 0, 40, 0.6);
+}
+
+/* Chalk Theme Adaptive Styles */
+[data-theme="chalk"] {
+  color: #030373;
+}
+[data-theme="chalk"] .glass-panel {
+  background: rgba(242, 248, 252, 0.9);
+  border-color: rgba(3, 3, 115, 0.15);
+  box-shadow: 0 20px 50px rgba(3, 3, 115, 0.08);
+}
+[data-theme="chalk"] header h1 {
+  color: #030373 !important;
+}
+[data-theme="chalk"] header p {
+  color: rgba(3, 3, 115, 0.7) !important;
+}
+[data-theme="chalk"] .preset-btn:not(.bg-cavalry-electric) {
+  color: rgba(3, 3, 115, 0.7) !important;
+}
+[data-theme="chalk"] .preset-btn:not(.bg-cavalry-electric):hover {
+  color: #030373 !important;
+  background: rgba(3, 3, 115, 0.06) !important;
+}
+[data-theme="chalk"] #animTitle {
+  color: #030373 !important;
+}
+[data-theme="chalk"] #animDesc {
+  color: rgba(3, 3, 115, 0.7) !important;
+}
+[data-theme="chalk"] #textInput {
+  background: rgba(3, 3, 115, 0.05) !important;
+  color: #030373 !important;
+  border-color: rgba(3, 3, 115, 0.2) !important;
+}
+[data-theme="chalk"] #loopPercent {
+  color: #030373 !important;
+}
+[data-theme="chalk"] input[type=range] {
+  background: rgba(3, 3, 115, 0.15);
+}
+[data-theme="chalk"] a[title="Return to Typoman Studio"],
+[data-theme="chalk"] #fullscreenBtn,
+[data-theme="chalk"] #resetPhaseBtn {
+  background: rgba(3, 3, 115, 0.05) !important;
+  border-color: rgba(3, 3, 115, 0.15) !important;
+  color: #030373 !important;
+}
+[data-theme="chalk"] a[title="Return to Typoman Studio"]:hover,
+[data-theme="chalk"] #fullscreenBtn:hover,
+[data-theme="chalk"] #resetPhaseBtn:hover {
+  background: rgba(3, 3, 115, 0.1) !important;
+}
+[data-theme="chalk"] .theme-btn:not(.active-theme) {
+  color: rgba(3, 3, 115, 0.6) !important;
+}
+[data-theme="chalk"] .theme-btn:not(.active-theme):hover {
+  color: #030373 !important;
+}
+[data-theme="chalk"] #fpsBadge {
+  color: #0284c7 !important;
+}
+[data-theme="chalk"] #fpsBadge span {
+  background: #0284c7 !important;
+}
+</style>
+</head>
+<body class="relative w-screen h-screen overflow-hidden select-none bg-grid transition-colors duration-500" id="appBody">
+
+  <!-- Top Floating Header -->
+  <header class="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-6 py-4 pointer-events-none">
+    <div class="flex items-center gap-3 pointer-events-auto">
+      <div class="w-3 h-3 rounded-full bg-cavalry-indigo animate-pulse shadow-[0_0_12px_#5C5AFB]"></div>
+      <div>
+        <h1 class="font-syne font-black text-sm tracking-wider text-cavalry-chalk uppercase flex items-center gap-2">
+          CAVALRY <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cavalry-electric/80 border border-cavalry-indigo/30 text-cavalry-lightIndigo">7 DAYS</span>
+        </h1>
+        <p class="text-[10px] text-cavalry-lightIndigo/70 font-mono tracking-tight">Satriyo Atmojo • Procedural Motion Graphics</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3 pointer-events-auto">
+      <!-- Back to Typoman Studio -->
+      <a href="index.html" class="px-2.5 py-1 rounded bg-black/40 border border-white/10 hover:border-cavalry-indigo text-[10px] font-mono font-bold text-white/80 hover:text-white flex items-center gap-1.5 transition-all" title="Return to Typoman Studio">
+        <i data-lucide="arrow-left" class="w-3 h-3"></i>
+        <span>TYPOMAN</span>
+      </a>
+
+      <!-- FPS Counter -->
+      <div class="px-2.5 py-1 rounded bg-black/40 border border-white/10 text-[10px] font-mono font-bold text-emerald-400 flex items-center gap-1.5 shadow-inner">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+        <span id="fpsBadge">60 FPS</span>
+      </div>
+
+      <!-- Theme Switcher -->
+      <div class="flex rounded-md p-0.5 bg-black/40 border border-white/10 text-[10px] font-mono">
+        <button class="theme-btn px-2 py-1 rounded transition-all font-bold active-theme text-white bg-cavalry-electric shadow-sm" data-theme="cobalt" title="Cobalt Blue Theme">COBALT</button>
+        <button class="theme-btn px-2 py-1 rounded transition-all text-white/60 hover:text-white" data-theme="void" title="Deep Void Black Theme">VOID</button>
+        <button class="theme-btn px-2 py-1 rounded transition-all text-white/60 hover:text-white" data-theme="chalk" title="High-Contrast White Theme">CHALK</button>
+      </div>
+
+      <!-- Fullscreen Toggle -->
+      <button id="fullscreenBtn" class="p-2 rounded bg-black/40 border border-white/10 text-white/80 hover:text-white hover:border-cavalry-indigo transition-all" title="Toggle Fullscreen">
+        <i data-lucide="maximize" class="w-3.5 h-3.5"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Canvas Viewport -->
+  <main class="w-full h-full relative flex items-center justify-center">
+    <canvas id="motionCanvas" class="w-full h-full block cursor-grab active:cursor-grabbing"></canvas>
+  </main>
+
+  <!-- Preset Selector Pill Bar (Day 1 - Day 7) -->
+  <nav class="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 p-1.5 rounded-xl glass-panel text-[11px] font-mono tracking-wide shadow-2xl">
+    <button class="preset-btn px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 bg-cavalry-electric text-white shadow-[0_0_15px_rgba(1,0,236,0.6)]" data-day="0">
+      <span class="opacity-60 text-[9px]">01</span> WAVE
+    </button>
+    <button class="preset-btn px-3 py-1.5 rounded-lg font-medium transition-all text-white/70 hover:text-white hover:bg-white/5 flex items-center gap-1.5" data-day="1">
+      <span class="opacity-60 text-[9px]">02</span> ACCORDION
+    </button>
+    <button class="preset-btn px-3 py-1.5 rounded-lg font-medium transition-all text-white/70 hover:text-white hover:bg-white/5 flex items-center gap-1.5" data-day="2">
+      <span class="opacity-60 text-[9px]">03</span> CYLINDER
+    </button>
+    <button class="preset-btn px-3 py-1.5 rounded-lg font-medium transition-all text-white/70 hover:text-white hover:bg-white/5 flex items-center gap-1.5" data-day="3">
+      <span class="opacity-60 text-[9px]">04</span> COUNTER
+    </button>
+    <button class="preset-btn px-3 py-1.5 rounded-lg font-medium transition-all text-white/70 hover:text-white hover:bg-white/5 flex items-center gap-1.5" data-day="4">
+      <span class="opacity-60 text-[9px]">05</span> BLOOM
+    </button>
+    <button class="preset-btn px-3 py-1.5 rounded-lg font-medium transition-all text-white/70 hover:text-white hover:bg-white/5 flex items-center gap-1.5" data-day="5">
+      <span class="opacity-60 text-[9px]">06</span> PUNCH
+    </button>
+    <button class="preset-btn px-3 py-1.5 rounded-lg font-medium transition-all text-white/70 hover:text-white hover:bg-white/5 flex items-center gap-1.5" data-day="6">
+      <span class="opacity-60 text-[9px]">07</span> TUNNEL
+    </button>
+  </nav>
+
+  <!-- Bottom Floating Control Dashboard -->
+  <footer class="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 w-[92%] max-w-4xl glass-panel rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-2xl">
+    
+    <!-- Left: Live Text Input -->
+    <div class="flex items-center gap-3 w-full md:w-auto flex-1">
+      <div class="text-cavalry-lightIndigo/80 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap flex items-center gap-1.5">
+        <i data-lucide="type" class="w-3.5 h-3.5 text-cavalry-indigo"></i> TEXT
+      </div>
+      <input type="text" id="textInput" value="CAVALRY" maxlength="20"
+        class="bg-black/30 border border-cavalry-indigo/30 focus:border-cavalry-lightIndigo text-white font-syne font-extrabold text-sm px-3.5 py-1.5 rounded-lg outline-none w-full md:w-52 tracking-wider uppercase transition-all shadow-inner placeholder-white/30"
+        placeholder="TYPE SOMETHING...">
+    </div>
+
+    <!-- Center: Playback Controls & Speed Slider -->
+    <div class="flex items-center gap-4 w-full md:w-auto justify-center">
+      <!-- Play/Pause Button -->
+      <button id="playPauseBtn" class="flex items-center justify-center w-9 h-9 rounded-xl bg-cavalry-electric hover:bg-cavalry-indigo text-white transition-all shadow-[0_0_15px_rgba(1,0,236,0.5)] active:scale-95" title="Play/Pause (Space)">
+        <i data-lucide="pause" id="playIcon" class="w-4 h-4"></i>
+      </button>
+
+      <!-- Speed Control -->
+      <div class="flex items-center gap-2">
+        <span class="text-[10px] font-mono text-cavalry-lightIndigo/70 font-semibold">SPEED</span>
+        <input type="range" id="speedSlider" min="0.2" max="3.0" step="0.1" value="1.0" class="w-24">
+        <span id="speedDisplay" class="text-[10px] font-mono text-white font-bold w-7 text-right">1.0×</span>
+      </div>
+
+      <!-- Reset / Re-seed Button -->
+      <button id="resetPhaseBtn" class="p-2 rounded-lg bg-black/20 hover:bg-white/10 text-white/70 hover:text-white border border-white/5 transition-all text-[10px] font-mono flex items-center gap-1" title="Sync Phase">
+        <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
+      </button>
+    </div>
+
+    <!-- Right: Current Animation Description & Scrubber -->
+    <div class="flex items-center gap-3 w-full md:w-auto justify-end">
+      <div class="text-right hidden sm:block">
+        <div id="animTitle" class="font-syne font-extrabold text-xs text-cavalry-chalk tracking-wide uppercase">DAY 01: WAVE DUPLICATOR</div>
+        <div id="animDesc" class="font-mono text-[9px] text-cavalry-lightIndigo/70">Procedural sine wave & noise falloff</div>
+      </div>
+      <!-- Loop Progress Indicator -->
+      <div class="w-10 h-10 relative flex items-center justify-center">
+        <svg class="w-9 h-9 -rotate-90">
+          <circle cx="18" cy="18" r="14" stroke="rgba(255,255,255,0.1)" stroke-width="2.5" fill="none"/>
+          <circle id="loopProgressCircle" cx="18" cy="18" r="14" stroke="#5C5AFB" stroke-width="2.5" stroke-dasharray="88" stroke-dashoffset="88" stroke-linecap="round" fill="none" class="transition-all duration-75"/>
+        </svg>
+        <span class="absolute text-[8px] font-mono font-bold text-white/80" id="loopPercent">0%</span>
+      </div>
+    </div>
+  </footer>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// CAVALRY 7-DAY PROCEDURAL ANIMATION ENGINE
+// ═══════════════════════════════════════════════════════════════════════
+
+const canvas = document.getElementById('motionCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+
+// Global Animation State
+const state = {
+  currentDay: 0,
+  text: "CAVALRY",
+  playing: true,
+  speed: 1.0,
+  time: 0,
+  theme: 'cobalt',
+  width: 0,
+  height: 0,
+  dpr: Math.min(window.devicePixelRatio || 1, 2)
+};
+
+// Theme Definitions based on Design Specs
+const THEMES = {
+  cobalt: {
+    bg: '#030373',
+    primary: '#0100EC',
+    accent1: '#5C5AFB',
+    accent2: '#A3A2FF',
+    text: '#F2F8FC',
+    subtext: 'rgba(242, 248, 252, 0.4)',
+    grid: 'rgba(255, 255, 255, 0.04)'
+  },
+  void: {
+    bg: '#05050A',
+    primary: '#181745',
+    accent1: '#5C5AFB',
+    accent2: '#A3A2FF',
+    text: '#FFFFFF',
+    subtext: 'rgba(255, 255, 255, 0.3)',
+    grid: 'rgba(92, 90, 251, 0.05)'
+  },
+  chalk: {
+    bg: '#F2F8FC',
+    primary: '#E0E7FF',
+    accent1: '#0100EC',
+    accent2: '#5C5AFB',
+    text: '#030373',
+    subtext: 'rgba(3, 3, 115, 0.35)',
+    grid: 'rgba(3, 3, 115, 0.05)'
+  }
+};
+
+// Animation Metadata
+const ANIMATIONS = [
+  {
+    title: "DAY 01: WAVE DUPLICATOR",
+    desc: "Procedural sine & noise wave with character phase offset",
+    duration: 3.0 // seconds per loop
+  },
+  {
+    title: "DAY 02: ACCORDION SQUASH",
+    desc: "Stepped cubic-bezier compression with elastic overshoot",
+    duration: 2.5
+  },
+  {
+    title: "DAY 03: CYLINDRICAL DRUM",
+    desc: "3D rotating drum projection with depth perspective falloff",
+    duration: 4.0
+  },
+  {
+    title: "DAY 04: COUNTER SLIDE",
+    desc: "Alternating multi-tiered staggered rows on beat lock",
+    duration: 3.2
+  },
+  {
+    title: "DAY 05: RADIAL BLOOM",
+    desc: "Circumference duplicator with kaleidoscope expansion",
+    duration: 3.5
+  },
+  {
+    title: "DAY 06: VELOCITY PUNCH",
+    desc: "Extreme shear and spring impact with chromatic echo",
+    duration: 2.4
+  },
+  {
+    title: "DAY 07: INFINITE ECHO TUNNEL",
+    desc: "Concentric depth recursion scaling through color cascades",
+    duration: 3.0
+  }
+];
+
+// Easing Utilities (Snappy Cavalry Curves)
+const Ease = {
+  // Snappy exponential curve cubic-bezier(0.16, 1, 0.3, 1)
+  outExpo: t => t === 1 ? 1 : 1 - Math.pow(2, -10 * t),
+  inOutCubic: t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2,
+  outBack: (t, s = 1.70158) => 1 + (s + 1) * Math.pow(t - 1, 3) + s * Math.pow(t - 1, 2),
+  cavalrySnap: t => {
+    // Stepped snappy easing: fast leap, spring overshoot, settle
+    const c4 = (2 * Math.PI) / 3;
+    return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// RESIZE & CANVAS SETUP
+// ═══════════════════════════════════════════════════════════════════════
+function resize() {
+  state.width = window.innerWidth;
+  state.height = window.innerHeight;
+  canvas.width = Math.floor(state.width * state.dpr);
+  canvas.height = Math.floor(state.height * state.dpr);
+  canvas.style.width = `${state.width}px`;
+  canvas.style.height = `${state.height}px`;
+  ctx.scale(state.dpr, state.dpr);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ═══════════════════════════════════════════════════════════════════════
+// DAY 1: WAVE DUPLICATOR
+// Staggered character sine waves across stacked lines with trailing echoes
+// ═══════════════════════════════════════════════════════════════════════
+function renderDay1(t, colors, W, H) {
+  const lines = 7;
+  const chars = state.text.split('');
+  const fontSize = Math.min(W / (chars.length * 0.75), H * 0.13, 90);
+  ctx.font = `900 ${fontSize}px Syne, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const lineSpacing = fontSize * 1.05;
+  const startY = H / 2 - ((lines - 1) * lineSpacing) / 2;
+
+  for (let l = 0; l < lines; l++) {
+    const yBase = startY + l * lineSpacing;
+    const isCenter = l === Math.floor(lines / 2);
+
+    // Character spacing
+    const totalW = chars.length * (fontSize * 0.65);
+    const startX = W / 2 - totalW / 2 + (fontSize * 0.65) / 2;
+
+    for (let c = 0; c < chars.length; c++) {
+      const x = startX + c * (fontSize * 0.65);
+
+      // Wave calculation: spatial offset + time
+      const spatialPhase = (c * 0.35) + (l * 0.5);
+      const wave = Math.sin((t * Math.PI * 2) + spatialPhase);
+      const waveCos = Math.cos((t * Math.PI * 2) + spatialPhase);
+      
+      const yOffset = wave * (fontSize * 0.45);
+      const scaleX = 1 + waveCos * 0.15;
+      const scaleY = 1 - waveCos * 0.15;
+
+      ctx.save();
+      ctx.translate(x, yBase + yOffset);
+      ctx.scale(scaleX, scaleY);
+
+      // Trailing Ghost Echo
+      ctx.fillStyle = colors.primary;
+      ctx.globalAlpha = 0.4;
+      ctx.fillText(chars[c], 0, -wave * 6);
+
+      // Accent letter color
+      if (isCenter) {
+        ctx.fillStyle = c % 2 === 0 ? colors.text : colors.accent2;
+        ctx.globalAlpha = 1.0;
+      } else {
+        const distFromCenter = Math.abs(l - Math.floor(lines / 2));
+        ctx.fillStyle = distFromCenter === 1 ? colors.accent1 : colors.subtext;
+        ctx.globalAlpha = Math.max(0.2, 1 - distFromCenter * 0.25);
+      }
+
+      ctx.fillText(chars[c], 0, 0);
+      ctx.restore();
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DAY 2: ACCORDION SQUASH
+// Rhythmic compression & expansion with staggered character delays
+// ═══════════════════════════════════════════════════════════════════════
+function renderDay2(t, colors, W, H) {
+  const chars = state.text.split('');
+  const fontSize = Math.min(W / (chars.length * 0.8), H * 0.22, 140);
+  ctx.font = `900 ${fontSize}px Syne, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // Loop phase (0 to 1)
+  const cycle = (t % 1);
+  const snapEase = Ease.outBack((cycle * 2) % 1, 2.2);
+  const direction = cycle < 0.5 ? 1 : -1;
+
+  const baseKern = fontSize * 0.7;
+  const totalW = chars.length * baseKern;
+
+  // Background ghost pulses
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  ctx.font = `900 ${fontSize * 1.8}px Syne, sans-serif`;
+  ctx.fillStyle = colors.primary;
+  ctx.globalAlpha = 0.25;
+  ctx.scale(1 + (1 - snapEase) * 0.15 * direction, 1 - (1 - snapEase) * 0.15 * direction);
+  ctx.fillText(state.text, 0, 0);
+  ctx.restore();
+
+  // Foreground staggered accordion
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+
+  for (let i = 0; i < chars.length; i++) {
+    const normIdx = i - (chars.length - 1) / 2;
+    const charDelay = Math.abs(normIdx) * 0.08;
+    const charCycle = ((t + charDelay) % 1);
+    const charSnap = Ease.outBack((charCycle * 2) % 1, 2.5);
+    const charDir = charCycle < 0.5 ? 1 : -1;
+
+    const kernOffset = normIdx * baseKern * (1 + (charDir * (1 - charSnap) * 0.4));
+    const squashX = 1 + charDir * (1 - charSnap) * 0.35;
+    const squashY = 1 - charDir * (1 - charSnap) * 0.35;
+
+    ctx.save();
+    ctx.translate(kernOffset, 0);
+    ctx.scale(squashX, squashY);
+
+    // Drop shadow echo
+    ctx.fillStyle = colors.accent1;
+    ctx.globalAlpha = 0.5;
+    ctx.fillText(chars[i], 4, 6);
+
+    // Main letter
+    ctx.fillStyle = colors.text;
+    ctx.globalAlpha = 1.0;
+    ctx.fillText(chars[i], 0, 0);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DAY 3: CYLINDRICAL DRUM
+// 3D cylindrical drum projection rolling continuously along X-axis
+// ═══════════════════════════════════════════════════════════════════════
+function renderDay3(t, colors, W, H) {
+  const slices = 16;
+  const radius = H * 0.42;
+  const fontSize = Math.min(W * 0.14, 85);
+  ctx.font = `900 ${fontSize}px Syne, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const rotAngle = (t * Math.PI * 2);
+
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+
+  // Render slices sorted by Z-depth
+  const sliceList = [];
+  for (let i = 0; i < slices; i++) {
+    const angle = rotAngle + (i * (Math.PI * 2 / slices));
+    const y = Math.sin(angle) * radius;
+    const z = Math.cos(angle) * radius;
+    sliceList.push({ index: i, angle, y, z });
+  }
+
+  // Sort back to front (smaller z rendered first)
+  sliceList.sort((a, b) => a.z - b.z);
+
+  sliceList.forEach(s => {
+    // Foreshortening and depth scaling
+    const scale = (s.z + radius * 1.5) / (radius * 2.5);
+    const alpha = Math.max(0.1, (s.z + radius) / (radius * 2));
+    const isFacing = s.z > 0;
+
+    ctx.save();
+    ctx.translate(0, s.y);
+    ctx.scale(1, Math.cos(s.angle)); // Vertical perspective foreshortening
+
+    // Shading
+    if (isFacing) {
+      ctx.fillStyle = colors.text;
+      ctx.globalAlpha = Math.min(1.0, alpha * 1.3);
+    } else {
+      ctx.fillStyle = colors.accent1;
+      ctx.globalAlpha = alpha * 0.4;
+    }
+
+    ctx.fillText(state.text, 0, 0);
+    ctx.restore();
+  });
+
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DAY 4: COUNTER SLIDE
+// Alternating rows sliding horizontally at high speed, locking on beat
+// ═══════════════════════════════════════════════════════════════════════
+function renderDay4(t, colors, W, H) {
+  const rows = 8;
+  const fontSize = Math.min(W * 0.12, H * 0.12, 80);
+  ctx.font = `900 ${fontSize}px Syne, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const rowHeight = H / (rows - 1);
+  const textW = ctx.measureText(state.text + "   ").width;
+
+  const cycle = (t % 1);
+  // Snappy stepped movement: hold -> fast snap -> hold
+  const snapT = Ease.inOutCubic(cycle);
+
+  for (let r = 0; r < rows; r++) {
+    const y = r * rowHeight;
+    const dir = r % 2 === 0 ? 1 : -1;
+    const speedMultiplier = (r % 3 === 0 ? 1.5 : 1.0);
+
+    // Staggered row phase
+    const rowOffset = (snapT * textW * dir * speedMultiplier);
+    const totalCols = Math.ceil(W / textW) + 3;
+
+    ctx.save();
+    // Color pattern
+    if (r === Math.floor(rows / 2)) {
+      ctx.fillStyle = colors.accent2;
+      ctx.globalAlpha = 1.0;
+    } else if (r % 2 === 0) {
+      ctx.fillStyle = colors.text;
+      ctx.globalAlpha = 0.85;
+    } else {
+      ctx.fillStyle = colors.accent1;
+      ctx.globalAlpha = 0.55;
+    }
+
+    for (let c = -2; c < totalCols; c++) {
+      const x = (c * textW) + (rowOffset % textW);
+      ctx.fillText(state.text, x, y);
+    }
+    ctx.restore();
+  }
+
+  // Center alignment guide bars (Cavalry motion motif)
+  ctx.strokeStyle = colors.accent1;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(W * 0.15, H / 2 - rowHeight * 0.6);
+  ctx.lineTo(W * 0.85, H / 2 - rowHeight * 0.6);
+  ctx.moveTo(W * 0.15, H / 2 + rowHeight * 0.6);
+  ctx.lineTo(W * 0.85, H / 2 + rowHeight * 0.6);
+  ctx.stroke();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DAY 5: RADIAL BLOOM
+// Circle array duplicator with characters radiating outward
+// ═══════════════════════════════════════════════════════════════════════
+function renderDay5(t, colors, W, H) {
+  const petals = 12;
+  const chars = state.text.split('');
+  const maxRadius = Math.min(W, H) * 0.38;
+  const fontSize = Math.min(W * 0.08, 45);
+  ctx.font = `900 ${fontSize}px Syne, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const pulse = Math.sin(t * Math.PI * 2);
+  const rot = t * Math.PI * 2 * 0.5;
+
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+
+  // Concentric Rings
+  for (let p = 0; p < petals; p++) {
+    const angle = rot + (p * (Math.PI * 2 / petals));
+    const rDist = maxRadius * (0.55 + pulse * 0.25);
+
+    ctx.save();
+    ctx.rotate(angle);
+
+    // Letter stack radiating outward
+    for (let c = 0; c < chars.length; c++) {
+      const charR = (c / chars.length) * rDist;
+      const charScale = 0.6 + (c / chars.length) * 0.8;
+
+      ctx.save();
+      ctx.translate(0, charR);
+      ctx.scale(charScale, charScale);
+
+      // Color mapping
+      if (c === chars.length - 1) {
+        ctx.fillStyle = colors.text;
+        ctx.globalAlpha = 1.0;
+      } else if (c % 2 === 0) {
+        ctx.fillStyle = colors.accent2;
+        ctx.globalAlpha = 0.8;
+      } else {
+        ctx.fillStyle = colors.accent1;
+        ctx.globalAlpha = 0.45;
+      }
+
+      ctx.fillText(chars[c], 0, 0);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  // Center Monogram Logo
+  ctx.font = `900 ${fontSize * 1.5}px Syne, sans-serif`;
+  ctx.fillStyle = colors.text;
+  ctx.fillText(chars[0], 0, 0);
+
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DAY 6: VELOCITY PUNCH
+// Extreme kinetic shear, velocity snap, and spring-loaded impact
+// ═══════════════════════════════════════════════════════════════════════
+function renderDay6(t, colors, W, H) {
+  const chars = state.text.split('');
+  const fontSize = Math.min(W / (chars.length * 0.75), H * 0.25, 160);
+  ctx.font = `900 ${fontSize}px Syne, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const cycle = (t % 1);
+  // Snappy punch cycle
+  const punchT = Ease.cavalrySnap((cycle * 2) % 1);
+  const dir = cycle < 0.5 ? 1 : -1;
+
+  const shearX = (1 - punchT) * 0.85 * dir;
+  const scalePunch = 1 + (1 - punchT) * 0.35;
+
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+
+  // Chromatic Aberration Trails
+  [-12, 0, 12].forEach((offset, idx) => {
+    ctx.save();
+    ctx.transform(1, 0, shearX, 1, offset * (1 - punchT), 0);
+    ctx.scale(scalePunch, scalePunch);
+
+    if (idx === 0) {
+      ctx.fillStyle = colors.primary;
+      ctx.globalAlpha = 0.6;
+    } else if (idx === 2) {
+      ctx.fillStyle = colors.accent2;
+      ctx.globalAlpha = 0.6;
+    } else {
+      ctx.fillStyle = colors.text;
+      ctx.globalAlpha = 1.0;
+    }
+
+    ctx.fillText(state.text, 0, 0);
+    ctx.restore();
+  });
+
+  // Kinetic speed lines
+  if (Math.abs(shearX) > 0.15) {
+    ctx.strokeStyle = colors.accent1;
+    ctx.lineWidth = 3;
+    for (let i = -3; i <= 3; i++) {
+      const ly = i * (fontSize * 0.3);
+      ctx.beginPath();
+      ctx.moveTo(-W * 0.4, ly);
+      ctx.lineTo(W * 0.4, ly);
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DAY 7: INFINITE ECHO TUNNEL
+// Concentric depth recursion scaling through cascading color loops
+// ═══════════════════════════════════════════════════════════════════════
+function renderDay7(t, colors, W, H) {
+  const depthLayers = 14;
+  const maxScale = 2.8;
+  const minScale = 0.05;
+  const fontSize = Math.min(W * 0.22, H * 0.22, 130);
+  ctx.font = `900 ${fontSize}px Syne, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const progress = (t % 1);
+
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+
+  for (let i = depthLayers; i >= 0; i--) {
+    const layerProg = (i / depthLayers + progress) % 1;
+    // Exponential scale expansion towards viewer
+    const scale = minScale * Math.pow(maxScale / minScale, layerProg);
+    const alpha = Math.sin(layerProg * Math.PI); // Fade in at center, fade out near screen
+
+    // Color gradient across depth
+    ctx.save();
+    ctx.scale(scale, scale);
+
+    if (layerProg > 0.8) {
+      ctx.fillStyle = colors.text;
+      ctx.globalAlpha = alpha * 0.9;
+    } else if (layerProg > 0.5) {
+      ctx.fillStyle = colors.accent2;
+      ctx.globalAlpha = alpha * 0.8;
+    } else if (layerProg > 0.25) {
+      ctx.fillStyle = colors.accent1;
+      ctx.globalAlpha = alpha * 0.65;
+    } else {
+      ctx.fillStyle = colors.primary;
+      ctx.globalAlpha = alpha * 0.4;
+    }
+
+    ctx.fillText(state.text, 0, 0);
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MAIN ANIMATION RENDER LOOP
+// ═══════════════════════════════════════════════════════════════════════
+let lastTime = performance.now();
+let frameCount = 0;
+let lastFpsUpdate = performance.now();
+
+function animate(currentTime) {
+  const dt = Math.min((currentTime - lastTime) / 1000, 0.1);
+  lastTime = currentTime;
+
+  if (state.playing) {
+    const anim = ANIMATIONS[state.currentDay];
+    state.time += (dt * state.speed) / anim.duration;
+  }
+
+  const W = state.width;
+  const H = state.height;
+  const colors = THEMES[state.theme];
+
+  // Clear canvas with active theme background
+  ctx.fillStyle = colors.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Draw procedural motion grid
+  ctx.strokeStyle = colors.grid;
+  ctx.lineWidth = 1;
+  const gridSize = 36;
+  ctx.beginPath();
+  for (let x = 0; x < W; x += gridSize) {
+    ctx.moveTo(x, 0); ctx.lineTo(x, H);
+  }
+  for (let y = 0; y < H; y += gridSize) {
+    ctx.moveTo(0, y); ctx.lineTo(W, y);
+  }
+  ctx.stroke();
+
+  // Render current day animation preset
+  switch (state.currentDay) {
+    case 0: renderDay1(state.time, colors, W, H); break;
+    case 1: renderDay2(state.time, colors, W, H); break;
+    case 2: renderDay3(state.time, colors, W, H); break;
+    case 3: renderDay4(state.time, colors, W, H); break;
+    case 4: renderDay5(state.time, colors, W, H); break;
+    case 5: renderDay6(state.time, colors, W, H); break;
+    case 6: renderDay7(state.time, colors, W, H); break;
+  }
+
+  // Update Loop Progress Scrubber
+  const loopFraction = (state.time % 1);
+  const strokeOffset = 88 - (loopFraction * 88);
+  document.getElementById('loopProgressCircle').style.strokeDashoffset = strokeOffset;
+  document.getElementById('loopPercent').textContent = `${Math.round(loopFraction * 100)}%`;
+
+  // FPS Counter calculation
+  frameCount++;
+  if (currentTime - lastFpsUpdate >= 500) {
+    const fps = Math.round((frameCount * 1000) / (currentTime - lastFpsUpdate));
+    document.getElementById('fpsBadge').textContent = `${fps} FPS`;
+    frameCount = 0;
+    lastFpsUpdate = currentTime;
+  }
+
+  requestAnimationFrame(animate);
+}
+
+requestAnimationFrame(animate);
+
+// ═══════════════════════════════════════════════════════════════════════
+// UI & EVENT INTERACTION
+// ═══════════════════════════════════════════════════════════════════════
+
+// Initialize Lucide Icons
+lucide.createIcons();
+
+// Preset Switcher
+const presetButtons = document.querySelectorAll('.preset-btn');
+presetButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const day = parseInt(btn.dataset.day);
+    switchDay(day);
+  });
+});
+
+function switchDay(day) {
+  state.currentDay = day;
+  presetButtons.forEach((b, i) => {
+    if (i === day) {
+      b.classList.remove('font-medium', 'text-white/70', 'hover:bg-white/5');
+      b.classList.add('font-bold', 'bg-cavalry-electric', 'text-white', 'shadow-[0_0_15px_rgba(1,0,236,0.6)]');
+    } else {
+      b.classList.remove('font-bold', 'bg-cavalry-electric', 'text-white', 'shadow-[0_0_15px_rgba(1,0,236,0.6)]');
+      b.classList.add('font-medium', 'text-white/70', 'hover:bg-white/5');
+    }
+  });
+
+  const anim = ANIMATIONS[day];
+  document.getElementById('animTitle').textContent = anim.title;
+  document.getElementById('animDesc').textContent = anim.desc;
+}
+
+// Live Text Input
+const textInput = document.getElementById('textInput');
+textInput.addEventListener('input', e => {
+  const val = e.target.value.trim().toUpperCase();
+  state.text = val.length > 0 ? val : "CAVALRY";
+});
+
+// Play / Pause
+const playPauseBtn = document.getElementById('playPauseBtn');
+playPauseBtn.addEventListener('click', togglePlay);
+function togglePlay() {
+  state.playing = !state.playing;
+  const icon = document.getElementById('playIcon');
+  if (state.playing) {
+    icon.setAttribute('data-lucide', 'pause');
+  } else {
+    icon.setAttribute('data-lucide', 'play');
+  }
+  lucide.createIcons();
+}
+
+// Speed Slider
+const speedSlider = document.getElementById('speedSlider');
+const speedDisplay = document.getElementById('speedDisplay');
+speedSlider.addEventListener('input', e => {
+  state.speed = parseFloat(e.target.value);
+  speedDisplay.textContent = `${state.speed.toFixed(1)}×`;
+});
+
+// Reset Phase
+document.getElementById('resetPhaseBtn').addEventListener('click', () => {
+  state.time = 0;
+});
+
+// Theme Switcher
+const themeButtons = document.querySelectorAll('.theme-btn');
+function setTheme(theme) {
+  if (!THEMES[theme]) return;
+  state.theme = theme;
+
+  themeButtons.forEach(b => {
+    if (b.dataset.theme === theme) {
+      b.classList.add('active-theme', 'text-white', 'bg-cavalry-electric', 'shadow-sm');
+      b.classList.remove('text-white/60');
+    } else {
+      b.classList.remove('active-theme', 'text-white', 'bg-cavalry-electric', 'shadow-sm');
+      b.classList.add('text-white/60');
+    }
+  });
+
+  document.getElementById('appBody').style.backgroundColor = THEMES[theme].bg;
+  document.body.setAttribute('data-theme', theme);
+}
+
+themeButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    setTheme(btn.dataset.theme);
+  });
+});
+
+// Fullscreen Toggle
+document.getElementById('fullscreenBtn').addEventListener('click', () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(err => console.log(err));
+  } else {
+    document.exitFullscreen().catch(err => console.log(err));
+  }
+});
+
+// Keyboard Shortcuts
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+
+  if (e.code === 'Space') {
+    e.preventDefault();
+    togglePlay();
+  }
+  // 1-7 for Day 1 to Day 7
+  if (e.key >= '1' && e.key <= '7') {
+    switchDay(parseInt(e.key) - 1);
+  }
+});
+
+// URL Query Parameter Deep Linking (?day=0..6, ?text=..., ?theme=cobalt|void|chalk, ?speed=1.0)
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.has('day')) {
+  const d = parseInt(urlParams.get('day'));
+  if (!isNaN(d) && d >= 0 && d <= 6) {
+    switchDay(d);
+  }
+}
+if (urlParams.has('text')) {
+  const txt = urlParams.get('text').trim().toUpperCase();
+  if (txt) {
+    state.text = txt;
+    textInput.value = txt;
+  }
+}
+if (urlParams.has('theme')) {
+  const th = urlParams.get('theme').toLowerCase();
+  setTheme(th);
+}
+if (urlParams.has('speed')) {
+  const sp = parseFloat(urlParams.get('speed'));
+  if (!isNaN(sp) && sp >= 0.2 && sp <= 3.0) {
+    state.speed = sp;
+    speedSlider.value = sp;
+    speedDisplay.textContent = `${sp.toFixed(1)}×`;
+  }
+}
+</script>
+</body>
+</html>
