@@ -3,2264 +3,787 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TYPOMAN — Kinetic Type Studio</title>
-<meta name="description" content="Brutalist kinetic typography engine with 3D WebGL scene distortions and rhythm-driven motion.">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Anton&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+<title>TYPOMAN V3 — Kinetic Typography Studio</title>
+<meta name="description" content="Typoman V3: High-performance kinetic typography studio featuring dynamic 2D convex hull perimeter morphing.">
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Syne:wght@700;800;900&display=swap" rel="stylesheet">
+
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Lucide Icons -->
+<script src="https://unpkg.com/lucide@latest"></script>
+
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        typoman: {
+          blue: '#0015ff',
+          electric: '#0100EC',
+          indigo: '#5C5AFB',
+          lightIndigo: '#A3A2FF',
+          chalk: '#FFFFFF',
+        }
+      },
+      fontFamily: {
+        syne: ['Syne', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
+        display: ['Helvetica Neue', 'Helvetica', 'Arial', 'sans-serif']
+      }
+    }
+  }
+}
+</script>
+
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
-html,body{width:100%;height:100%;background:#050505;overflow:hidden;font-family:'JetBrains Mono',monospace;}
-:root{
-  --bg:#050505;--bg2:#0a0a0a;--bg3:#111111;--bg4:#181818;
-  --border:#222222;--border2:#333333;--border3:#444444;
-  --text:#f5f5f5;--text2:#aaaaaa;--text3:#666666;
-  --accent:#FF2020;--accent-glow:rgba(255,32,32,0.3);
-  --success:#00FF9D;
+html,body{width:100%;height:100%;overflow:hidden;background:#0015ff;color:#ffffff;font-family:'JetBrains Mono',monospace;-webkit-font-smoothing:antialiased;}
+
+/* Custom Range Slider */
+input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255,255,255,0.2);
+  height: 4px;
+  border-radius: 2px;
+  outline: none;
 }
-body{color:var(--text);font-size:11px;overflow:hidden;background:var(--bg);cursor:crosshair;}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(255,255,255,0.9);
+  transition: transform 0.1s, background 0.1s;
+}
+input[type=range]::-webkit-slider-thumb:hover {
+  transform: scale(1.3);
+  background: #A3A2FF;
+}
 
-/* Global grain overlay */
-body::after{content:'';position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;
-  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-  opacity:0.04;z-index:99999;mix-blend-mode:overlay;}
+/* Glassmorphic Panel */
+.glass-panel {
+  background: rgba(0, 15, 180, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 20px 50px rgba(0, 0, 80, 0.5);
+}
 
-/* Custom Cursor */
-.cursor{position:fixed;width:20px;height:20px;border:1px solid var(--accent);border-radius:50%;
-  pointer-events:none;z-index:100000;transform:translate(-50%,-50%);transition:transform 0.08s ease-out,width 0.15s,height 0.15s;
-  mix-blend-mode:difference;background:rgba(255,255,255,0.06);backdrop-filter:blur(1px);}
-.cursor.active{width:36px;height:36px;background:var(--accent);border-color:transparent;}
-
-.root{display:flex;flex-direction:column;width:100vw;height:100vh;position:relative;z-index:1;}
-
-/* Top Bar */
-.top-bar{flex-shrink:0;height:48px;display:flex;align-items:center;gap:14px;padding:0 18px;
-  background:var(--bg2);border-bottom:1px solid var(--border);user-select:none;}
-.logo{font-family:'Anton',sans-serif;font-size:22px;letter-spacing:3px;color:var(--text);display:flex;align-items:center;gap:8px;}
-.logo .tag{color:#000;background:var(--accent);font-size:10px;padding:2px 6px;letter-spacing:1.5px;font-family:'JetBrains Mono',monospace;font-weight:800;}
-.top-sep{width:1px;height:18px;background:var(--border2);}
-.top-info{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;}
-
-.top-actions{display:flex;align-items:center;gap:8px;margin-left:auto;}
-.action-btn{font-size:10px;padding:5px 12px;border:1px solid var(--border2);background:var(--bg3);
-  color:var(--text2);cursor:pointer;font-weight:700;letter-spacing:1px;text-transform:uppercase;transition:all 0.12s;}
-.action-btn:hover{background:var(--border2);color:var(--text);}
-.action-btn.accent{background:var(--accent);color:#000;border-color:var(--accent);font-weight:800;}
-.action-btn.accent:hover{background:#ff4040;}
-
-.live-dot{width:7px;height:7px;border-radius:50%;background:var(--border3);margin-left:4px;transition:background 0.2s;}
-.live-dot.on{background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 1s infinite;}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
-
-.top-keys{display:flex;gap:6px;align-items:center;margin-left:8px;}
-.kbd{font-size:9px;font-weight:700;padding:2px 5px;background:var(--bg3);border:1px solid var(--border2);color:var(--text);text-transform:uppercase;}
-
-/* Main Layout */
-.main-row{display:flex;flex:1;min-height:0;}
-
-/* Left Control Panel */
-.panel{width:320px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);
-  display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;
-  scrollbar-width:thin;scrollbar-color:var(--bg4) transparent;}
-.panel::-webkit-scrollbar{width:4px;}
-.panel::-webkit-scrollbar-thumb{background:var(--border3);}
-
-/* Section Accordion Header */
-.sh{display:flex;align-items:center;gap:8px;padding:12px 16px;cursor:pointer;user-select:none;
-  border-bottom:1px solid var(--border);transition:background 0.12s;}
-.sh:hover{background:rgba(255,255,255,0.02);}
-.sh .ico{font-size:11px;width:16px;text-align:center;color:var(--accent);}
-.sh .lbl{font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--text);flex:1;}
-.sh .ar{font-size:10px;color:var(--text3);transition:transform 0.15s;}
-.sh.open .ar{transform:rotate(90deg);color:var(--text);}
-
-/* Section Content */
-.sb{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:12px;}
-.sb.hidden{display:none;}
-
-/* Form Controls */
-.row{display:flex;align-items:center;gap:10px;}
-.row label{font-size:10px;color:var(--text2);flex-shrink:0;font-weight:700;text-transform:uppercase;letter-spacing:1px;min-width:60px;}
-
-.radio-group{display:flex;gap:3px;background:var(--bg3);border:1px solid var(--border);padding:2px;border-radius:0px;}
-.radio-btn{flex:1;text-align:center;font-size:9px;font-weight:700;padding:5px 8px;cursor:pointer;
-  color:var(--text3);text-transform:uppercase;letter-spacing:1px;border:none;background:transparent;transition:all 0.1s;}
-.radio-btn:hover{color:var(--text);}
-.radio-btn.active{background:var(--accent);color:#000;font-weight:800;}
-
-input[type=range]{flex:1;min-width:0;height:4px;-webkit-appearance:none;appearance:none;background:var(--border2);outline:none;cursor:crosshair;}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:8px;height:16px;background:var(--accent);cursor:crosshair;border:none;}
-input[type=range]::-webkit-slider-thumb:hover{background:#fff;}
-
-.ni{width:46px;font-size:10px;font-weight:700;text-align:right;background:var(--bg3);
-  border:1px solid var(--border2);color:var(--text);padding:4px 6px;outline:none;font-family:'JetBrains Mono',monospace;}
-.ni:focus{border-color:var(--accent);}
-
-.txt-input{width:100%;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;
-  background:var(--bg3);border:1px solid var(--border2);color:var(--text);
-  padding:10px;resize:vertical;min-height:90px;outline:none;line-height:1.4;letter-spacing:1px;}
-.txt-input:focus{border-color:var(--accent);}
-
-/* Font Uploader & Status */
-.font-box{display:flex;flex-direction:column;gap:6px;}
-.font-current{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;
-  background:var(--bg3);border:1px solid var(--border2);}
-.font-name{font-size:11px;font-weight:800;color:var(--text);letter-spacing:1px;text-transform:uppercase;}
-.font-reset-btn{font-size:9px;color:var(--accent);cursor:pointer;font-weight:700;text-transform:uppercase;background:none;border:none;}
-.font-reset-btn:hover{text-decoration:underline;}
-
-.font-upload-label{display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;
-  border:1px dashed var(--border3);background:rgba(255,255,255,0.02);color:var(--text2);
-  font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all 0.15s;}
-.font-upload-label:hover{border-color:var(--accent);color:var(--accent);background:rgba(255,32,32,0.05);}
-
-/* Scene Selection Chips Grid */
-.scene-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;}
-.sc-chip{display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);
-  border:1px solid var(--border);cursor:pointer;user-select:none;transition:all 0.1s;}
-.sc-chip:hover{border-color:var(--border3);}
-.sc-chip.on{border-color:var(--accent);background:rgba(255,32,32,0.12);}
-.sc-chip input{display:none;}
-.sc-chip-ind{width:8px;height:8px;border:1px solid var(--border3);flex-shrink:0;}
-.sc-chip.on .sc-chip-ind{background:var(--accent);border-color:var(--accent);}
-.sc-chip-name{font-size:9px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;}
-.sc-chip.on .sc-chip-name{color:var(--text);font-weight:800;}
-
-/* Color Swatches */
-.color-picker-row{display:flex;gap:12px;align-items:center;}
-.color-field{flex:1;display:flex;flex-direction:column;gap:4px;}
-.color-field-label{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-weight:700;}
-.color-field-inner{display:flex;align-items:center;gap:6px;}
-input[type=color]{width:32px;height:32px;padding:0;border:1px solid var(--border2);background:none;cursor:pointer;}
-.hex-input{flex:1;width:100%;font-size:10px;font-weight:700;background:var(--bg3);border:1px solid var(--border2);
-  color:var(--text);padding:6px;outline:none;font-family:'JetBrains Mono',monospace;}
-
-.swatch-grid{display:flex;gap:4px;flex-wrap:wrap;}
-.swatch{width:22px;height:22px;border:1px solid var(--border2);cursor:pointer;transition:transform 0.1s;}
-.swatch:hover{transform:scale(1.15);border-color:#fff;}
-
-/* Aspect Ratio Buttons */
-.aspect-row{display:flex;gap:4px;}
-.aspect-btn{flex:1;padding:6px 0;font-size:9px;font-weight:700;text-align:center;background:var(--bg3);
-  border:1px solid var(--border2);color:var(--text2);cursor:pointer;text-transform:uppercase;transition:all 0.1s;}
-.aspect-btn:hover{background:var(--border2);color:var(--text);}
-.aspect-btn.active{background:var(--accent);color:#000;border-color:var(--accent);font-weight:800;}
-
-/* Export Buttons */
-.export-row{display:flex;gap:6px;}
-.exp-btn{flex:1;padding:8px 0;font-size:10px;font-weight:800;text-align:center;background:var(--bg3);
-  border:1px solid var(--border2);color:var(--text);cursor:pointer;letter-spacing:1px;text-transform:uppercase;transition:all 0.12s;}
-.exp-btn:hover{background:var(--border2);color:#fff;}
-
-.record-btn{width:100%;padding:10px 0;font-size:11px;font-weight:800;text-align:center;
-  background:rgba(255,32,32,0.15);border:1px solid var(--accent);color:var(--accent);
-  cursor:pointer;letter-spacing:2px;text-transform:uppercase;transition:all 0.15s;}
-.record-btn:hover{background:var(--accent);color:#000;}
-.record-btn.recording{background:var(--accent);color:#000;animation:pulse 0.8s infinite;}
-
-/* Center Viewport */
-.center-col{flex:1;min-width:0;display:flex;flex-direction:column;position:relative;}
-.viewport{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;
-  background-color:#080808;
-  background-image:linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px);
-  background-size:24px 24px;overflow:hidden;}
-
-/* Canvas container */
-#canvasHolder{box-shadow:0 12px 48px rgba(0,0,0,0.8);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;}
-#canvasHolder canvas{display:block !important;}
-
-/* Bottom status bar */
-.status-bar{height:28px;flex-shrink:0;background:var(--bg2);border-top:1px solid var(--border);
-  display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:9px;color:var(--text3);user-select:none;}
-.status-bar span{display:flex;align-items:center;gap:6px;}
-
-@media(max-width:850px){
-  .main-row{flex-direction:column;}
-  .panel{width:100%;max-height:45vh;border-right:none;border-bottom:1px solid var(--border);}
+/* Subtle grid overlay */
+.bg-grid {
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
 }
 </style>
 </head>
-<body>
+<body class="relative w-screen h-screen overflow-hidden select-none bg-grid" id="appBody">
 
-<div class="root">
-  <!-- Top Header -->
-  <div class="top-bar">
-    <div class="logo">TYPOMAN <span class="tag">KINETIC STUDIO</span></div>
-    <div class="top-sep"></div>
-    <div class="top-info">3D Typographic Motion Engine</div>
-    <div class="live-dot on" id="liveDot"></div>
-
-    <div class="top-actions">
-      <button class="action-btn accent" id="playBtn">❚❚ PAUSE</button>
-      <button class="action-btn" id="randomColorsBtn">⟳ RANDOM</button>
-      <button class="action-btn" id="swapColorsBtn">⇄ INVERT</button>
-      <a href="cavalry.html" class="action-btn" style="text-decoration:none;background:rgba(92,90,251,0.2);border-color:#5C5AFB;color:#A3A2FF;" title="Cavalry: 7 Days of Beginner Motion Graphics">⚡ CAVALRY 7D</a>
-      <a href="https://github.com/markdo27/typoman" target="_blank" class="action-btn" style="text-decoration:none;">SOURCE</a>
-    </div>
-
-    <div class="top-keys">
-      <span class="kbd">SPACE</span>
-      <span class="kbd">R</span>
-      <span class="kbd">X</span>
-    </div>
-  </div>
-
-  <div class="main-row">
-    <!-- Left Controls Panel -->
-    <div class="panel">
-      <!-- 1. TEXT SECTION -->
-      <div class="sh open" data-sec="text">
-        <span class="ico">T</span>
-        <span class="lbl">Typography</span>
-        <span class="ar">›</span>
-      </div>
-      <div class="sb" id="sec-text">
-        <div class="radio-group" id="textModeGroup">
-          <button class="radio-btn active" data-mode="text">Custom Text</button>
-          <button class="radio-btn" data-mode="clock">Live Clock</button>
-        </div>
-
-        <textarea class="txt-input" id="textArea" rows="5" placeholder="Enter words (1 per line)...">THE
-COLLECTIVE
-POWER
-OF
-TINY</textarea>
-
-        <div class="row">
-          <label>Case</label>
-          <div class="radio-group" id="caseGroup" style="flex:1;">
-            <button class="radio-btn active" data-case="upper">UPPER</button>
-            <button class="radio-btn" data-case="lower">lower</button>
-            <button class="radio-btn" data-case="title">Title</button>
-            <button class="radio-btn" data-case="none">As-Is</button>
-          </div>
-        </div>
-
-        <div class="font-box">
-          <div class="font-current">
-            <div>
-              <span style="font-size:9px;color:var(--text3);display:block;text-transform:uppercase;">Active Font</span>
-              <span class="font-name" id="fontNameDisplay">Anton</span>
-            </div>
-            <button class="font-reset-btn" id="fontResetBtn" style="display:none;">Reset to Anton</button>
-          </div>
-          <label class="font-upload-label">
-            <span>+ Upload Font (.ttf / .otf / .woff)</span>
-            <input type="file" id="fontUploadInput" accept=".ttf,.otf,.woff,.woff2" style="display:none;">
-          </label>
-        </div>
-      </div>
-
-      <!-- 2. MOTION SECTION -->
-      <div class="sh open" data-sec="motion">
-        <span class="ico">⚡</span>
-        <span class="lbl">Kinetic Motion</span>
-        <span class="ar">›</span>
-      </div>
-      <div class="sb" id="sec-motion">
-        <div class="row">
-          <label>Play Mode</label>
-          <div class="radio-group" id="motionModeGroup" style="flex:1;">
-            <button class="radio-btn active" data-motion="mix">Auto-Mix</button>
-            <button class="radio-btn" data-motion="lock">Single Lock</button>
-          </div>
-        </div>
-
-        <div class="row">
-          <label>Transition</label>
-          <div class="radio-group" id="cutModeGroup" style="flex:1;">
-            <button class="radio-btn active" data-cut="matchcut">MatchCut</button>
-            <button class="radio-btn" data-cut="easyease">EasyEase</button>
-          </div>
-        </div>
-
-        <div class="row">
-          <label>Pace (BPM)</label>
-          <input type="range" id="paceSlider" min="30" max="240" step="5" value="120">
-          <span class="ni" id="paceVal">120</span>
-        </div>
-
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:2px;">
-          <span style="font-size:9px;color:var(--text3);text-transform:uppercase;font-weight:700;letter-spacing:1px;">Active Scenes (13)</span>
-          <div style="display:flex;gap:6px;">
-            <button class="font-reset-btn" id="selectAllScenes">Select All</button>
-            <button class="font-reset-btn" id="clearAllScenes">Clear</button>
-          </div>
-        </div>
-
-        <!-- 13 Kinetic Scene Chips -->
-        <div class="scene-grid" id="sceneGrid">
-          <div class="sc-chip on" data-idx="0"><div class="sc-chip-ind"></div><span class="sc-chip-name">Arc</span></div>
-          <div class="sc-chip on" data-idx="1"><div class="sc-chip-ind"></div><span class="sc-chip-name">Bend</span></div>
-          <div class="sc-chip on" data-idx="2"><div class="sc-chip-ind"></div><span class="sc-chip-name">Box (3D)</span></div>
-          <div class="sc-chip on" data-idx="3"><div class="sc-chip-ind"></div><span class="sc-chip-name">Bug Eye</span></div>
-          <div class="sc-chip on" data-idx="4"><div class="sc-chip-ind"></div><span class="sc-chip-name">Halo (3D)</span></div>
-          <div class="sc-chip on" data-idx="5"><div class="sc-chip-ind"></div><span class="sc-chip-name">Sun</span></div>
-          <div class="sc-chip on" data-idx="6"><div class="sc-chip-ind"></div><span class="sc-chip-name">Shutter 1</span></div>
-          <div class="sc-chip on" data-idx="7"><div class="sc-chip-ind"></div><span class="sc-chip-name">Shutter 2</span></div>
-          <div class="sc-chip on" data-idx="8"><div class="sc-chip-ind"></div><span class="sc-chip-name">Slots</span></div>
-          <div class="sc-chip on" data-idx="9"><div class="sc-chip-ind"></div><span class="sc-chip-name">Snap</span></div>
-          <div class="sc-chip on" data-idx="10"><div class="sc-chip-ind"></div><span class="sc-chip-name">Split</span></div>
-          <div class="sc-chip on" data-idx="11"><div class="sc-chip-ind"></div><span class="sc-chip-name">Starburst</span></div>
-          <div class="sc-chip on" data-idx="12"><div class="sc-chip-ind"></div><span class="sc-chip-name">Twist (3D)</span></div>
-        </div>
-      </div>
-
-      <!-- 3. APPEARANCE SECTION -->
-      <div class="sh open" data-sec="appearance">
-        <span class="ico">◎</span>
-        <span class="lbl">Style & Canvas</span>
-        <span class="ar">›</span>
-      </div>
-      <div class="sb" id="sec-appearance">
-        <div class="color-picker-row">
-          <div class="color-field">
-            <div class="color-field-label">Background</div>
-            <div class="color-field-inner">
-              <input type="color" id="bgColorInput" value="#000000">
-              <input type="text" class="hex-input" id="bgHexInput" value="#000000">
-            </div>
-          </div>
-          <div class="color-field">
-            <div class="color-field-label">Foreground</div>
-            <div class="color-field-inner">
-              <input type="color" id="fgColorInput" value="#ffffff">
-              <input type="text" class="hex-input" id="fgHexInput" value="#ffffff">
-            </div>
-          </div>
-        </div>
-
-        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;font-weight:700;margin-top:2px;">Curated Palettes</div>
-        <div class="swatch-grid" id="paletteSwatches"></div>
-
-        <div class="row" style="margin-top:2px;">
-          <label style="min-width:auto;flex:1;cursor:pointer;">
-            <input type="checkbox" id="colorSwapOnBeat" checked style="accent-color:var(--accent);margin-right:6px;">
-            Random Color Swap on Beat
-          </label>
-        </div>
-
-        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;font-weight:700;margin-top:4px;">Aspect Ratio</div>
-        <div class="aspect-row" id="aspectRow">
-          <button class="aspect-btn active" data-aspect="window">Auto</button>
-          <button class="aspect-btn" data-aspect="1:1">1:1</button>
-          <button class="aspect-btn" data-aspect="9:16">9:16</button>
-          <button class="aspect-btn" data-aspect="16:9">16:9</button>
-          <button class="aspect-btn" data-aspect="4:5">4:5</button>
-        </div>
-      </div>
-
-      <!-- 4. EXPORT SECTION -->
-      <div class="sh open" data-sec="export">
-        <span class="ico">⬇</span>
-        <span class="lbl">Export</span>
-        <span class="ar">›</span>
-      </div>
-      <div class="sb" id="sec-export">
-        <div class="export-row">
-          <button class="exp-btn" id="expPng">↓ PNG Image</button>
-          <button class="exp-btn" id="expSvg">↓ SVG Vector</button>
-        </div>
-
-        <div class="row" style="margin-top:4px;">
-          <label>Loop Repeats</label>
-          <input type="range" id="repeatSlider" min="1" max="8" step="1" value="3">
-          <span class="ni" id="repeatVal">3</span>
-        </div>
-
-        <button class="record-btn" id="recordLoopBtn">⏺ Record WebM Video Loop</button>
-      </div>
-
-      <!-- 5. ABOUT & LICENCE SECTION -->
-      <div class="sh" data-sec="about">
-        <span class="ico">ⓘ</span>
-        <span class="lbl">About &amp; Licence</span>
-        <span class="ar">›</span>
-      </div>
-      <div class="sb hidden" id="sec-about">
-        <div style="display:flex;flex-direction:column;gap:8px;">
-          <div>
-            <div style="font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text3);">Author</div>
-            <div style="font-size:10px;color:var(--text2);margin-top:2px;">Mark Do</div>
-          </div>
-          <div>
-            <div style="font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text3);">Contact</div>
-            <div style="font-size:10px;margin-top:2px;"><a href="mailto:dtcmark@gmail.com" style="color:var(--accent);text-decoration:none;">dtcmark@gmail.com</a></div>
-          </div>
-          <div>
-            <div style="font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text3);">Personal Use</div>
-            <div style="font-size:10px;color:var(--text2);margin-top:2px;line-height:1.4;">Free for personal, study, and other non-commercial work. No permission needed.</div>
-          </div>
-          <div>
-            <div style="font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text3);">Commercial Use</div>
-            <div style="font-size:10px;color:var(--text2);margin-top:2px;line-height:1.4;">Client, brand, resale, and any other paid work needs written permission: <a href="mailto:dtcmark@gmail.com?subject=Commercial%20use%20request" style="color:var(--accent);text-decoration:none;">request a licence</a>.</div>
-          </div>
-          <div style="font-size:9px;color:var(--text3);padding-top:6px;border-top:1px solid var(--border);">&copy; 2026 Mark Do. Provided as is, with no warranty.</div>
-        </div>
-      </div>
-
-      <!-- About & Licence -->
-      <div class="sh" data-sec="about"><span class="ico">&#9432;</span><span class="lbl">About &amp; Licence</span><span class="ar">›</span></div>
-      <div class="sb hidden" id="sec-about">
-        <dl class="about">
-          <dt>Author</dt>
-          <dd>Mark Do</dd>
-          <dt>Contact</dt>
-          <dd><a href="mailto:dtcmark@gmail.com">dtcmark@gmail.com</a></dd>
-          <dt>Personal use</dt>
-          <dd>Free. Use this tool, and anything you make with it, for personal, study and other non commercial work. No permission needed.</dd>
-          <dt>Commercial use</dt>
-          <dd>Ask first. Client, brand, resale and any other paid work needs written permission: <a href="mailto:dtcmark@gmail.com?subject=Commercial%20use%20request">request a licence</a>.</dd>
-        </dl>
-        <p class="about-note">&copy; 2026 Mark Do. Provided as is, with no warranty.</p>
+  <!-- Top Floating Header -->
+  <header class="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-6 py-4 pointer-events-none">
+    <div class="flex items-center gap-3 pointer-events-auto">
+      <div class="w-3 h-3 rounded-full bg-white animate-pulse shadow-[0_0_12px_#ffffff]"></div>
+      <div>
+        <h1 class="font-syne font-black text-sm tracking-wider text-white uppercase flex items-center gap-2">
+          TYPOMAN <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/20 border border-white/30 text-white">V3</span>
+        </h1>
+        <p class="text-[10px] text-white/70 font-mono tracking-tight">Kinetic Typography Studio • Dynamic Convex Hull</p>
       </div>
     </div>
 
-    <!-- Center Viewport -->
-    <div class="center-col">
-      <div class="viewport" id="viewport">
-        <div id="canvasHolder"></div>
+    <div class="flex items-center gap-3 pointer-events-auto">
+      <!-- Link to Cavalry 7D -->
+      <a href="cavalry.html" class="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 border border-white/20 text-[10px] font-mono font-bold text-white flex items-center gap-1.5 transition-all shadow-sm" title="Cavalry 7 Days Motion Graphics">
+        <i data-lucide="sparkles" class="w-3 h-3"></i>
+        <span>CAVALRY 7D</span>
+      </a>
+
+      <!-- FPS Counter -->
+      <div class="px-2.5 py-1 rounded bg-black/40 border border-white/20 text-[10px] font-mono font-bold text-emerald-400 flex items-center gap-1.5 shadow-inner">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+        <span id="fpsBadge">60 FPS</span>
       </div>
 
-      <div class="status-bar">
-        <span>STATUS: <strong id="statusText" style="color:var(--text);margin-left:4px;">READY</strong></span>
-        <span>ENGINE: <strong>p5.js WEBGL 3D</strong></span>
-        <span id="fpsCounter">FPS: 60</span>
+      <!-- Fullscreen Toggle -->
+      <button id="fullscreenBtn" class="p-2 rounded bg-black/40 border border-white/20 text-white/80 hover:text-white hover:border-white transition-all" title="Toggle Fullscreen">
+        <i data-lucide="maximize" class="w-3.5 h-3.5"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Canvas Viewport -->
+  <main class="w-full h-full relative flex items-center justify-center">
+    <canvas id="motionCanvas" class="w-full h-full block cursor-grab active:cursor-grabbing"></canvas>
+  </main>
+
+  <!-- Shape Selector Pill Bar (Layout A - D) -->
+  <nav class="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 p-1.5 rounded-xl glass-panel text-[11px] font-mono tracking-wide shadow-2xl">
+    <button class="shape-btn px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 bg-white text-typoman-blue shadow-[0_0_15px_rgba(255,255,255,0.6)]" data-layout="0">
+      <span class="opacity-60 text-[9px]">A</span> TRIANGLE
+    </button>
+    <button class="shape-btn px-3 py-1.5 rounded-lg font-medium transition-all text-white/80 hover:text-white hover:bg-white/10 flex items-center gap-1.5" data-layout="1">
+      <span class="opacity-60 text-[9px]">B</span> OCTAGON
+    </button>
+    <button class="shape-btn px-3 py-1.5 rounded-lg font-medium transition-all text-white/80 hover:text-white hover:bg-white/10 flex items-center gap-1.5" data-layout="2">
+      <span class="opacity-60 text-[9px]">C</span> TRAPEZOID
+    </button>
+    <button class="shape-btn px-3 py-1.5 rounded-lg font-medium transition-all text-white/80 hover:text-white hover:bg-white/10 flex items-center gap-1.5" data-layout="3">
+      <span class="opacity-60 text-[9px]">D</span> POLYGON
+    </button>
+  </nav>
+
+  <!-- Bottom Floating Control Dashboard -->
+  <footer class="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 w-[94%] max-w-4xl px-5 py-3.5 rounded-2xl glass-panel flex flex-wrap items-center justify-between gap-4 shadow-2xl">
+    <!-- Left: Custom Text Input -->
+    <div class="flex items-center gap-3 flex-1 min-w-[240px]">
+      <div class="flex items-center gap-2 text-white/70">
+        <i data-lucide="type" class="w-4 h-4 text-white"></i>
+        <span class="text-[10px] font-mono uppercase tracking-wider font-semibold">TEXT</span>
+      </div>
+      <input type="text" id="textInput" value="HELVETICA" maxlength="20" placeholder="Type word..."
+        class="bg-white/10 border border-white/25 rounded-lg px-3 py-1.5 text-xs font-syne font-bold uppercase tracking-widest text-white placeholder-white/30 focus:outline-none focus:border-white focus:ring-1 focus:ring-white transition-all w-full max-w-[200px]" />
+    </div>
+
+    <!-- Center: Playback Controls & Speed -->
+    <div class="flex items-center gap-4">
+      <!-- Play / Pause Button -->
+      <button id="playPauseBtn" class="w-9 h-9 rounded-xl bg-white text-typoman-blue hover:bg-white/90 flex items-center justify-center transition-all shadow-[0_0_15px_rgba(255,255,255,0.4)] active:scale-95" title="Play / Pause (Space)">
+        <i data-lucide="pause" id="playIcon" class="w-4 h-4 fill-current"></i>
+      </button>
+
+      <!-- Speed Slider -->
+      <div class="flex items-center gap-2">
+        <span class="text-[10px] font-mono text-white/70 uppercase">SPEED</span>
+        <input type="range" id="speedSlider" min="0.2" max="3.0" step="0.1" value="1.0" class="w-20 sm:w-28" />
+        <span id="speedDisplay" class="text-[11px] font-mono font-bold text-white min-w-[28px]">1.0×</span>
+      </div>
+
+      <!-- Convex Hull Toggle Button -->
+      <button id="hullToggleBtn" class="px-2.5 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 border border-white/30 text-white font-mono text-[10px] font-bold flex items-center gap-1.5 transition-all shadow-sm" title="Toggle Convex Hull Perimeter (H)">
+        <i data-lucide="hexagon" class="w-3.5 h-3.5 text-white"></i>
+        <span id="hullStatusText">HULL ON</span>
+      </button>
+
+      <!-- Reset / Sync Phase Button -->
+      <button id="resetPhaseBtn" class="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white border border-white/15 transition-all text-[10px] font-mono flex items-center gap-1" title="Sync Phase to 0 (R)">
+        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+      </button>
+    </div>
+
+    <!-- Right: Active Shape Info & Loop Scrubber -->
+    <div class="flex items-center gap-3 w-full md:w-auto justify-end">
+      <div class="text-right hidden sm:block">
+        <div id="shapeTitle" class="font-syne font-extrabold text-xs text-white tracking-wide uppercase">LAYOUT A: TRIANGLE</div>
+        <div id="shapeDesc" class="font-mono text-[9px] text-white/70">Tilted sharp triangle stretched wide</div>
+      </div>
+      <!-- Loop Progress Ring -->
+      <div class="w-10 h-10 relative flex items-center justify-center">
+        <svg class="w-9 h-9 -rotate-90">
+          <circle cx="18" cy="18" r="14" stroke="rgba(255,255,255,0.2)" stroke-width="2.5" fill="none"/>
+          <circle id="loopProgressCircle" cx="18" cy="18" r="14" stroke="#ffffff" stroke-width="2.5" stroke-dasharray="88" stroke-dashoffset="88" stroke-linecap="round" fill="none" class="transition-all duration-75"/>
+        </svg>
+        <span class="absolute text-[8px] font-mono font-bold text-white" id="loopPercent">0%</span>
       </div>
     </div>
-  </div>
-</div>
+  </footer>
 
 <script>
-// ═══════════════════════════════════════════════════════════════════
-// GLOBAL STATE & ENGINE CONFIG
-// ═══════════════════════════════════════════════════════════════════
-let currentFontFamily = "'Anton', sans-serif";
-let currentFontName = "Anton";
-let customFontEntry = null;
+// ═══════════════════════════════════════════════════════════════════════
+// TYPOMAN V3: KINETIC TYPOGRAPHY & DYNAMIC CONVEX HULL ENGINE
+// ═══════════════════════════════════════════════════════════════════════
 
-let bkgdColor = '#000000';
-let foreColor = '#ffffff';
-let colorSwapOn = true;
+const canvas = document.getElementById('motionCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
 
-let playing = true;
-let textMode = 'text'; // 'text' | 'clock'
-let textCase = 'upper'; // 'upper' | 'lower' | 'title' | 'none'
-let keyArray = ["THE", "COLLECTIVE", "POWER", "OF", "TINY"];
-let selector = 0;
+// Application State
+const state = {
+  text: "HELVETICA",
+  instances: 4,
+  playing: true,
+  speed: 1.0,
+  loopDuration: 8.0, // 8-second seamless cycle
+  time: 0,
+  showHull: true,
+  currentLayoutIdx: 0,
+  width: 0,
+  height: 0,
+  dpr: Math.min(window.devicePixelRatio || 1, 2)
+};
 
-let motionMode = 'mix'; // 'mix' | 'lock'
-let lockedSceneIdx = 0;
-let cutMode = 'matchcut'; // 'matchcut' | 'easyease'
-let accelMode = 0; // 0 = matchcut (hard), 1 = easyease (smooth)
-let pace = 120; // BPM
-let sceneLength = 30; // frames per scene
-let coreCounter = 0;
-let rampCounter = 0;
-let sHold = 0;
-
-let mainFlash = null;
-const flashCount = 13;
-let sceneOn = new Array(flashCount).fill(true);
-
-let aspectMode = 'window'; // 'window' | '1:1' | '9:16' | '16:9' | '4:5'
-let cnvWidth = 800, cnvHeight = 800;
-
-let thisFontAdjust = 0.82;
-let thisFontAdjustUp = -0.04;
-
-const frate = 30;
-let isFirstLoad = true;
-
-// Curated Brutalist Palettes
-const PALETTES = [
-  ['#000000', '#ffffff'],
-  ['#ffffff', '#000000'],
-  ['#FF2020', '#000000'],
-  ['#000000', '#FF2020'],
-  ['#00FF9D', '#050505'],
-  ['#002BFF', '#FFFFFF'],
-  ['#FFE600', '#000000'],
-  ['#141414', '#E8FF00']
+// Layout Metadata
+const LAYOUT_META = [
+  { title: "LAYOUT A: TRIANGLE", desc: "Tilted sharp triangle with vertices stretched wide" },
+  { title: "LAYOUT B: OCTAGON", desc: "Rounded irregular octagon with balanced perimeter" },
+  { title: "LAYOUT C: TRAPEZOID", desc: "Slanted, tall trapezoid with staggered diagonals" },
+  { title: "LAYOUT D: POLYGON", desc: "Compact asymmetrical polygon with sharp corners" }
 ];
 
-// ═══════════════════════════════════════════════════════════════════
-// TEXT MEASUREMENT & TEXTURE GENERATION (Native 2D Canvas Engine)
-// ═══════════════════════════════════════════════════════════════════
-const measureCanvas = document.createElement('canvas');
-const measureCtx = measureCanvas.getContext('2d');
+// ═══════════════════════════════════════════════════════════════════════
+// 4 SPATIAL LAYOUT COORDINATE MATRICES
+// Normalized [-0.5, 0.5] coordinates for discrete characters.
+// Outer letters define the perimeter; interior letters drift within.
+// ═══════════════════════════════════════════════════════════════════════
 
-function measureTextWidth(txt, size, font) {
-  measureCtx.font = `900 ${Math.round(size)}px ${font || currentFontFamily}`;
-  return measureCtx.measureText(txt).width;
-}
+// Generate 36 discrete normalized coordinate points for each layout
+function generateLayouts(count) {
+  // Layout A: Tilted Sharp Triangle
+  // 3 outer vertices: V0=(-0.42, -0.38), V1=(0.44, -0.12), V2=(-0.18, 0.42)
+  const layoutA = [];
+  const V0 = { x: -0.42, y: -0.38 };
+  const V1 = { x: 0.44, y: -0.12 };
+  const V2 = { x: -0.18, y: 0.42 };
 
-function createTextTexture(txt, targetW, targetH, bg, fg) {
-  const w = Math.max(4, Math.round(targetW));
-  const h = Math.max(4, Math.round(targetH));
-  const pg = createGraphics(w, h);
-  const ctx = pg.drawingContext;
+  const perimeterA = 24;
+  const interiorA = count - perimeterA;
 
-  if (bg && bg !== 'transparent') {
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, w, h);
-  } else {
-    ctx.clearRect(0, 0, w, h);
+  // Along edge 0: V0 -> V1 (8 points)
+  for (let i = 0; i < 8; i++) {
+    const f = i / 8;
+    layoutA.push({
+      x: V0.x + (V1.x - V0.x) * f,
+      y: V0.y + (V1.y - V0.y) * f,
+      isOuter: true
+    });
+  }
+  // Along edge 1: V1 -> V2 (8 points)
+  for (let i = 0; i < 8; i++) {
+    const f = i / 8;
+    layoutA.push({
+      x: V1.x + (V2.x - V1.x) * f,
+      y: V1.y + (V2.y - V1.y) * f,
+      isOuter: true
+    });
+  }
+  // Along edge 2: V2 -> V0 (8 points)
+  for (let i = 0; i < 8; i++) {
+    const f = i / 8;
+    layoutA.push({
+      x: V2.x + (V0.x - V2.x) * f,
+      y: V2.y + (V0.y - V2.y) * f,
+      isOuter: true
+    });
+  }
+  // Interior points inside triangle
+  for (let i = 0; i < interiorA; i++) {
+    // Barycentric sampling
+    const r1 = Math.sqrt((i + 1) / (interiorA + 1));
+    const r2 = (i * 0.61803398875) % 1;
+    const a = 1 - r1;
+    const b = r1 * (1 - r2);
+    const c = r1 * r2;
+    layoutA.push({
+      x: (a * V0.x + b * V1.x + c * V2.x) * 0.78,
+      y: (a * V0.y + b * V1.y + c * V2.y) * 0.78,
+      isOuter: false
+    });
   }
 
-  const fontSize = Math.round(h * thisFontAdjust);
-  ctx.font = `900 ${fontSize}px ${currentFontFamily}`;
-  ctx.fillStyle = fg;
+  // Layout B: Rounded Irregular Octagon / Hexagon
+  const layoutB = [];
+  const perimeterB = 22;
+  const interiorB = count - perimeterB;
+  const octVertices = [
+    { x: -0.32, y: -0.38 },
+    { x: 0.08, y: -0.42 },
+    { x: 0.38, y: -0.26 },
+    { x: 0.44, y: 0.06 },
+    { x: 0.30, y: 0.38 },
+    { x: -0.06, y: 0.42 },
+    { x: -0.38, y: 0.28 },
+    { x: -0.44, y: -0.08 }
+  ];
+  for (let i = 0; i < perimeterB; i++) {
+    const t = (i / perimeterB) * octVertices.length;
+    const idx = Math.floor(t);
+    const frac = t - idx;
+    const p1 = octVertices[idx % octVertices.length];
+    const p2 = octVertices[(idx + 1) % octVertices.length];
+    layoutB.push({
+      x: p1.x + (p2.x - p1.x) * frac,
+      y: p1.y + (p2.y - p1.y) * frac,
+      isOuter: true
+    });
+  }
+  for (let i = 0; i < interiorB; i++) {
+    const angle = (i / interiorB) * Math.PI * 2;
+    const rad = 0.12 + ((i % 3) * 0.07);
+    layoutB.push({
+      x: Math.cos(angle) * rad,
+      y: Math.sin(angle) * rad * 0.85,
+      isOuter: false
+    });
+  }
+
+  // Layout C: Slanted, Tall Trapezoid
+  const layoutC = [];
+  const perimeterC = 24;
+  const interiorC = count - perimeterC;
+  const T0 = { x: -0.20, y: -0.42 }; // Top-left
+  const T1 = { x: 0.26, y: -0.34 };  // Top-right
+  const T2 = { x: 0.42, y: 0.40 };   // Bottom-right
+  const T3 = { x: -0.38, y: 0.38 };  // Bottom-left
+
+  // Top edge (4 points)
+  for (let i = 0; i < 4; i++) {
+    const f = i / 4;
+    layoutC.push({ x: T0.x + (T1.x - T0.x) * f, y: T0.y + (T1.y - T0.y) * f, isOuter: true });
+  }
+  // Right slanted edge (8 points)
+  for (let i = 0; i < 8; i++) {
+    const f = i / 8;
+    layoutC.push({ x: T1.x + (T2.x - T1.x) * f, y: T1.y + (T2.y - T1.y) * f, isOuter: true });
+  }
+  // Bottom edge (4 points)
+  for (let i = 0; i < 4; i++) {
+    const f = i / 4;
+    layoutC.push({ x: T2.x + (T3.x - T2.x) * f, y: T2.y + (T3.y - T2.y) * f, isOuter: true });
+  }
+  // Left slanted edge (8 points)
+  for (let i = 0; i < 8; i++) {
+    const f = i / 8;
+    layoutC.push({ x: T3.x + (T0.x - T3.x) * f, y: T3.y + (T0.y - T3.y) * f, isOuter: true });
+  }
+  // Interior cascading lines
+  for (let i = 0; i < interiorC; i++) {
+    const u = ((i % 4) + 1) / 5;
+    const v = (Math.floor(i / 4) + 1) / (Math.ceil(interiorC / 4) + 1);
+    const topPt = { x: T0.x + (T1.x - T0.x) * u, y: T0.y + (T1.y - T0.y) * u };
+    const btmPt = { x: T3.x + (T2.x - T3.x) * u, y: T3.y + (T2.y - T3.y) * u };
+    layoutC.push({
+      x: topPt.x + (btmPt.x - topPt.x) * v,
+      y: topPt.y + (btmPt.y - topPt.y) * v,
+      isOuter: false
+    });
+  }
+
+  // Layout D: Compact Asymmetrical Polygon
+  const layoutD = [];
+  const perimeterD = 20;
+  const interiorD = count - perimeterD;
+  const polyVertices = [
+    { x: -0.28, y: -0.26 },
+    { x: 0.16, y: -0.32 },
+    { x: 0.36, y: -0.06 },
+    { x: 0.28, y: 0.28 },
+    { x: -0.06, y: 0.34 },
+    { x: -0.34, y: 0.14 }
+  ];
+  for (let i = 0; i < perimeterD; i++) {
+    const t = (i / perimeterD) * polyVertices.length;
+    const idx = Math.floor(t);
+    const frac = t - idx;
+    const p1 = polyVertices[idx % polyVertices.length];
+    const p2 = polyVertices[(idx + 1) % polyVertices.length];
+    layoutD.push({
+      x: p1.x + (p2.x - p1.x) * frac,
+      y: p1.y + (p2.y - p1.y) * frac,
+      isOuter: true
+    });
+  }
+  for (let i = 0; i < interiorD; i++) {
+    const r = (i + 1) / (interiorD + 1);
+    const angle = i * 2.399963; // Golden angle
+    layoutD.push({
+      x: Math.cos(angle) * 0.16 * Math.sqrt(r),
+      y: Math.sin(angle) * 0.16 * Math.sqrt(r),
+      isOuter: false
+    });
+  }
+
+  return [layoutA, layoutB, layoutC, layoutD];
+}
+
+// Build discrete character objects
+let characters = [];
+let layouts = [];
+
+function initCharacters() {
+  const text = state.text.toUpperCase();
+  const totalLetters = text.length * state.instances;
+  characters = [];
+
+  for (let inst = 0; inst < state.instances; inst++) {
+    for (let c = 0; c < text.length; c++) {
+      characters.push({
+        char: text[c],
+        index: inst * text.length + c,
+        x: 0,
+        y: 0,
+        targetX: 0,
+        targetY: 0,
+        driftPhase: Math.random() * Math.PI * 2
+      });
+    }
+  }
+
+  layouts = generateLayouts(characters.length);
+}
+
+initCharacters();
+
+// ═══════════════════════════════════════════════════════════════════════
+// ANDREW'S MONOTONE CHAIN 2D CONVEX HULL ALGORITHM
+// Computes strictly convex polygon of letter center points in O(N log N)
+// ═══════════════════════════════════════════════════════════════════════
+function convexHull(points) {
+  if (points.length <= 2) return points.slice();
+
+  // 1. Sort points lexicographically by x, then y
+  const pts = points.slice().sort((a, b) => (a.x === b.x ? a.y - b.y : a.x - b.x));
+
+  // 2D cross product of OA and OB vectors:
+  // > 0 for counter-clockwise, < 0 for clockwise, 0 for collinear
+  function cross(o, a, b) {
+    return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  }
+
+  // 2. Build lower hull
+  const lower = [];
+  for (let i = 0; i < pts.length; i++) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], pts[i]) <= 0) {
+      lower.pop();
+    }
+    lower.push(pts[i]);
+  }
+
+  // 3. Build upper hull
+  const upper = [];
+  for (let i = pts.length - 1; i >= 0; i--) {
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], pts[i]) <= 0) {
+      upper.pop();
+    }
+    upper.push(pts[i]);
+  }
+
+  // Remove duplicate end points
+  lower.pop();
+  upper.pop();
+
+  return lower.concat(upper);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SMOOTH EASING & INTERPOLATION MATH
+// ═══════════════════════════════════════════════════════════════════════
+function easeInOutQuint(t) {
+  return t < 0.5 ? 16 * t * t * t * t * t : 1 + 16 * (--t) * t * t * t * t;
+}
+
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CANVAS RESIZE & RETINA DPR SCALING
+// ═══════════════════════════════════════════════════════════════════════
+function resizeCanvas() {
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  state.width = W;
+  state.height = H;
+  state.dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  canvas.width = W * state.dpr;
+  canvas.height = H * state.dpr;
+  canvas.style.width = `${W}px`;
+  canvas.style.height = `${H}px`;
+
+  ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+}
+
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// ═══════════════════════════════════════════════════════════════════════
+// MAIN ANIMATION LOOP
+// ═══════════════════════════════════════════════════════════════════════
+let lastTime = 0;
+let frameCount = 0;
+let lastFpsUpdate = performance.now();
+
+function animate(currentTime) {
+  if (!lastTime) lastTime = currentTime;
+  const dt = Math.min(Math.max((currentTime - lastTime) / 1000, 0), 0.1);
+  lastTime = currentTime;
+
+  if (state.playing) {
+    state.time += (dt * state.speed) / state.loopDuration;
+  }
+
+  const W = state.width;
+  const H = state.height;
+
+  // Clear canvas with deep Klein electric blue
+  ctx.fillStyle = '#0015ff';
+  ctx.fillRect(0, 0, W, H);
+
+  // Draw subtle motion grid
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+  ctx.lineWidth = 1;
+  const gridSize = 40;
+  ctx.beginPath();
+  for (let x = 0; x < W; x += gridSize) {
+    ctx.moveTo(x, 0); ctx.lineTo(x, H);
+  }
+  for (let y = 0; y < H; y += gridSize) {
+    ctx.moveTo(0, y); ctx.lineTo(W, y);
+  }
+  ctx.stroke();
+
+  // Determine current morph stage across 4 layouts (strictly non-negative)
+  const cycle = ((state.time % 1.0) + 1.0) % 1.0;
+  const stageFraction = cycle * 4;
+  const currentStage = Math.min(3, Math.max(0, Math.floor(stageFraction)));
+  const nextStage = (currentStage + 1) % 4;
+  const stageT = Math.max(0, Math.min(1, stageFraction - currentStage));
+  const easedT = easeInOutCubic(stageT);
+
+  // Update layout button UI if stage changed
+  if (state.currentLayoutIdx !== currentStage) {
+    state.currentLayoutIdx = currentStage;
+    updateShapeUI(currentStage);
+  }
+
+  const currentLayout = layouts[currentStage];
+  const nextLayout = layouts[nextStage];
+
+  // Geometric scale factors responsive to screen bounds
+  const spanX = Math.min(W * 0.85, H * 1.35 * 0.85);
+  const spanY = Math.min(H * 0.78, W * 0.65);
+  const centerX = W / 2;
+  const centerY = H / 2;
+
+  // Responsive font size: Helvetica 20-28px
+  const fontSize = Math.max(19, Math.min(Math.round(W * 0.022), 28));
+  ctx.font = `700 ${fontSize}px Helvetica, Arial, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(txt, w / 2, h / 2 + h * thisFontAdjustUp);
-  return pg;
+
+  const letterPoints = [];
+
+  // Interpolate and calculate positions for each character
+  for (let i = 0; i < characters.length; i++) {
+    const ch = characters[i];
+    const pA = currentLayout[i % currentLayout.length];
+    const pB = nextLayout[i % nextLayout.length];
+
+    // Individual character stagger for organic fluid flow
+    const stagger = (i / characters.length) * 0.06;
+    const charT = Math.max(0, Math.min(1, (stageT - stagger) / (1 - stagger * 1.5)));
+    const charEased = easeInOutCubic(charT);
+
+    const nx = pA.x + (pB.x - pA.x) * charEased;
+    const ny = pA.y + (pB.y - pA.y) * charEased;
+
+    // Organic drift for interior characters
+    const isInterior = !pA.isOuter || !pB.isOuter;
+    const driftAmp = isInterior ? 5 : 1.5;
+    const driftX = Math.sin(state.time * Math.PI * 4 + ch.driftPhase) * driftAmp;
+    const driftY = Math.cos(state.time * Math.PI * 3.5 + ch.driftPhase * 1.3) * driftAmp;
+
+    const posX = centerX + nx * spanX + driftX;
+    const posY = centerY + ny * spanY + driftY;
+
+    ch.x = posX;
+    ch.y = posY;
+
+    letterPoints.push({ x: posX, y: posY, char: ch.char, isOuter: !isInterior });
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // DYNAMIC CONVEX HULL CALCULATION (Andrew's Monotone Chain)
+  // ═════════════════════════════════════════════════════════════════════
+  if (state.showHull) {
+    const hull = convexHull(letterPoints);
+
+    if (hull.length > 2) {
+      ctx.save();
+      // 1.5px solid white line enclosing all characters
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+
+      ctx.beginPath();
+      ctx.moveTo(hull[0].x, hull[0].y);
+      for (let h = 1; h < hull.length; h++) {
+        ctx.lineTo(hull[h].x, hull[h].y);
+      }
+      ctx.closePath();
+      ctx.stroke();
+
+      // Subtle vertex markers at hull corners
+      ctx.fillStyle = '#ffffff';
+      for (let h = 0; h < hull.length; h++) {
+        ctx.beginPath();
+        ctx.arc(hull[h].x, hull[h].y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // DRAW CHARACTERS (Crisp White Helvetica)
+  // ═════════════════════════════════════════════════════════════════════
+  ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < letterPoints.length; i++) {
+    const pt = letterPoints[i];
+    ctx.fillText(pt.char, pt.x, pt.y);
+  }
+
+  // Update Loop Progress Scrubber
+  const loopFraction = (state.time % 1.0);
+  const strokeOffset = 88 - (loopFraction * 88);
+  document.getElementById('loopProgressCircle').style.strokeDashoffset = strokeOffset;
+  document.getElementById('loopPercent').textContent = `${Math.round(loopFraction * 100)}%`;
+
+  // FPS Counter calculation
+  frameCount++;
+  if (currentTime - lastFpsUpdate >= 500) {
+    const fps = Math.round((frameCount * 1000) / (currentTime - lastFpsUpdate));
+    document.getElementById('fpsBadge').textContent = `${fps} FPS`;
+    frameCount = 0;
+    lastFpsUpdate = currentTime;
+  }
+
+  requestAnimationFrame(animate);
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// EASING FUNCTIONS
-// ═══════════════════════════════════════════════════════════════════
-function easeOutQuad(t){ return 1 - (1 - t) * (1 - t); }
-function easeInQuad(t){ return t * t; }
-function easeInOutQuad(t){ return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
-function easeOutCirc(t){ return Math.sqrt(1 - Math.pow(t - 1, 2)); }
-function easeInCirc(t){ return 1 - Math.sqrt(1 - Math.pow(t, 2)); }
-function easeInOutCirc(t){ return t < 0.5 ? (1 - Math.sqrt(1 - Math.pow(2 * t, 2))) / 2 : (Math.sqrt(1 - Math.pow(-2 * t + 2, 2)) + 1) / 2; }
+requestAnimationFrame(animate);
 
-// ═══════════════════════════════════════════════════════════════════
-// P5.JS SETUP & MAIN LOOP
-// ═══════════════════════════════════════════════════════════════════
-function setup() {
-  calcCanvasSize();
-  const cnv = createCanvas(cnvWidth, cnvHeight, WEBGL);
-  cnv.parent('canvasHolder');
+// ═══════════════════════════════════════════════════════════════════════
+// UI & EVENT INTERACTION
+// ═══════════════════════════════════════════════════════════════════════
 
-  frameRate(frate);
-  textureMode(NORMAL);
+// Initialize Lucide Icons
+lucide.createIcons();
 
-  updateSceneLength();
-  readTextInput();
-  pickScene();
-}
-
-function draw() {
-  if (!playing) return;
-
-  background(bkgdColor);
-  ortho(-width / 2, width / 2, -height / 2, height / 2, -10000, 10000);
-
-  push();
-    translate(-width / 2, -height / 2);
-    if (mainFlash) {
-      mainFlash.update();
-      mainFlash.display();
-    }
-  pop();
-
-  // Rhythm beat scheduler
-  if (textMode === 'text') {
-    if ((coreCounter + 1) % sceneLength === 0) {
-      pickScene();
-    }
-  } else if (textMode === 'clock') {
-    if (sHold !== second()) {
-      pickScene();
-      sHold = second();
-    }
-  }
-
-  coreCounter++;
-
-  if (frameCount % 30 === 0) {
-    document.getElementById('fpsCounter').textContent = `FPS: ${Math.round(frameRate())}`;
-  }
-}
-
-function calcCanvasSize() {
-  const container = document.getElementById('viewport');
-  const maxW = container.clientWidth - 40;
-  const maxH = container.clientHeight - 40;
-
-  if (aspectMode === '1:1') {
-    const sz = Math.min(maxW, maxH, 800);
-    cnvWidth = sz; cnvHeight = sz;
-  } else if (aspectMode === '9:16') {
-    let h = Math.min(maxH, 880);
-    let w = h * (9 / 16);
-    if (w > maxW) { w = maxW; h = w * (16 / 9); }
-    cnvWidth = Math.round(w); cnvHeight = Math.round(h);
-  } else if (aspectMode === '16:9') {
-    let w = Math.min(maxW, 960);
-    let h = w * (9 / 16);
-    if (h > maxH) { h = maxH; w = h * (16 / 9); }
-    cnvWidth = Math.round(w); cnvHeight = Math.round(h);
-  } else if (aspectMode === '4:5') {
-    let h = Math.min(maxH, 800);
-    let w = h * (4 / 5);
-    if (w > maxW) { w = maxW; h = w * (5 / 4); }
-    cnvWidth = Math.round(w); cnvHeight = Math.round(h);
-  } else {
-    cnvWidth = Math.max(300, maxW);
-    cnvHeight = Math.max(300, maxH);
-  }
-}
-
-function windowResized() {
-  calcCanvasSize();
-  resizeCanvas(cnvWidth, cnvHeight, WEBGL);
-  if (mainFlash) pickScene();
-}
-
-function updateSceneLength() {
-  sceneLength = Math.max(4, Math.round((60 / pace) * frate));
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// SCENE DISPATCHER & PICKER
-// ═══════════════════════════════════════════════════════════════════
-function readTextInput() {
-  const txt = document.getElementById('textArea').value;
-  const rawLines = txt.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  keyArray = rawLines.length > 0 ? rawLines : ["TYPOMAN"];
-  selector = 0;
-}
-
-function formatText(str) {
-  if (textCase === 'upper') return str.toUpperCase();
-  if (textCase === 'lower') return str.toLowerCase();
-  if (textCase === 'title') return str.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-  return str;
-}
-
-function pickScene() {
-  if (mainFlash && typeof mainFlash.removeGraphics === 'function') {
-    mainFlash.removeGraphics();
-  }
-
-  if (selector >= keyArray.length) selector = 0;
-  let currentText = formatText(keyArray[selector]);
-
-  if (textMode === 'clock') {
-    const h = String(hour()).padStart(2, '0');
-    const m = String(minute()).padStart(2, '0');
-    const s = String(second()).padStart(2, '0');
-    currentText = `${h}:${m}:${s}`;
-  }
-
-  let sceneIdx = 0;
-
-  if (isFirstLoad) {
-    sceneIdx = 2; // Box (3D) as default opening scene
-    isFirstLoad = false;
-  } else if (motionMode === 'lock') {
-    sceneIdx = lockedSceneIdx;
-  } else {
-    const available = [];
-    for (let i = 0; i < flashCount; i++) {
-      if (sceneOn[i]) available.push(i);
-    }
-    if (available.length === 0) {
-      mainFlash = new BlankScene(rampCounter % 2, currentText);
-      return;
-    }
-    sceneIdx = available[Math.floor(Math.random() * available.length)];
-  }
-
-  const ramp = rampCounter % 2;
-  switch (sceneIdx) {
-    case 0: mainFlash = new ArcerScene(ramp, currentText); break;
-    case 1: mainFlash = new BendScene(ramp, currentText); break;
-    case 2: mainFlash = new BoxScene(ramp, currentText); break;
-    case 3: mainFlash = new BugEyesScene(ramp, currentText); break;
-    case 4: mainFlash = new HaloScene(ramp, currentText); break;
-    case 5: mainFlash = new RiseSunScene(ramp, currentText); break;
-    case 6: mainFlash = new ShuttersScene(ramp, currentText); break;
-    case 7: mainFlash = new Shutters2Scene(ramp, currentText); break;
-    case 8: mainFlash = new SlotMachineScene(ramp, currentText); break;
-    case 9: mainFlash = new SnapScene(ramp, currentText); break;
-    case 10: mainFlash = new SplitScene(ramp, currentText); break;
-    case 11: mainFlash = new StarburstScene(ramp, currentText); break;
-    case 12: mainFlash = new TwistScene(ramp, currentText); break;
-    default: mainFlash = new BlankScene(ramp, currentText); break;
-  }
-
-  // Color swap on beat
-  if (colorSwapOn && Math.random() < 0.35) {
-    const temp = foreColor;
-    foreColor = bkgdColor;
-    bkgdColor = temp;
-    updateColorInputs();
-  }
-
-  rampCounter++;
-  selector++;
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// 13 KINETIC SCENE IMPLEMENTATIONS
-// ═══════════════════════════════════════════════════════════════════
-
-// --- 0. ARCER ---
-class ArcerScene {
-  constructor(ramp, inp) {
-    this.inp = inp;
-    this.ramp = ramp;
-    this.ticker = 0;
-    this.pgTextSize = 10;
-    this.findTextSize();
-    this.xSpots = [];
-    this.findXpos();
-    this.pg = [];
-    this.makeTextures();
-    this.yAnim = [];
-    this.yTarget = [];
-    this.yStart = 50;
-    this.yMin = 0;
-    this.yMax = -140;
-    this.setYtarget();
-  }
-  update() {
-    this.ticker++;
-    const tk0 = map(this.ticker, 0, sceneLength, 0, 1);
-    for (let n = 0; n < this.inp.length; n++) {
-      let tk1;
-      if (accelMode === 0) {
-        tk1 = this.ramp === 0 ? easeOutCirc(tk0) : easeInCirc(tk0);
-        this.yAnim[n] = map(tk1, 0, 1, this.yStart, this.yTarget[n]);
-      } else {
-        if (tk0 < 0.5) {
-          tk1 = easeOutCirc(map(tk0, 0, 0.5, 0, 1));
-          this.yAnim[n] = map(tk1, 0, 1, this.yStart, this.yTarget[n] / 2);
-        } else {
-          tk1 = easeInCirc(map(tk0, 0.5, 1, 0, 1));
-          this.yAnim[n] = map(tk1, 0, 1, this.yTarget[n] / 2, this.yTarget[n]);
-        }
-      }
-    }
-  }
-  display() {
-    background(bkgdColor);
-    push();
-      translate(0, height / 2);
-      for (let n = 0; n < this.inp.length; n++) {
-        push();
-          translate(this.xSpots[n], this.yAnim[n]);
-          image(this.pg[n], 0, -this.pg[n].height / 2);
-        pop();
-      }
-    pop();
-  }
-  findXpos() {
-    let fs = 0;
-    const charWidths = [];
-    for (let n = 0; n < this.inp.length; n++) {
-      const w = measureTextWidth(this.inp.charAt(n), this.pgTextSize, currentFontFamily);
-      charWidths.push(w);
-      fs += w;
-    }
-    let xs = width / 2 - fs / 2;
-    for (let n = 0; n < this.inp.length; n++) {
-      this.xSpots[n] = xs;
-      xs += charWidths[n];
-    }
-  }
-  setYtarget() {
-    for (let n = 0; n < this.inp.length; n++) {
-      this.yAnim[n] = this.yMin;
-      const tk0 = map(n, 0, Math.max(1, this.inp.length - 1), 0, 2 * PI);
-      this.yTarget[n] = map(cos(tk0), 1, -1, this.yMin, this.yMax);
-    }
-  }
-  findTextSize() {
-    let m = 0;
-    this.pgTextSize = 10;
-    while (m < width * 0.85 && this.pgTextSize < 350) {
-      m = measureTextWidth(this.inp, this.pgTextSize, currentFontFamily);
-      this.pgTextSize += 4;
-    }
-    if (this.pgTextSize * thisFontAdjust > height * 0.85) {
-      this.pgTextSize = (height * 0.85) / thisFontAdjust;
-    }
-  }
-  makeTextures() {
-    for (let n = 0; n < this.inp.length; n++) {
-      const ch = this.inp.charAt(n);
-      const w = Math.max(8, Math.round(measureTextWidth(ch, this.pgTextSize, currentFontFamily)));
-      const h = Math.max(8, Math.round(this.pgTextSize * (thisFontAdjust + 0.1)));
-      this.pg[n] = createTextTexture(ch, w, h, 'transparent', foreColor);
-    }
-  }
-  removeGraphics() {
-    for (let n = 0; n < this.pg.length; n++) {
-      if (this.pg[n]) this.pg[n].remove();
-    }
-  }
-}
-
-// --- 1. BEND ---
-class BendScene {
-  constructor(ramp, inp) {
-    this.inp = inp;
-    this.ramp = ramp;
-    this.ticker = 0;
-    this.pgTextSize = 10;
-    this.findTextSize();
-    this.drawTextures();
-    this.res = 200;
-    this.yTopCorner = (height - this.pgA.height) / 2;
-    this.yBotCorner = (height - this.pgA.height) / 2 + this.pgA.height;
-  }
-  update() {
-    this.ticker++;
-    const tk0 = map(this.ticker, 0, sceneLength, 0, 1);
-    let tk1;
-    let a0, b0, a1, b1;
-    if (accelMode === 0) {
-      tk1 = this.ramp === 0 ? easeOutCirc(tk0) : easeInCirc(tk0);
-      a0 = 0; b0 = -this.yTopCorner;
-      a1 = this.pgA.height; b1 = this.yBotCorner;
-    } else {
-      if (tk0 < 0.5) {
-        tk1 = easeOutCirc(map(tk0, 0, 0.5, 0, 1));
-        a0 = 0; b0 = -this.yTopCorner / 2;
-        a1 = this.pgA.height; b1 = (this.yBotCorner + this.pgA.height) / 2;
-      } else {
-        tk1 = easeInCirc(map(tk0, 0.5, 1, 0, 1));
-        a0 = -this.yTopCorner / 2; b0 = -this.yTopCorner;
-        a1 = (this.yBotCorner + this.pgA.height) / 2; b1 = this.yBotCorner;
-      }
-    }
-    this.yTopAnim = map(tk1, 0, 1, a0, b0);
-    this.yBotAnim = map(tk1, 0, 1, a1, b1);
-  }
-  display() {
-    background(bkgdColor);
-    push();
-      translate(width / 2, height / 2);
-      translate(-this.pgA.width / 2, -this.pgA.height / 2);
-      texture(this.pgA);
-      noStroke();
-      beginShape(TRIANGLE_STRIP);
-        for (let n = 0; n <= this.res; n++) {
-          const t = n / this.res;
-          const x = bezierPoint(0, width / 2, width / 2, width, t);
-          const yT = bezierPoint(this.yTopAnim, 0, 0, this.yTopAnim, t);
-          const yB = bezierPoint(this.yBotAnim, this.pgA.height, this.pgA.height, this.yBotAnim, t);
-          const u = map(x, 0, this.pgA.width, 0, 1);
-          vertex(x, yT, u, 0);
-          vertex(x, yB, u, 1);
-        }
-      endShape();
-    pop();
-  }
-  findTextSize() {
-    let m = 0;
-    this.pgTextSize = 10;
-    while (m < width * 0.85 && this.pgTextSize < 350) {
-      m = measureTextWidth(this.inp, this.pgTextSize, currentFontFamily);
-      this.pgTextSize += 4;
-    }
-    if (this.pgTextSize * thisFontAdjust > height * 0.85) {
-      this.pgTextSize = (height * 0.85) / thisFontAdjust;
-    }
-  }
-  drawTextures() {
-    const rs = Math.max(20, Math.round(measureTextWidth(this.inp, this.pgTextSize, currentFontFamily)));
-    const h = Math.max(10, Math.round(this.pgTextSize * (thisFontAdjust + 0.1)));
-    this.pgA = createTextTexture(this.inp, rs, h, bkgdColor, foreColor);
-  }
-  removeGraphics() { if (this.pgA) this.pgA.remove(); }
-}
-
-// --- 2. BOX (3D) ---
-class BoxScene {
-  constructor(ramp, inp) {
-    this.inp = inp;
-    this.ramp = ramp;
-    this.ticker = 0;
-    this.pgTextSize = 10;
-    this.findTextSize();
-    this.drawTextures();
-    this.stripH = this.pgA.height;
-    this.xRotMax = random(-PI, PI);
-    this.yRotMax = random(-PI / 8, PI / 8);
-    this.zRotMax = random(-PI / 2, PI / 2);
-  }
-  update() {
-    this.ticker++;
-    const tk0 = map(this.ticker, 0, sceneLength, 0, 1);
-    let tk1;
-    let a0, b0, a1, b1, a2, b2;
-    if (accelMode === 0) {
-      tk1 = this.ramp === 0 ? easeOutCirc(tk0) : easeInCirc(tk0);
-      a0 = 0; b0 = this.xRotMax; a1 = 0; b1 = this.yRotMax; a2 = 0; b2 = this.zRotMax;
-    } else {
-      if (tk0 < 0.5) {
-        tk1 = easeOutCirc(map(tk0, 0, 0.5, 0, 1));
-        a0 = 0; b0 = this.xRotMax / 2; a1 = 0; b1 = this.yRotMax / 2; a2 = 0; b2 = this.zRotMax / 2;
-      } else {
-        tk1 = easeInCirc(map(tk0, 0.5, 1, 0, 1));
-        a0 = this.xRotMax / 2; b0 = this.xRotMax; a1 = this.yRotMax / 2; b1 = this.yRotMax; a2 = this.zRotMax / 2; b2 = this.zRotMax;
-      }
-    }
-    this.xRot = map(tk1, 0, 1, a0, b0);
-    this.yRot = map(tk1, 0, 1, a1, b1);
-    this.zRot = map(tk1, 0, 1, a2, b2);
-  }
-  display() {
-    background(bkgdColor);
-    push();
-      translate(width / 2, height / 2);
-      rotateY(this.yRot);
-      rotateX(this.xRot);
-      rotateZ(this.zRot);
-      for (let m = 0; m < 4; m++) {
-        texture(m % 2 === 0 ? this.pgA : this.pgB);
-        push();
-          rotateX(m * PI / 2);
-          beginShape(TRIANGLE_STRIP);
-            vertex(-this.pgA.width / 2, -this.pgA.height / 2, this.stripH / 2, 0, 0);
-            vertex(-this.pgA.width / 2, this.pgA.height / 2, this.stripH / 2, 0, 1);
-            vertex(this.pgA.width / 2, -this.pgA.height / 2, this.stripH / 2, 1, 0);
-            vertex(this.pgA.width / 2, this.pgA.height / 2, this.stripH / 2, 1, 1);
-          endShape();
-        pop();
-        push();
-          fill(bkgdColor);
-          noStroke();
-          translate(-this.pgA.width / 2, -this.pgA.height / 2, this.stripH / 2);
-          rotateY(PI / 2);
-          rect(-1, -1, this.stripH + 2, this.stripH + 2);
-          translate(0, 0, this.pgA.width);
-          rect(-1, -1, this.stripH + 2, this.stripH + 2);
-        pop();
-      }
-    pop();
-  }
-  findTextSize() {
-    let m = 0;
-    this.pgTextSize = 10;
-    while (m < width * 0.85 && this.pgTextSize < 350) {
-      m = measureTextWidth(this.inp, this.pgTextSize, currentFontFamily);
-      this.pgTextSize += 4;
-    }
-    if (this.pgTextSize * thisFontAdjust > height * 0.85) {
-      this.pgTextSize = (height * 0.85) / thisFontAdjust;
-    }
-  }
-  drawTextures() {
-    const rs = Math.max(20, Math.round(measureTextWidth(this.inp, this.pgTextSize, currentFontFamily)));
-    const h = Math.max(10, Math.round(this.pgTextSize * (thisFontAdjust + 0.1)));
-    this.pgA = createTextTexture(this.inp, rs, h, bkgdColor, foreColor);
-    this.pgB = createTextTexture(this.inp, rs, Math.round(h * 0.85), foreColor, bkgdColor);
-  }
-  removeGraphics() { if (this.pgA) this.pgA.remove(); if (this.pgB) this.pgB.remove(); }
-}
-
-// --- 3. BUG EYES ---
-class BugEyesScene {
-  constructor(ramp, inp) {
-    this.inp = inp;
-    this.ramp = ramp;
-    this.ticker = 0;
-    this.pgTextSize = 10;
-    this.findTextSize();
-    this.pg = [];
-    this.makeTextures();
-    this.xSpots = [];
-    this.shutterAnim = [];
-    this.findXpos();
-    this.pacer = (sceneLength / 2) / Math.max(1, this.inp.length);
-  }
-  update() {
-    this.ticker++;
-    for (let n = 0; n < this.inp.length; n++) {
-      for (let p = 0; p < this.repeats; p++) {
-        const d = dist(n, p, this.inp.length / 2, this.repeats / 2);
-        const tk00 = constrain(this.ticker - (this.pacer * d), 0, sceneLength);
-        const tk0 = map(tk00, 0, sceneLength, 0, 1);
-        const tk1 = this.ramp === 0 ? easeOutQuad(tk0) : easeInQuad(tk0);
-        this.shutterAnim[n][p] = map(tk1, 0, 1, this.pg[n].height, 0);
-      }
-    }
-  }
-  display() {
-    background(bkgdColor);
-    push();
-      translate(0, height / 2);
-      translate(0, -this.pg[0].height / 2);
-      for (let n = 0; n < this.inp.length; n++) {
-        push();
-          translate(0, -this.repeats * this.pg[n].height / 2);
-          translate(0, (n % 2) * this.pg[n].height / 2);
-          for (let p = 0; p < this.repeats; p++) {
-            push();
-              translate(this.xSpots[n], p * this.pg[n].height);
-              texture(this.pg[n]);
-              const vTop = 0;
-              const vBot = map(this.pg[n].height - this.shutterAnim[n][p], 0, this.pg[n].height, 0, 1);
-              beginShape(TRIANGLE_STRIP);
-                vertex(0, this.shutterAnim[n][p], 0, vTop);
-                vertex(0, this.pg[n].height, 0, vBot);
-                vertex(this.pg[n].width, this.shutterAnim[n][p], 1, vTop);
-                vertex(this.pg[n].width, this.pg[n].height, 1, vBot);
-              endShape();
-            pop();
-          }
-        pop();
-      }
-    pop();
-  }
-  findXpos() {
-    let fs = 0;
-    const charWidths = [];
-    for (let n = 0; n < this.inp.length; n++) {
-      this.shutterAnim[n] = [];
-      const w = measureTextWidth(this.inp.charAt(n), this.pgTextSize, currentFontFamily);
-      charWidths.push(w);
-      fs += w;
-    }
-    let xs = width / 2 - fs / 2;
-    for (let n = 0; n < this.inp.length; n++) {
-      this.xSpots[n] = xs;
-      xs += charWidths[n];
-    }
-  }
-  findTextSize() {
-    let m = 0;
-    this.pgTextSize = 10;
-    while (m < width * 0.85 && this.pgTextSize < 350) {
-      m = measureTextWidth(this.inp, this.pgTextSize, currentFontFamily);
-      this.pgTextSize += 4;
-    }
-    if (this.pgTextSize * thisFontAdjust > height * 0.85) {
-      this.pgTextSize = (height * 0.85) / thisFontAdjust;
-    }
-  }
-  makeTextures() {
-    for (let n = 0; n < this.inp.length; n++) {
-      const ch = this.inp.charAt(n);
-      const rs = Math.max(8, Math.round(measureTextWidth(ch, this.pgTextSize, currentFontFamily)));
-      const h = Math.max(8, Math.round(this.pgTextSize * (thisFontAdjust + 0.05)));
-      this.pg[n] = createTextTexture(ch, rs, h, bkgdColor, foreColor);
-    }
-    this.repeats = Math.floor(height / this.pg[0].height) + 2;
-  }
-  removeGraphics() {
-    for (let n = 0; n < this.pg.length; n++) {
-      if (this.pg[n]) this.pg[n].remove();
-    }
-  }
-}
-
-// --- 4. HALO (3D) ---
-class HaloScene {
-  constructor(ramp, inp) {
-    this.inp = inp;
-    this.ramp = ramp;
-    this.ticker = 0;
-    this.pgTextSize = 10;
-    this.findTextSize();
-    this.drawTextures();
-    this.res = 80;
-    this.ang = (2 * PI) / this.res;
-    this.radius = width / 2.2;
-    this.sec = (2 * PI * this.radius) / this.res;
-    this.stripH = this.pgA.height;
-    this.xRotMax = random(-PI / 4, PI / 4);
-    this.zRotMax = random(-PI / 4, PI / 4);
-    this.heightRatio = (this.pgA.width * this.stripH) / this.pgA.height;
-  }
-  update() {
-    this.ticker++;
-    const tk0 = map(this.ticker, 0, sceneLength, 0, 1);
-    let tk1;
-    let a0, b0, a1, b1;
-    if (accelMode === 0) {
-      tk1 = this.ramp === 0 ? easeOutCirc(tk0) : easeInCirc(tk0);
-      a0 = 0; b0 = this.xRotMax; a1 = 0; b1 = this.zRotMax;
-    } else {
-      if (tk0 < 0.5) {
-        tk1 = easeOutCirc(map(tk0, 0, 0.5, 0, 1));
-        a0 = 0; b0 = this.xRotMax / 2; a1 = 0; b1 = this.zRotMax / 2;
-      } else {
-        tk1 = easeInCirc(map(tk0, 0.5, 1, 0, 1));
-        a0 = this.xRotMax / 2; b0 = this.xRotMax; a1 = this.zRotMax / 2; b1 = this.zRotMax;
-      }
-    }
-    this.xRot = map(tk1, 0, 1, a0, b0);
-    this.zRot = map(tk1, 0, 1, a1, b1);
-  }
-  display() {
-    background(bkgdColor);
-    push();
-      translate(width / 2, height / 2);
-      rotateX(this.xRot);
-      rotateZ(this.zRot);
-      for (let m = 0; m < 2; m++) {
-        texture(m === 0 ? this.pgA : this.pgB);
-        beginShape(TRIANGLE_STRIP);
-          for (let n = 0; n <= this.res; n++) {
-            const x = cos(n * this.ang + PI) * (this.radius - m / 2);
-            const z = sin(n * this.ang + PI) * (this.radius - m / 2);
-            const yTop = -this.stripH / 2 + m;
-            const yBot = this.stripH / 2 - m;
-            const thisDist = (n * this.sec + this.ticker * 2.5 + 600) % this.heightRatio;
-            const u = map(thisDist, 0, this.heightRatio, 1, 0);
-            vertex(x, yTop, z, u, 0);
-            vertex(x, yBot, z, u, 1);
-            if (thisDist > this.heightRatio - this.sec) {
-              vertex(x, yTop, z, 1, 0);
-              vertex(x, yBot, z, 1, 1);
-            }
-          }
-        endShape();
-      }
-    pop();
-  }
-  findTextSize() {
-    let m = 0;
-    this.pgTextSize = 10;
-    while (m < width * 0.85 && this.pgTextSize < 350) {
-      m = measureTextWidth(this.inp, this.pgTextSize, currentFontFamily);
-      this.pgTextSize += 4;
-    }
-    if (this.pgTextSize * thisFontAdjust > height * 0.85) {
-      this.pgTextSize = (height * 0.85) / thisFontAdjust;
-    }
-  }
-  drawTextures() {
-    const rs = Math.max(20, Math.round(measureTextWidth(this.inp, this.pgTextSize, currentFontFamily)) + 200);
-    const h = Math.max(10, Math.round(this.pgTextSize * (thisFontAdjust + 0.1)));
-    this.pgA = createTextTexture(this.inp, rs, h, bkgdColor, foreColor);
-    this.pgB = createTextTexture(this.inp, rs, h, foreColor, bkgdColor);
-  }
-  removeGraphics() { if (this.pgA) this.pgA.remove(); if (this.pgB) this.pgB.remove(); }
-}
-
-// --- 5. RISE SUN ---
-class RiseSunScene {
-  constructor(ramp, inp) {
-    this.inp = inp;
-    this.ramp = ramp;
-    this.ticker = 0;
-    this.pgTextSize = 10;
-    this.findTextSize();
-    this.drawTextures();
-    this.res = 48;
-    this.ang = (2 * PI) / this.res;
-    this.radiusX = height * 1.25;
-    this.radiusY = height;
-    this.xCenter = width / 2;
-    this.direction = Math.random() < 0.5 ? 1 : -1;
-    this.yCenterStart = height / 2 + this.direction * (this.radiusY - 25);
-    this.yCenterEnd = this.yCenterStart + 100;
-  }
-  update() {
-    this.ticker++;
-    const tk0 = map(this.ticker, 0, sceneLength, 0, 1);
-    let tk1;
-    let a0, b0;
-    if (accelMode === 0) {
-      tk1 = this.ramp === 0 ? easeOutCirc(tk0) : easeInCirc(tk0);
-      a0 = this.yCenterStart; b0 = this.yCenterEnd;
-    } else {
-      if (tk0 < 0.5) {
-        tk1 = easeOutCirc(map(tk0, 0, 0.5, 0, 1));
-        a0 = this.yCenterStart; b0 = (this.yCenterStart + this.yCenterEnd) / 2;
-      } else {
-        tk1 = easeInCirc(map(tk0, 0.5, 1, 0, 1));
-        a0 = (this.yCenterStart + this.yCenterEnd) / 2; b0 = this.yCenterEnd;
-      }
-    }
-    this.yCenter = map(tk1, 0, 1, a0, b0);
-  }
-  display() {
-    image(this.pgA, 0, 0);
-    texture(this.pgB);
-    beginShape(TRIANGLE_FAN);
-      for (let n = 0; n < this.res; n++) {
-        const x = this.xCenter + cos(n * this.ang) * this.radiusX;
-        const y = this.yCenter + sin(n * this.ang) * this.radiusY;
-        const u = map(x, 0, width, 0, 1);
-        const v = map(y, 0, height, 0, 1);
-        vertex(x, y, u, v);
-      }
-    endShape();
-  }
-  findTextSize() {
-    let m = 0;
-    this.pgTextSize = 10;
-    while (m < width * 0.85 && this.pgTextSize < 350) {
-      m = measureTextWidth(this.inp, this.pgTextSize, currentFontFamily);
-      this.pgTextSize += 4;
-    }
-    if (this.pgTextSize * thisFontAdjust > height * 0.85) {
-      this.pgTextSize = (height * 0.85) / thisFontAdjust;
-    }
-  }
-  drawTextures() {
-    this.pgA = createTextTexture(this.inp, width, height, foreColor, bkgdColor);
-    this.pgB = createTextTexture(this.inp, width, height, bkgdColor, foreColor);
-  }
-  removeGraphics() { if (this.pgA) this.pgA.remove(); if (this.pgB) this.pgB.remove(); }
-}
-
-// --- 6. SHUTTERS ---
-class ShuttersScene {
-  constructor(ramp, inp) {
-    this.inp = inp;
-    this.ramp = ramp;
-    this.ticker = 0;
-    this.pgTextSize = 10;
-    this.xSpots = [];
-    this.shutterAnim = [];
-    this.shutterYanim = [];
-    this.pg = [];
-    this.pacer = (sceneLength / 2) / Math.max(1, this.inp.length);
-
-    this.findTextSize();
-    this.findXpos();
-    this.makeTextures();
-  }
-  update() {
-    this.ticker++;
-    for (let n = 0; n < this.inp.length; n++) {
-      const tk00 = constrain(this.ticker - this.pacer * n, 0, sceneLength);
-      const tk0 = map(tk00, 0, sceneLength, 0, 1);
-      const tk1 = this.ramp === 0 ? easeOutQuad(tk0) : easeInOutQuad(tk0);
-      this.shutterAnim[n] = map(tk1, 0, 1, this.pg[0] ? this.pg[0].height : 50, 0);
-      this.shutterYanim[n] = map(tk1, 0, 1, this.pg[0] ? -this.pg[0].height / 2 : -25, 0);
-    }
-  }
-  display() {
-    background(bkgdColor);
-    push();
-      translate(0, height / 2);
-      const firstH = this.pg[0] ? this.pg[0].height : 50;
-      translate(0, -firstH / 2);
-      for (let n = 0; n < this.inp.length; n++) {
-        if (!this.pg[n]) continue;
-        push();
-          translate(this.xSpots[n], this.shutterYanim[n] || 0);
-          texture(this.pg[n]);
-          const vTop = 0;
-          const vBot = map(this.pg[n].height - (this.shutterAnim[n] || 0), 0, this.pg[n].height, 0, 1);
-          beginShape(TRIANGLE_STRIP);
-            vertex(0, this.shutterAnim[n] || 0, 0, vTop);
-            vertex(0, this.pg[n].height, 0, vBot);
-            vertex(this.pg[n].width, this.shutterAnim[n] || 0, 1, vTop);
-            vertex(this.pg[n].width, this.pg[n].height, 1, vBot);
-          endShape();
-        pop();
-      }
-    pop();
-  }
-  findXpos() {
-    let fs = 0;
-    const charWidths = [];
-    for (let n = 0; n < this.inp.length; n++) {
-      this.shutterAnim[n] = 0;
-      this.shutterYanim[n] = 0;
-      const w = measureTextWidth(this.inp.charAt(n), this.pgTextSize, currentFontFamily);
-      charWidths.push(w);
-      fs += w;
-    }
-    let xs = width / 2 - fs / 2;
-    for (let n = 0; n < this.inp.length; n++) {
-      this.xSpots[n] = xs;
-      xs += charWidths[n];
-    }
-  }
-  findTextSize() {
-    let m = 0;
-    this.pgTextSize = 10;
-    while (m < width * 0.85 && this.pgTextSize < 350) {
-      m = measureTextWidth(this.inp, this.pgTextSize, currentFontFamily);
-      this.pgTextSize += 4;
-    }
-    if (this.pgTextSize * thisFontAdjust > height * 0.85) {
-      this.pgTextSize = (height * 0.85) / thisFontAdjust;
-    }
-  }
-  makeTextures() {
-    for (let n = 0; n < this.inp.length; n++) {
-      const ch = this.inp.charAt(n);
-      const rs = Math.max(8, Math.round(measureTextWidth(ch, this.pgTextSize, currentFontFamily)));
-      const h = Math.max(8, Math.round(this.pgTextSize * (thisFontAdjust + 0.05)));
-      this.pg[n] = createTextTexture(ch, rs, h, bkgdColor, foreColor);
-    }
-  }
-  removeGraphics() {
-    for (let n = 0; n < this.pg.length; n++) {
-      if (this.pg[n]) this.pg[n].remove();
-    }
-  }
-}
-
-// --- 7. SHUTTERS 2 ---
-class Shutters2Scene {
-  constructor(ramp, inp) {
-    this.inp = inp;
-    this.ramp = ramp;
-    this.ticker = 0;
-    this.pgTextSize = 10;
-    this.xSpots = [];
-    this.xAnim = [];
-    this.shutterAnim = [];
-    this.pg = [];
-    this.pacer = (sceneLength / 3) / Math.max(1, this.inp.length);
-
-    this.findTextSize();
-    this.findXpos();
-    this.makeTextures();
-  }
-  update() {
-    this.ticker++;
-    for (let n = 0; n < this.inp.length; n++) {
-      if (!this.pg[n]) continue;
-      const tk00 = constrain(this.ticker - this.pacer * n, 0, sceneLength);
-      const tk0 = map(tk00, 0, sceneLength, 0, 1);
-      let tk1;
-      let a0, b0, a1, b1;
-      if (accelMode === 0) {
-        tk1 = this.ramp === 0 ? easeOutQuad(tk0) : easeInOutQuad(tk0);
-        a0 = 0; b0 = this.pg[n].width;
-        a1 = width / 2; b1 = this.xSpots[n];
-      } else {
-        if (tk0 < 0.5) {
-          tk1 = easeOutCirc(map(tk0, 0, 0.5, 0, 1));
-          a0 = 0; b0 = this.pg[n].width;
-          a1 = width / 2; b1 = this.xSpots[n];
-        } else {
-          tk1 = easeInCirc(map(tk0, 0.5, 1, 0, 1));
-          a0 = this.pg[n].width; b0 = 0;
-          a1 = this.xSpots[n]; b1 = this.xSpots[n];
-        }
-      }
-      this.shutterAnim[n] = map(tk1, 0, 1, a0, b0);
-      this.xAnim[n] = map(tk1, 0, 1, a1, b1);
-    }
-  }
-  display() {
-    background(bkgdColor);
-    push();
-      translate(0, height / 2);
-      const firstH = this.pg[0] ? this.pg[0].height : 50;
-      translate(0, -firstH / 2);
-      for (let n = 0; n < this.inp.length; n++) {
-        if (!this.pg[n]) continue;
-        push();
-          translate(this.xAnim[n] || 0, 0);
-          texture(this.pg[n]);
-          const uL = 0;
-          const uR = map(this.pg[n].width - (this.shutterAnim[n] || 0), 0, this.pg[n].width, 1, 0);
-          beginShape(TRIANGLE_STRIP);
-            vertex(0, 0, uL, 0);
-            vertex(0, this.pg[n].height, uL, 1);
-            vertex(this.shutterAnim[n] || 0, 0, uR, 0);
-            vertex(this.shutterAnim[n] || 0, this.pg[n].height, uR, 1);
-          endShape();
-        pop();
-      }
-    pop();
-  }
-  findXpos() {
-    let fs = 0;
-    const charWidths = [];
-    for (let n = 0; n < this.inp.length; n++) {
-      this.shutterAnim[n] = 0;
-      this.xAnim[n] = 0;
-      const w = measureTextWidth(this.inp.charAt(n), this.pgTextSize, currentFontFamily);
-      charWidths.push(w);
-      fs += w;
-    }
-    let xs = width / 2 - fs / 2;
-    for (let n = 0; n < this.inp.length; n++) {
-      this.xSpots[n] = xs;
-      xs += charWidths[n];
-    }
-  }
-  findTextSize() {
-    let m = 0;
-    this.pgTextSize = 10;
-    while (m < width * 0.85 && this.pgTextSize < 350) {
-      m = measureTextWidth(this.inp, this.pgTextSize, currentFontFamily);
-      this.pgTextSize += 4;
-    }
-    if (this.pgTextSize * thisFontAdjust > height * 0.85) {
-      this.pgTextSize = (height * 0.85) / thisFontAdjust;
-    }
-  }
-  makeTextures() {
-    for (let n = 0; n < this.inp.length; n++) {
-      const ch = this.inp.charAt(n);
-      const rs = Math.max(8, Math.round(measureTextWidth(ch, this.pgTextSize, currentFontFamily)));
-      const h = Math.max(8, Math.round(this.pgTextSize * (thisFontAdjust + 0.05)));
-      this.pg[n] = createTextTexture(ch, rs, h, bkgdColor, foreColor);
-    }
-  }
-  removeGraphics() {
-    for (let n = 0; n < this.pg.length; n++) {
-      if (this.pg[n]) this.pg[n].remove();
-    }
-  }
-}
-
-// --- 8. SLOT MACHINE ---
-class SlotMachineScene {
-  constructor(ramp, inp) {
-    this.inp = inp;
-    this.ramp = ramp;
-    this.ticker = 0;
-    this.repeats = 3;
-    this.pgTextSize = 10;
-    this.xSpots = [];
-    this.yAnim = [];
-    this.yTarget = [];
-    this.yStart = 50;
-    this.pg = [];
-
-    this.findTextSize();
-    this.findXpos();
-    this.makeTextures();
-    this.setYtarget();
-  }
-  update() {
-    this.ticker++;
-    const tk0 = map(this.ticker, 0, sceneLength, 0, 1);
-    for (let n = 0; n < this.inp.length; n++) {
-      let tk1;
-      let a0, b0;
-      if (accelMode === 0) {
-        tk1 = this.ramp === 0 ? easeOutCirc(tk0) : easeInCirc(tk0);
-        a0 = this.yStart; b0 = this.yTarget[n];
-      } else {
-        if (tk0 < 0.5) {
-          tk1 = easeOutCirc(map(tk0, 0, 0.5, 0, 1));
-          a0 = this.yStart; b0 = (this.yStart + this.yTarget[n]) / 2;
-        } else {
-          tk1 = easeInCirc(map(tk0, 0.5, 1, 0, 1));
-          a0 = (this.yStart + this.yTarget[n]) / 2; b0 = this.yTarget[n];
-        }
-      }
-      this.yAnim[n] = map(tk1, 0, 1, a0, b0);
-    }
-  }
-  display() {
-    background(bkgdColor);
-    push();
-      translate(0, height / 2);
-      for (let n = 0; n < this.inp.length; n++) {
-        if (!this.pg[n]) continue;
-        push();
-          translate(this.xSpots[n], this.yAnim[n] || 0);
-          translate(0, -this.repeats * (this.pg[n].height * 0.85) / 2);
-          for (let p = 0; p < this.repeats; p++) {
-            image(this.pg[n], 0, p * this.pg[n].height * 0.85);
-          }
-        pop();
-      }
-    pop();
-  }
-  findXpos() {
-    let fs = 0;
-    const charWidths = [];
-    for (let n = 0; n < this.inp.length; n++) {
-      this.yAnim[n] = this.yStart;
-      this.yTarget[n] = 0;
-      const w = measureTextWidth(this.inp.charAt(n), this.pgTextSize, currentFontFamily);
-      charWidths.push(w);
-      fs += w;
-    }
-    let xs = width / 2 - fs / 2;
-    for (let n = 0; n < this.inp.length; n++) {
-      this.xSpots[n] = xs;
-      xs += charWidths[n];
-    }
-  }
-  setYtarget() {
-    for (let n = 0; n < this.inp.length; n++) {
-      this.yTarget[n] = random(-this.pgTextSize * 2, this.pgTextSize * 2);
-    }
-  }
-  findTextSize() {
-    let m = 0;
-    this.pgTextSize = 10;
-    while (m < width * 0.85 && this.pgTextSize < 350) {
-      m = measureTextWidth(this.inp, this.pgTextSize, currentFontFamily);
-      this.pgTextSize += 4;
-    }
-    if (this.pgTextSize * thisFontAdjust > height * 0.85) {
-      this.pgTextSize = (height * 0.85) / thisFontAdjust;
-    }
-    this.repeats = Math.round((height * 2) / this.pgTextSize) + 4;
-  }
-  makeTextures() {
-    for (let n = 0; n < this.inp.length; n++) {
-      const ch = this.inp.charAt(n);
-      const w = Math.max(8, Math.round(measureTextWidth(ch, this.pgTextSize, currentFontFamily)));
-      const h = Math.max(8, Math.round(this.pgTextSize * (thisFontAdjust + 0.1)));
-      this.pg[n] = createTextTexture(ch, w, h, 'transparent', foreColor);
-    }
-  }
-  removeGraphics() {
-    for (let n = 0; n < this.pg.length; n++) {
-      if (this.pg[n]) this.pg[n].remove();
-    }
-  }
-}
-
-// --- 9. SNAP ---
-class SnapScene {
-  constructor(ramp, inp) {
-    this.inp = inp;
-    this.ramp = ramp;
-    this.ticker = 0;
-    this.pgTextSize = 10;
-    this.findTextSize();
-    this.xKern = [];
-    this.xWidths = [];
-    this.xScaleMax = 0.2;
-    this.xScale = [];
-    this.xShear = [];
-    this.xShearMax = -PI / 8;
-    this.findSpacing();
-    this.pg = [];
-    this.makeTextures();
-    this.pacer = (sceneLength / 1.5) / Math.max(1, this.inp.length);
-  }
-  update() {
-    this.ticker++;
-    for (let n = 0; n < this.inp.length; n++) {
-      const tk00 = constrain(this.ticker - n * this.pacer, 0, sceneLength);
-      const tk0 = map(tk00, 0, sceneLength, 0, 1);
-      let tk1;
-      let a0, b0, a1, b1;
-      if (accelMode === 0) {
-        tk1 = this.ramp === 0 ? easeOutQuad(tk0) : easeInQuad(tk0);
-        a0 = this.xScaleMax; b0 = 1; a1 = this.xShearMax; b1 = 0;
-      } else {
-        if (tk0 < 0.5) {
-          tk1 = easeOutCirc(map(tk0, 0, 0.5, 0, 1));
-          a0 = this.xScaleMax; b0 = (this.xScaleMax + 1) / 2;
-          a1 = this.xShearMax; b1 = this.xShearMax / 2;
-        } else {
-          tk1 = easeInCirc(map(tk0, 0.5, 1, 0, 1));
-          a0 = (this.xScaleMax + 1) / 2; b0 = 1;
-          a1 = this.xShearMax / 2; b1 = 0;
-        }
-      }
-      this.xScale[n] = map(tk1, 0, 1, a0, b0);
-      this.xShear[n] = map(tk1, 0, 1, a1, b1);
-      this.xWidths[n] = measureTextWidth(this.inp.charAt(n), this.pgTextSize, currentFontFamily) * this.xScale[n];
-    }
-    let fs = 0;
-    for (let n = 0; n < this.inp.length - 1; n++) {
-      this.xKern[n] = this.xWidths[n] / 2 + this.xWidths[n + 1] / 2;
-      fs += this.xKern[n];
-    }
-    this.xKern[this.inp.length - 1] = 0;
-    this.xStart = -fs / 2;
-  }
-  display() {
-    background(bkgdColor);
-    push();
-      translate(width / 2, height / 2);
-      translate(this.xStart, 0);
-      for (let n = 0; n < this.inp.length; n++) {
-        push();
-          shearX(this.xShear[n]);
-          scale(this.xScale[n], 1);
-          image(this.pg[n], -this.pg[n].width / 2, -this.pg[n].height / 2);
-        pop();
-        translate(this.xKern[n], 0);
-      }
-    pop();
-  }
-  findSpacing() {
-    for (let n = 0; n < this.inp.length; n++) {
-      this.xWidths[n] = measureTextWidth(this.inp.charAt(n), this.pgTextSize, currentFontFamily);
-    }
-    let fs = 0;
-    for (let n = 0; n < this.inp.length - 1; n++) {
-      this.xKern[n] = this.xWidths[n] / 2 + this.xWidths[n + 1] / 2;
-      fs += this.xKern[n];
-    }
-    this.xKern[this.inp.length - 1] = 0;
-    this.xStart = -fs / 2;
-  }
-  findTextSize() {
-    let m = 0;
-    this.pgTextSize = 10;
-    while (m < width * 0.85 && this.pgTextSize < 350) {
-      m = measureTextWidth(this.inp, this.pgTextSize, currentFontFamily);
-      this.pgTextSize += 4;
-    }
-    if (this.pgTextSize * thisFontAdjust > height * 0.85) {
-      this.pgTextSize = (height * 0.85) / thisFontAdjust;
-    }
-  }
-  makeTextures() {
-    for (let n = 0; n < this.inp.length; n++) {
-      const ch = this.inp.charAt(n);
-      const w = Math.max(8, Math.round(measureTextWidth(ch, this.pgTextSize, currentFontFamily)));
-      const h = Math.max(8, Math.round(this.pgTextSize * (thisFontAdjust + 0.1)));
-      this.pg[n] = createTextTexture(ch, w, h, 'transparent', foreColor);
-    }
-  }
-  removeGraphics() {
-    for (let n = 0; n < this.pg.length; n++) {
-      if (this.pg[n]) this.pg[n].remove();
-    }
-  }
-}
-
-// --- 10. SPLIT ---
-class SplitScene {
-  constructor(ramp, inp) {
-    this.inp = inp;
-    this.ramp = ramp;
-    this.ticker = 0;
-    this.pgTextSize = 10;
-    this.findTextSize();
-    this.drawTextures();
-    this.direction = Math.random() < 0.5 ? -1 : 1;
-    this.animShear = 0;
-    this.animShearMax = this.direction * (PI / 8);
-    this.splitR = [0, random(0.1, 0.4)];
-    this.splitR.push(this.splitR[1] + random(0.1, 0.5));
-    this.splitR.push(1);
-    this.animX = [];
-    this.animXmax = [this.direction * -100, this.direction * 50, this.direction * 25];
-  }
-  update() {
-    this.ticker++;
-    const tk0 = map(this.ticker, 0, sceneLength, 0, 1);
-    let tk1;
-    if (accelMode === 0) {
-      tk1 = this.ramp === 0 ? easeOutCirc(tk0) : easeInCirc(tk0);
-      this.animShear = map(tk1, 0, 1, 0, this.animShearMax);
-      for (let m = 0; m < 3; m++) {
-        this.animX[m] = map(tk1, 0, 1, 0, this.animXmax[m]);
-      }
-    } else {
-      let a, b;
-      if (tk0 < 0.5) {
-        tk1 = easeOutCirc(map(tk0, 0, 0.5, 0, 1));
-        a = 0; b = this.animShearMax / 2;
-      } else {
-        tk1 = easeInCirc(map(tk0, 0.5, 1, 0, 1));
-        a = this.animShearMax / 2; b = this.animShearMax;
-      }
-      this.animShear = map(tk1, 0, 1, a, b);
-      for (let m = 0; m < 3; m++) {
-        let a2, b2;
-        if (tk0 < 0.5) {
-          a2 = 0; b2 = this.animXmax[m] / 2;
-        } else {
-          a2 = this.animXmax[m] / 2; b2 = this.animXmax[m];
-        }
-        this.animX[m] = map(tk1, 0, 1, a2, b2);
-      }
-    }
-  }
-  display() {
-    background(bkgdColor);
-    push();
-      translate(width / 2, height / 2);
-      scale(0.78);
-      shearX(this.animShear);
-      translate(-this.pgA.width / 2, -this.pgA.height / 2);
-      texture(this.pgA);
-      for (let m = 0; m < 3; m++) {
-        translate(this.animX[m], 0);
-        beginShape(TRIANGLE_STRIP);
-          vertex(0, this.pgA.height * this.splitR[m], 0, this.splitR[m]);
-          vertex(0, this.pgA.height * this.splitR[m + 1], 0, this.splitR[m + 1]);
-          vertex(this.pgA.width, this.pgA.height * this.splitR[m], 1, this.splitR[m]);
-          vertex(this.pgA.width, this.pgA.height * this.splitR[m + 1], 1, this.splitR[m + 1]);
-        endShape();
-      }
-    pop();
-  }
-  findTextSize() {
-    let m = 0;
-    this.pgTextSize = 10;
-    while (m < width * 0.85 && this.pgTextSize < 350) {
-      m = measureTextWidth(this.inp, this.pgTextSize, currentFontFamily);
-      this.pgTextSize += 4;
-    }
-    if (this.pgTextSize * thisFontAdjust > height * 0.85) {
-      this.pgTextSize = (height * 0.85) / thisFontAdjust;
-    }
-  }
-  drawTextures() {
-    const rs = Math.max(20, Math.round(measureTextWidth(this.inp, this.pgTextSize, currentFontFamily)));
-    const h = Math.max(10, Math.round(this.pgTextSize * (thisFontAdjust + 0.05)));
-    this.pgA = createTextTexture(this.inp, rs, h, bkgdColor, foreColor);
-  }
-  removeGraphics() { if (this.pgA) this.pgA.remove(); }
-}
-
-// --- 11. STARBURST ---
-class StarburstScene {
-  constructor(ramp, inp) {
-    this.inp = inp;
-    this.ramp = ramp;
-    this.ticker = 0;
-    this.pgTextSize = 10;
-    this.findTextSize();
-    this.drawTextures();
-    this.res = Math.round(random(2, 8)) * 4;
-    this.ang = (2 * PI) / this.res;
-    this.radiusMinX = 0; this.radiusMaxX = width / 2;
-    this.radiusMinY = 0; this.radiusMaxY = height / 2;
-    this.radiusXinner = width / 8; this.radiusYinner = height / 8;
-    this.xCenter = width / 2;
-    this.yMin = height * 0.75; this.yMax = height / 2;
-    this.rotZmax = random(-PI, PI);
-  }
-  update() {
-    this.ticker++;
-    const tk0 = map(this.ticker, 0, sceneLength, 0, 1);
-    let tk1;
-    let a0, b0, a1, b1, a2, b2, a3, b3;
-    if (accelMode === 0) {
-      tk1 = this.ramp === 0 ? easeOutCirc(tk0) : easeInCirc(tk0);
-      a0 = this.radiusMinX; b0 = this.radiusMaxX;
-      a1 = this.radiusMinY; b1 = this.radiusMaxY;
-      a2 = 0; b2 = this.rotZmax;
-      a3 = this.yMin; b3 = this.yMax;
-    } else {
-      if (tk0 < 0.5) {
-        tk1 = easeOutCirc(map(tk0, 0, 0.5, 0, 1));
-        a0 = this.radiusMinX; b0 = (this.radiusMinX + this.radiusMaxX) / 2;
-        a1 = this.radiusMinY; b1 = (this.radiusMinY + this.radiusMaxY) / 2;
-        a2 = 0; b2 = this.rotZmax / 2;
-        a3 = this.yMin; b3 = (this.yMin + this.yMax) / 2;
-      } else {
-        tk1 = easeInCirc(map(tk0, 0.5, 1, 0, 1));
-        a0 = (this.radiusMinX + this.radiusMaxX) / 2; b0 = this.radiusMaxX;
-        a1 = (this.radiusMinY + this.radiusMaxY) / 2; b1 = this.radiusMaxY;
-        a2 = this.rotZmax / 2; b2 = this.rotZmax;
-        a3 = (this.yMin + this.yMax) / 2; b3 = this.yMax;
-      }
-    }
-    this.radiusX = map(tk1, 0, 1, a0, b0);
-    this.radiusY = map(tk1, 0, 1, a1, b1);
-    this.rotZ = map(tk1, 0, 1, a2, b2);
-    this.yCenter = map(tk1, 0, 1, a3, b3);
-  }
-  display() {
-    image(this.pgA, 0, 0);
-    texture(this.pgB);
-    beginShape(TRIANGLE_FAN);
-      vertex(this.xCenter, this.yCenter, 0.5, 0.5);
-      for (let n = 0; n <= this.res; n++) {
-        let nowRX = this.radiusXinner;
-        let nowRY = this.radiusYinner;
-        if (n % 2 === 0) {
-          nowRX = this.radiusX;
-          nowRY = this.radiusY;
-        }
-        const x = this.xCenter + cos(n * this.ang + this.rotZ) * nowRX;
-        const y = this.yCenter + sin(n * this.ang + this.rotZ) * nowRY;
-        const u = map(x, 0, width, 0, 1);
-        const v = map(y, 0, height, 0, 1);
-        vertex(x, y, u, v);
-      }
-    endShape();
-  }
-  findTextSize() {
-    let m = 0;
-    this.pgTextSize = 10;
-    while (m < width * 0.85 && this.pgTextSize < 350) {
-      m = measureTextWidth(this.inp, this.pgTextSize, currentFontFamily);
-      this.pgTextSize += 4;
-    }
-    if (this.pgTextSize * thisFontAdjust > height * 0.85) {
-      this.pgTextSize = (height * 0.85) / thisFontAdjust;
-    }
-  }
-  drawTextures() {
-    this.pgA = createTextTexture(this.inp, width, height, foreColor, bkgdColor);
-    this.pgB = createTextTexture(this.inp, width, height, bkgdColor, foreColor);
-  }
-  removeGraphics() { if (this.pgA) this.pgA.remove(); if (this.pgB) this.pgB.remove(); }
-}
-
-// --- 12. TWIST (3D) ---
-class TwistScene {
-  constructor(ramp, inp) {
-    this.inp = inp;
-    this.ramp = ramp;
-    this.ticker = 0;
-    this.pgTextSize = 10;
-    this.findTextSize();
-    this.drawTextures();
-    this.yOutside = (height - this.pgA.height) / 2;
-    this.d = Math.random() < 0.5 ? -1 : 1;
-    this.res = 200;
-    this.tl = createVector(0, 0);
-    this.bl = createVector(0, this.pgA.height);
-    this.tml = createVector(this.pgA.width / 3, 0);
-    this.bml = createVector(this.pgA.width / 3, this.pgA.height);
-    this.tmr = createVector((this.pgA.width * 2) / 3, 0);
-    this.bmr = createVector((this.pgA.width * 2) / 3, this.pgA.height);
-    this.tr = createVector(this.pgA.width, 0);
-    this.br = createVector(this.pgA.width, this.pgA.height);
-  }
-  update() {
-    this.ticker++;
-    const tk0 = map(this.ticker, 0, sceneLength, 0, 1);
-    let tk1;
-    let a0, b0, a1, b1;
-    if (accelMode === 0) {
-      tk1 = this.ramp === 0 ? easeOutCirc(tk0) : easeInCirc(tk0);
-      if (this.d === 1) {
-        a0 = 0; b0 = -this.yOutside;
-        a1 = this.pgA.height; b1 = this.pgA.height + this.yOutside;
-      } else {
-        a0 = this.pgA.height; b0 = this.pgA.height + this.yOutside;
-        a1 = 0; b1 = this.d * this.yOutside;
-      }
-    } else {
-      if (tk0 < 0.5) {
-        tk1 = easeOutCirc(map(tk0, 0, 0.5, 0, 1));
-        if (this.d === 1) {
-          a0 = 0; b0 = -this.yOutside / 2;
-          a1 = this.pgA.height; b1 = this.pgA.height + this.yOutside / 2;
-        } else {
-          a0 = this.pgA.height; b0 = this.pgA.height + this.yOutside / 2;
-          a1 = 0; b1 = (this.d * this.yOutside) / 2;
-        }
-      } else {
-        tk1 = easeInCirc(map(tk0, 0.5, 1, 0, 1));
-        if (this.d === 1) {
-          a0 = -this.yOutside / 2; b0 = -this.yOutside;
-          a1 = this.pgA.height + this.yOutside / 2; b1 = this.pgA.height + this.yOutside;
-        } else {
-          a0 = this.pgA.height + this.yOutside / 2; b0 = this.pgA.height + this.yOutside;
-          a1 = (this.d * this.yOutside) / 2; b1 = this.d * this.yOutside;
-        }
-      }
-    }
-    if (this.d === 1) {
-      this.tl.y = map(tk1, 0, 1, a0, b0);
-      this.tml.y = this.tl.y;
-      this.bmr.y = map(tk1, 0, 1, a1, b1);
-      this.br.y = this.bmr.y;
-    } else {
-      this.bl.y = map(tk1, 0, 1, a0, b0);
-      this.bml.y = this.bl.y;
-      this.tmr.y = map(tk1, 0, 1, a1, b1);
-      this.tr.y = this.tmr.y;
-    }
-  }
-  display() {
-    background(bkgdColor);
-    push();
-      translate(width / 2, height / 2);
-      translate(-this.pgA.width / 2, -this.pgA.height / 2);
-      texture(this.pgA);
-      noStroke();
-      beginShape(TRIANGLE_STRIP);
-        for (let n = 0; n <= this.res; n++) {
-          const t = n / this.res;
-          const xTop = bezierPoint(this.tl.x, this.tml.x, this.tmr.x, this.tr.x, t);
-          const yTop = bezierPoint(this.tl.y, this.tml.y, this.tmr.y, this.tr.y, t);
-          const xBot = bezierPoint(this.bl.x, this.bml.x, this.bmr.x, this.br.x, t);
-          const yBot = bezierPoint(this.bl.y, this.bml.y, this.bmr.y, this.br.y, t);
-          const u = map(xTop, 0, this.pgA.width, 0, 1);
-          vertex(xTop, yTop, u, 0);
-          vertex(xBot, yBot, u, 1);
-        }
-      endShape();
-    pop();
-  }
-  findTextSize() {
-    let m = 0;
-    this.pgTextSize = 10;
-    while (m < width * 0.85 && this.pgTextSize < 350) {
-      m = measureTextWidth(this.inp, this.pgTextSize, currentFontFamily);
-      this.pgTextSize += 4;
-    }
-    if (this.pgTextSize * thisFontAdjust > height * 0.85) {
-      this.pgTextSize = (height * 0.85) / thisFontAdjust;
-    }
-  }
-  drawTextures() {
-    const rs = Math.max(20, Math.round(measureTextWidth(this.inp, this.pgTextSize, currentFontFamily)));
-    const h = Math.max(10, Math.round(this.pgTextSize * (thisFontAdjust + 0.05)));
-    this.pgA = createTextTexture(this.inp, rs, h, bkgdColor, foreColor);
-  }
-  removeGraphics() { if (this.pgA) this.pgA.remove(); }
-}
-
-// --- BLANK SCENE FALLBACK ---
-class BlankScene {
-  constructor(ramp, inp) {
-    this.inp = inp;
-    this.pgTextSize = 10;
-    this.findTextSize();
-    this.drawTextures();
-  }
-  update() {}
-  display() {
-    background(bkgdColor);
-    push();
-      translate(width / 2, height / 2);
-      image(this.pg, -this.pg.width / 2, -this.pg.height / 2);
-    pop();
-  }
-  findTextSize() {
-    let m = 0;
-    this.pgTextSize = 10;
-    while (m < width * 0.85 && this.pgTextSize < 350) {
-      m = measureTextWidth(this.inp, this.pgTextSize, currentFontFamily);
-      this.pgTextSize += 4;
-    }
-    if (this.pgTextSize * thisFontAdjust > height * 0.85) {
-      this.pgTextSize = (height * 0.85) / thisFontAdjust;
-    }
-  }
-  drawTextures() {
-    const rs = Math.max(20, Math.round(measureTextWidth(this.inp, this.pgTextSize, currentFontFamily)));
-    const h = Math.max(10, Math.round(this.pgTextSize * (thisFontAdjust + 0.1)));
-    this.pg = createTextTexture(this.inp, rs, h, 'transparent', foreColor);
-  }
-  removeGraphics() { if (this.pg) this.pg.remove(); }
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// UI EVENT LISTENERS & WIRING
-// ═══════════════════════════════════════════════════════════════════
-
-// Accordions
-document.querySelectorAll('.sh').forEach(h => {
-  h.addEventListener('click', () => {
-    const body = document.getElementById('sec-' + h.dataset.sec);
-    const open = h.classList.toggle('open');
-    body.classList.toggle('hidden', !open);
+// Shape / Layout Selector
+const shapeButtons = document.querySelectorAll('.shape-btn');
+shapeButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const layoutIdx = parseInt(btn.dataset.layout);
+    jumpToLayout(layoutIdx);
   });
 });
 
-// Play / Pause
-const playBtn = document.getElementById('playBtn');
-const liveDot = document.getElementById('liveDot');
-playBtn.addEventListener('click', togglePlay);
+function jumpToLayout(idx) {
+  // Jump to start of specified layout stage
+  state.time = idx * 0.25;
+  updateShapeUI(idx);
+}
+window.jumpToLayout = jumpToLayout;
+window.state = state;
+
+function updateShapeUI(idx) {
+  if (idx < 0 || idx >= LAYOUT_META.length) return;
+  const meta = LAYOUT_META[idx];
+  if (!meta) return;
+
+  shapeButtons.forEach((b, i) => {
+    if (i === idx) {
+      b.classList.remove('font-medium', 'text-white/80', 'hover:bg-white/10');
+      b.classList.add('font-bold', 'bg-white', 'text-typoman-blue', 'shadow-[0_0_15px_rgba(255,255,255,0.6)]');
+    } else {
+      b.classList.remove('font-bold', 'bg-white', 'text-typoman-blue', 'shadow-[0_0_15px_rgba(255,255,255,0.6)]');
+      b.classList.add('font-medium', 'text-white/80', 'hover:bg-white/10');
+    }
+  });
+
+  document.getElementById('shapeTitle').textContent = meta.title;
+  document.getElementById('shapeDesc').textContent = meta.desc;
+}
+
+// Live Text Input
+const textInput = document.getElementById('textInput');
+textInput.addEventListener('input', e => {
+  const val = e.target.value.trim().toUpperCase();
+  state.text = val.length > 0 ? val : "HELVETICA";
+  initCharacters();
+});
+
+// Play / Pause Toggle
+const playPauseBtn = document.getElementById('playPauseBtn');
+playPauseBtn.addEventListener('click', togglePlay);
 
 function togglePlay() {
-  playing = !playing;
-  playBtn.textContent = playing ? '❚❚ PAUSE' : '▶ PLAY';
-  playBtn.classList.toggle('accent', playing);
-  liveDot.classList.toggle('on', playing);
-  document.getElementById('statusText').textContent = playing ? 'LIVE' : 'PAUSED';
+  state.playing = !state.playing;
+  const icon = document.getElementById('playIcon');
+  if (state.playing) {
+    icon.setAttribute('data-lucide', 'pause');
+  } else {
+    icon.setAttribute('data-lucide', 'play');
+  }
+  lucide.createIcons();
 }
 
-// Text Mode (Text vs Clock)
-document.getElementById('textModeGroup').addEventListener('click', e => {
-  const btn = e.target.closest('.radio-btn');
-  if (!btn) return;
-  document.querySelectorAll('#textModeGroup .radio-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  textMode = btn.dataset.mode;
-  document.getElementById('textArea').style.display = textMode === 'text' ? 'block' : 'none';
-  pickScene();
+// Speed Slider
+const speedSlider = document.getElementById('speedSlider');
+const speedDisplay = document.getElementById('speedDisplay');
+speedSlider.addEventListener('input', e => {
+  state.speed = parseFloat(e.target.value);
+  speedDisplay.textContent = `${state.speed.toFixed(1)}×`;
 });
 
-// Text Input
-document.getElementById('textArea').addEventListener('input', () => {
-  readTextInput();
-  pickScene();
-});
+// Convex Hull Toggle
+const hullToggleBtn = document.getElementById('hullToggleBtn');
+const hullStatusText = document.getElementById('hullStatusText');
 
-// Case Group
-document.getElementById('caseGroup').addEventListener('click', e => {
-  const btn = e.target.closest('.radio-btn');
-  if (!btn) return;
-  document.querySelectorAll('#caseGroup .radio-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  textCase = btn.dataset.case;
-  pickScene();
-});
-
-// Custom Font Upload
-document.getElementById('fontUploadInput').addEventListener('change', async e => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const fontName = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "");
-  const familyName = 'Custom_' + fontName;
-  const url = URL.createObjectURL(file);
-
-  try {
-    const fontFace = new FontFace(familyName, `url(${url})`);
-    const loaded = await fontFace.load();
-    document.fonts.add(loaded);
-
-    currentFontFamily = `'${familyName}', sans-serif`;
-    currentFontName = file.name;
-    customFontEntry = { familyName, url };
-
-    document.getElementById('fontNameDisplay').textContent = currentFontName;
-    document.getElementById('fontResetBtn').style.display = 'block';
-
-    pickScene();
-  } catch (err) {
-    alert("Could not load font file: " + err.message);
+function toggleHull() {
+  state.showHull = !state.showHull;
+  if (state.showHull) {
+    hullStatusText.textContent = "HULL ON";
+    hullToggleBtn.classList.remove('opacity-60');
+    hullToggleBtn.classList.add('bg-white/15');
+  } else {
+    hullStatusText.textContent = "HULL OFF";
+    hullToggleBtn.classList.add('opacity-60');
+    hullToggleBtn.classList.remove('bg-white/15');
   }
-  e.target.value = '';
-});
-
-// Reset Font to Anton
-document.getElementById('fontResetBtn').addEventListener('click', () => {
-  currentFontFamily = "'Anton', sans-serif";
-  currentFontName = "Anton";
-  customFontEntry = null;
-  document.getElementById('fontNameDisplay').textContent = 'Anton';
-  document.getElementById('fontResetBtn').style.display = 'none';
-  pickScene();
-});
-
-// Motion Mode (Mix vs Lock)
-document.getElementById('motionModeGroup').addEventListener('click', e => {
-  const btn = e.target.closest('.radio-btn');
-  if (!btn) return;
-  document.querySelectorAll('#motionModeGroup .radio-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  motionMode = btn.dataset.motion;
-  pickScene();
-});
-
-// Cut Mode (MatchCut vs EasyEase)
-document.getElementById('cutModeGroup').addEventListener('click', e => {
-  const btn = e.target.closest('.radio-btn');
-  if (!btn) return;
-  document.querySelectorAll('#cutModeGroup .radio-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  cutMode = btn.dataset.cut;
-  accelMode = cutMode === 'matchcut' ? 0 : 1;
-});
-
-// Pace Slider
-const paceSlider = document.getElementById('paceSlider');
-const paceVal = document.getElementById('paceVal');
-paceSlider.addEventListener('input', e => {
-  pace = parseInt(e.target.value);
-  paceVal.textContent = pace;
-  updateSceneLength();
-});
-
-// Scene Grid Chips
-const sceneChips = document.querySelectorAll('.sc-chip');
-sceneChips.forEach(chip => {
-  chip.addEventListener('click', () => {
-    const idx = parseInt(chip.dataset.idx);
-    if (motionMode === 'lock') {
-      lockedSceneIdx = idx;
-      sceneChips.forEach(c => c.classList.remove('on'));
-      chip.classList.add('on');
-      pickScene();
-    } else {
-      sceneOn[idx] = !sceneOn[idx];
-      chip.classList.toggle('on', sceneOn[idx]);
-    }
-  });
-});
-
-document.getElementById('selectAllScenes').addEventListener('click', () => {
-  sceneOn.fill(true);
-  sceneChips.forEach(c => c.classList.add('on'));
-});
-
-document.getElementById('clearAllScenes').addEventListener('click', () => {
-  sceneOn.fill(false);
-  sceneChips.forEach(c => c.classList.remove('on'));
-});
-
-// Colors & Appearance
-const bgColorInput = document.getElementById('bgColorInput');
-const bgHexInput = document.getElementById('bgHexInput');
-const fgColorInput = document.getElementById('fgColorInput');
-const fgHexInput = document.getElementById('fgHexInput');
-
-function updateColorInputs() {
-  bgColorInput.value = bkgdColor;
-  bgHexInput.value = bkgdColor;
-  fgColorInput.value = foreColor;
-  fgHexInput.value = foreColor;
 }
 
-bgColorInput.addEventListener('input', e => {
-  bkgdColor = e.target.value;
-  bgHexInput.value = bkgdColor;
-  if (mainFlash) pickScene();
+hullToggleBtn.addEventListener('click', toggleHull);
+
+// Reset / Sync Phase
+document.getElementById('resetPhaseBtn').addEventListener('click', () => {
+  state.time = 0;
 });
 
-bgHexInput.addEventListener('change', e => {
-  if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) {
-    bkgdColor = e.target.value;
-    bgColorInput.value = bkgdColor;
-    if (mainFlash) pickScene();
+// Fullscreen Toggle
+document.getElementById('fullscreenBtn').addEventListener('click', () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(err => console.log(err));
+  } else {
+    document.exitFullscreen().catch(err => console.log(err));
   }
-});
-
-fgColorInput.addEventListener('input', e => {
-  foreColor = e.target.value;
-  fgHexInput.value = foreColor;
-  if (mainFlash) pickScene();
-});
-
-fgHexInput.addEventListener('change', e => {
-  if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) {
-    foreColor = e.target.value;
-    fgColorInput.value = foreColor;
-    if (mainFlash) pickScene();
-  }
-});
-
-// Build Palettes Swatches
-const paletteHolder = document.getElementById('paletteSwatches');
-PALETTES.forEach(([bg, fg]) => {
-  const sw = document.createElement('div');
-  sw.className = 'swatch';
-  sw.style.background = `linear-gradient(135deg, ${bg} 50%, ${fg} 50%)`;
-  sw.title = `${bg} / ${fg}`;
-  sw.addEventListener('click', () => {
-    bkgdColor = bg;
-    foreColor = fg;
-    updateColorInputs();
-    pickScene();
-  });
-  paletteHolder.appendChild(sw);
-});
-
-// Color Swap on Beat Checkbox
-document.getElementById('colorSwapOnBeat').addEventListener('change', e => {
-  colorSwapOn = e.target.checked;
-});
-
-// Randomize Colors Button
-document.getElementById('randomColorsBtn').addEventListener('click', randomizeColors);
-function randomizeColors() {
-  const p = PALETTES[Math.floor(Math.random() * PALETTES.length)];
-  bkgdColor = p[0];
-  foreColor = p[1];
-  updateColorInputs();
-  pickScene();
-}
-
-// Invert / Swap Colors Button
-document.getElementById('swapColorsBtn').addEventListener('click', () => {
-  const temp = foreColor;
-  foreColor = bkgdColor;
-  bkgdColor = temp;
-  updateColorInputs();
-  pickScene();
-});
-
-// Aspect Ratio Buttons
-document.getElementById('aspectRow').addEventListener('click', e => {
-  const btn = e.target.closest('.aspect-btn');
-  if (!btn) return;
-  document.querySelectorAll('#aspectRow .aspect-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  aspectMode = btn.dataset.aspect;
-  windowResized();
-});
-
-// Export Controls
-document.getElementById('expPng').addEventListener('click', () => {
-  const cnv = document.querySelector('#canvasHolder canvas');
-  if (!cnv) return;
-  const a = document.createElement('a');
-  a.download = `typoman-${cnvWidth}x${cnvHeight}.png`;
-  a.href = cnv.toDataURL('image/png');
-  a.click();
-});
-
-document.getElementById('expSvg').addEventListener('click', () => {
-  let txt = formatText(keyArray[selector % keyArray.length] || "TYPOMAN");
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${cnvWidth}" height="${cnvHeight}" viewBox="0 0 ${cnvWidth} ${cnvHeight}">\n`;
-  svg += `  <rect width="${cnvWidth}" height="${cnvHeight}" fill="${bkgdColor}"/>\n`;
-  svg += `  <text x="${cnvWidth/2}" y="${cnvHeight/2}" text-anchor="middle" dominant-baseline="central" fill="${foreColor}" font-family="${currentFontName}, sans-serif" font-weight="900" font-size="${cnvHeight * 0.35}">${txt}</text>\n`;
-  svg += `</svg>`;
-  const blob = new Blob([svg], { type: 'image/svg+xml' });
-  const a = document.createElement('a');
-  a.download = `typoman.svg`;
-  a.href = URL.createObjectURL(blob);
-  a.click();
-});
-
-// Record Loop as WebM
-let isRecording = false;
-document.getElementById('recordLoopBtn').addEventListener('click', () => {
-  if (isRecording) return;
-  const cnv = document.querySelector('#canvasHolder canvas');
-  if (!cnv) return;
-
-  const btn = document.getElementById('recordLoopBtn');
-  btn.classList.add('recording');
-  btn.textContent = '⏺ RECORDING...';
-  isRecording = true;
-
-  const stream = cnv.captureStream(30);
-  const recorder = new MediaRecorder(stream, {
-    mimeType: 'video/webm;codecs=vp9',
-    videoBitsPerSecond: 8000000
-  });
-
-  const chunks = [];
-  recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-  recorder.onstop = () => {
-    const blob = new Blob(chunks, { type: 'video/webm' });
-    const a = document.createElement('a');
-    a.download = 'typoman-kinetic-loop.webm';
-    a.href = URL.createObjectURL(blob);
-    a.click();
-    btn.classList.remove('recording');
-    btn.textContent = '⏺ RECORD WEBM VIDEO LOOP';
-    isRecording = false;
-  };
-
-  recorder.start();
-  const repeats = parseInt(document.getElementById('repeatSlider').value) || 3;
-  const loopDuration = ((60 / pace) * repeats) * 1000;
-  setTimeout(() => recorder.stop(), Math.min(loopDuration, 30000));
-});
-
-document.getElementById('repeatSlider').addEventListener('input', e => {
-  document.getElementById('repeatVal').textContent = e.target.value;
 });
 
 // Keyboard Shortcuts
 document.addEventListener('keydown', e => {
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.target.tagName === 'INPUT') return;
+
   if (e.code === 'Space') {
     e.preventDefault();
     togglePlay();
-  }
-  if (e.code === 'KeyR' && !e.ctrlKey && !e.metaKey) {
-    e.preventDefault();
-    randomizeColors();
-  }
-  if (e.code === 'KeyX' && !e.ctrlKey && !e.metaKey) {
-    e.preventDefault();
-    document.getElementById('swapColorsBtn').click();
+  } else if (e.key === 'r' || e.key === 'R') {
+    state.time = 0;
+  } else if (e.key === 'h' || e.key === 'H') {
+    toggleHull();
+  } else if (e.key >= '1' && e.key <= '4') {
+    jumpToLayout(parseInt(e.key) - 1);
   }
 });
-
-// Custom Cursor
-const cursor = document.createElement('div');
-cursor.className = 'cursor';
-document.body.appendChild(cursor);
-document.addEventListener('mousemove', e => {
-  cursor.style.left = e.clientX + 'px';
-  cursor.style.top = e.clientY + 'px';
-});
-document.addEventListener('mousedown', () => cursor.classList.add('active'));
-document.addEventListener('mouseup', () => cursor.classList.remove('active'));
 </script>
 </body>
 </html>
