@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TYPOMAN V3 — Kinetic Motion & Convex Hull Studio</title>
-<meta name="description" content="Typoman V3: High-performance kinetic typography and procedural motion studio featuring dynamic convex hull and pulley-belt tangent hull animations.">
+<title>TYPOMAN V3 — Kinetic Motion & Typography Suite</title>
+<meta name="description" content="Typoman V3: High-performance procedural kinetic typography and motion graphics studio featuring 9 procedural animation engines.">
 
 <!-- Fonts -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -70,7 +70,7 @@ input[type=range]::-webkit-slider-thumb:hover {
 
 /* Glassmorphic Panel */
 .glass-panel {
-  background: rgba(0, 15, 180, 0.65);
+  background: rgba(0, 15, 180, 0.7);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -84,6 +84,10 @@ input[type=range]::-webkit-slider-thumb:hover {
     linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
   background-size: 40px 40px;
 }
+
+/* Custom Scrollbar for top pill nav */
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 </style>
 </head>
 <body class="relative w-screen h-screen overflow-hidden select-none bg-grid" id="appBody">
@@ -96,27 +100,11 @@ input[type=range]::-webkit-slider-thumb:hover {
         <h1 class="font-syne font-black text-sm tracking-wider text-white uppercase flex items-center gap-2">
           TYPOMAN <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/20 border border-white/30 text-white">V3</span>
         </h1>
-        <p class="text-[10px] text-white/70 font-mono tracking-tight" id="headerSubtitle">Kinetic Typography Studio • Dynamic Convex Hull</p>
+        <p class="text-[10px] text-white/70 font-mono tracking-tight" id="headerSubtitle">Kinetic Typography & Motion Studio</p>
       </div>
     </div>
 
     <div class="flex items-center gap-3 pointer-events-auto">
-      <!-- Mode Switcher (01 TYPE HULL / 02 PULLEY BELT) -->
-      <div class="flex rounded-lg p-0.5 bg-black/40 border border-white/20 text-[10px] font-mono">
-        <button id="modeTypeBtn" class="mode-btn px-2.5 py-1 rounded font-bold transition-all bg-white text-typoman-blue shadow-sm" data-mode="type" title="Mode 1: Kinetic Type Convex Hull">
-          01 TYPE HULL
-        </button>
-        <button id="modePulleyBtn" class="mode-btn px-2.5 py-1 rounded font-medium transition-all text-white/70 hover:text-white" data-mode="pulley" title="Mode 2: 6-Node Pulley Belt Tangent Hull">
-          02 PULLEY BELT
-        </button>
-      </div>
-
-      <!-- Link to Cavalry 7D -->
-      <a href="cavalry.html" class="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 border border-white/20 text-[10px] font-mono font-bold text-white flex items-center gap-1.5 transition-all shadow-sm" title="Cavalry 7 Days Motion Graphics">
-        <i data-lucide="sparkles" class="w-3 h-3"></i>
-        <span>CAVALRY 7D</span>
-      </a>
-
       <!-- FPS Counter -->
       <div class="px-2.5 py-1 rounded bg-black/40 border border-white/20 text-[10px] font-mono font-bold text-emerald-400 flex items-center gap-1.5 shadow-inner">
         <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
@@ -135,26 +123,15 @@ input[type=range]::-webkit-slider-thumb:hover {
     <canvas id="motionCanvas" class="w-full h-full block cursor-grab active:cursor-grabbing"></canvas>
   </main>
 
-  <!-- Dynamic Shape / Trajectory Selector Pill Bar -->
-  <nav class="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 p-1.5 rounded-xl glass-panel text-[11px] font-mono tracking-wide shadow-2xl" id="presetNavBar">
-    <button class="preset-pill-btn px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 bg-white text-typoman-blue shadow-[0_0_15px_rgba(255,255,255,0.6)]" data-idx="0">
-      <span class="opacity-60 text-[9px]">A</span> <span class="pill-label">TRIANGLE</span>
-    </button>
-    <button class="preset-pill-btn px-3 py-1.5 rounded-lg font-medium transition-all text-white/80 hover:text-white hover:bg-white/10 flex items-center gap-1.5" data-idx="1">
-      <span class="opacity-60 text-[9px]">B</span> <span class="pill-label">OCTAGON</span>
-    </button>
-    <button class="preset-pill-btn px-3 py-1.5 rounded-lg font-medium transition-all text-white/80 hover:text-white hover:bg-white/10 flex items-center gap-1.5" data-idx="2">
-      <span class="opacity-60 text-[9px]">C</span> <span class="pill-label">TRAPEZOID</span>
-    </button>
-    <button class="preset-pill-btn px-3 py-1.5 rounded-lg font-medium transition-all text-white/80 hover:text-white hover:bg-white/10 flex items-center gap-1.5" data-idx="3">
-      <span class="opacity-60 text-[9px]">D</span> <span class="pill-label">POLYGON</span>
-    </button>
+  <!-- 9 Animation Selector Pill Bar -->
+  <nav class="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 p-1.5 rounded-xl glass-panel text-[11px] font-mono tracking-wide shadow-2xl max-w-[96vw] overflow-x-auto hide-scrollbar" id="animNavBar">
+    <!-- Buttons dynamically rendered / updated in script -->
   </nav>
 
   <!-- Bottom Floating Control Dashboard -->
   <footer class="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 w-[94%] max-w-4xl px-5 py-3.5 rounded-2xl glass-panel flex flex-wrap items-center justify-between gap-4 shadow-2xl">
     <!-- Left: Custom Text Input -->
-    <div class="flex items-center gap-3 flex-1 min-w-[240px]">
+    <div class="flex items-center gap-3 flex-1 min-w-[220px]">
       <div class="flex items-center gap-2 text-white/70">
         <i data-lucide="type" class="w-4 h-4 text-white"></i>
         <span class="text-[10px] font-mono uppercase tracking-wider font-semibold" id="textInputLabel">TEXT</span>
@@ -177,23 +154,17 @@ input[type=range]::-webkit-slider-thumb:hover {
         <span id="speedDisplay" class="text-[11px] font-mono font-bold text-white min-w-[28px]">1.0×</span>
       </div>
 
-      <!-- Convex Hull / Belt Toggle Button -->
-      <button id="hullToggleBtn" class="px-2.5 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 border border-white/30 text-white font-mono text-[10px] font-bold flex items-center gap-1.5 transition-all shadow-sm" title="Toggle Convex Hull / Belt (H)">
-        <i data-lucide="hexagon" class="w-3.5 h-3.5 text-white"></i>
-        <span id="hullStatusText">HULL ON</span>
-      </button>
-
       <!-- Reset / Sync Phase Button -->
       <button id="resetPhaseBtn" class="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white border border-white/15 transition-all text-[10px] font-mono flex items-center gap-1" title="Sync Phase to 0 (R)">
         <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
       </button>
     </div>
 
-    <!-- Right: Active Shape / Info & Loop Scrubber -->
+    <!-- Right: Active Animation Info & Loop Scrubber -->
     <div class="flex items-center gap-3 w-full md:w-auto justify-end">
       <div class="text-right hidden sm:block">
-        <div id="shapeTitle" class="font-syne font-extrabold text-xs text-white tracking-wide uppercase">LAYOUT A: TRIANGLE</div>
-        <div id="shapeDesc" class="font-mono text-[9px] text-white/70">Tilted sharp triangle with vertices stretched wide</div>
+        <div id="animTitle" class="font-syne font-extrabold text-xs text-white tracking-wide uppercase">01: CONVEX HULL</div>
+        <div id="animDesc" class="font-mono text-[9px] text-white/70">4-layout kinetic typography convex hull</div>
       </div>
       <!-- Loop Progress Ring -->
       <div class="w-10 h-10 relative flex items-center justify-center">
@@ -208,178 +179,160 @@ input[type=range]::-webkit-slider-thumb:hover {
 
 <script>
 // ═══════════════════════════════════════════════════════════════════════
-// TYPOMAN V3: KINETIC TYPOGRAPHY & PULLEY-BELT TANGENT HULL ENGINE
+// TYPOMAN V3: KINETIC TYPOGRAPHY & PROCEDURAL MOTION SUITE
 // ═══════════════════════════════════════════════════════════════════════
 
 const canvas = document.getElementById('motionCanvas');
 const ctx = canvas.getContext('2d', { alpha: false });
 
-// Application State
+// Global Suite State
 const state = {
-  mode: 'type', // 'type' | 'pulley'
+  currentAnim: 0,
   text: "HELVETICA",
-  instances: 4,
   playing: true,
   speed: 1.0,
-  loopDuration: 8.0, // 8-second seamless cycle
+  loopDuration: 8.0,
   time: 0,
-  showHull: true,
-  currentLayoutIdx: 0,
-  pulleyPresetIdx: 0,
   width: 0,
   height: 0,
-  dpr: Math.min(window.devicePixelRatio || 1, 2)
+  dpr: Math.min(window.devicePixelRatio || 1, 2),
+  mouseX: -9999,
+  mouseY: -9999,
+  isHovering: false
 };
 
-// Metadata for Mode 1 (Kinetic Typography)
-const TYPE_LAYOUT_META = [
-  { label: "TRIANGLE", title: "LAYOUT A: TRIANGLE", desc: "Tilted sharp triangle with vertices stretched wide" },
-  { label: "OCTAGON", title: "LAYOUT B: OCTAGON", desc: "Rounded irregular octagon with balanced perimeter" },
-  { label: "TRAPEZOID", title: "LAYOUT C: TRAPEZOID", desc: "Slanted, tall trapezoid with staggered diagonals" },
-  { label: "POLYGON", title: "LAYOUT D: POLYGON", desc: "Compact asymmetrical polygon with sharp corners" }
-];
-
-// Metadata for Mode 2 (Pulley Belt)
-const PULLEY_PRESET_META = [
-  { label: "LISSAJOUS", title: "PULLEY 01: LISSAJOUS", desc: "Harmonic 1:2:3 Lissajous curves with tangent belt" },
-  { label: "ORBITAL", title: "PULLEY 02: ORBITAL", desc: "Wandering dual focal centers with eccentric orbits" },
-  { label: "FIGURE-8", title: "PULLEY 03: FIGURE-8", desc: "Counter-crossing lemniscates with weaving nodes" },
-  { label: "ELASTIC", title: "PULLEY 04: ELASTIC", desc: "Dynamic tension breathing with asymmetrical expansion" }
+// 9 Animation Definitions
+const ANIMATIONS = [
+  {
+    id: 'type-hull',
+    name: 'TYPE HULL',
+    title: '01: CONVEX HULL TYPOGRAPHY',
+    desc: '4 spatial layouts with dynamic Andrew Monotone convex hull'
+  },
+  {
+    id: 'pulley-belt',
+    name: 'PULLEY BELT',
+    title: '02: PULLEY BELT ENGINE',
+    desc: '6 circular nodes with smooth external tangent convex hull'
+  },
+  {
+    id: 'swarm',
+    name: 'SWARM',
+    title: '03: BREATHING CIRCLE SWARM',
+    desc: '300 circular particles expanding 80px to 260px with Perlin jitter'
+  },
+  {
+    id: 'vector-field',
+    name: 'VECTOR FIELD',
+    title: '04: INTERACTIVE VECTOR FIELD',
+    desc: '16x10 tick grid rotating towards Lissajous / cursor focus'
+  },
+  {
+    id: 'undulation',
+    name: 'UNDULATION',
+    title: '05: UNDULATING WAVE BASELINE',
+    desc: 'Heavy stroked text translating along undulating sine arch'
+  },
+  {
+    id: 'network',
+    name: 'NETWORK',
+    title: '06: ANIMATED GRAPH NETWORK',
+    desc: '8 ring nodes with inward-bowed quadratic spring connections'
+  },
+  {
+    id: 'radar',
+    name: 'RADAR',
+    title: '07: RADIAL TYPOGRAPHY RADAR',
+    desc: 'Cartesian grid scanned by moving satellite hub with raycasts'
+  },
+  {
+    id: 'rollercoaster',
+    name: 'ROLLERCOASTER',
+    title: '08: ROLLERCOASTER TRACK',
+    desc: '3-rail parallel ribbon spline with 9 letter token trains'
+  },
+  {
+    id: 'morph',
+    name: 'MORPH',
+    title: '09: TYPOGRAPHY MORPH',
+    desc: 'Abstract geometric primitives morphing into Helvetica wordmark'
+  }
 ];
 
 // ═══════════════════════════════════════════════════════════════════════
-// MODE 1: KINETIC TYPOGRAPHY LAYOUTS & OBJECTS
+// ANIMATION 01: CONVEX HULL TYPOGRAPHY ENGINE
 // ═══════════════════════════════════════════════════════════════════════
 
 function generateLayouts(count) {
-  // Layout A: Tilted Sharp Triangle
   const layoutA = [];
-  const V0 = { x: -0.42, y: -0.38 };
-  const V1 = { x: 0.44, y: -0.12 };
-  const V2 = { x: -0.18, y: 0.42 };
-  const perimeterA = 24;
-  const interiorA = count - perimeterA;
-
-  for (let i = 0; i < 8; i++) {
-    const f = i / 8;
-    layoutA.push({ x: V0.x + (V1.x - V0.x) * f, y: V0.y + (V1.y - V0.y) * f, isOuter: true });
-  }
-  for (let i = 0; i < 8; i++) {
-    const f = i / 8;
-    layoutA.push({ x: V1.x + (V2.x - V1.x) * f, y: V1.y + (V2.y - V1.y) * f, isOuter: true });
-  }
-  for (let i = 0; i < 8; i++) {
-    const f = i / 8;
-    layoutA.push({ x: V2.x + (V0.x - V2.x) * f, y: V2.y + (V0.y - V2.y) * f, isOuter: true });
-  }
-  for (let i = 0; i < interiorA; i++) {
-    const r1 = Math.sqrt((i + 1) / (interiorA + 1));
-    const r2 = (i * 0.61803398875) % 1;
-    const a = 1 - r1;
-    const b = r1 * (1 - r2);
-    const c = r1 * r2;
-    layoutA.push({
-      x: (a * V0.x + b * V1.x + c * V2.x) * 0.78,
-      y: (a * V0.y + b * V1.y + c * V2.y) * 0.78,
-      isOuter: false
-    });
+  const V0 = { x: -0.42, y: -0.38 }, V1 = { x: 0.44, y: -0.12 }, V2 = { x: -0.18, y: 0.42 };
+  for (let i = 0; i < 8; i++) layoutA.push({ x: V0.x + (V1.x - V0.x) * (i / 8), y: V0.y + (V1.y - V0.y) * (i / 8), isOuter: true });
+  for (let i = 0; i < 8; i++) layoutA.push({ x: V1.x + (V2.x - V1.x) * (i / 8), y: V1.y + (V2.y - V1.y) * (i / 8), isOuter: true });
+  for (let i = 0; i < 8; i++) layoutA.push({ x: V2.x + (V0.x - V2.x) * (i / 8), y: V2.y + (V0.y - V2.y) * (i / 8), isOuter: true });
+  for (let i = 0; i < count - 24; i++) {
+    const r1 = Math.sqrt((i + 1) / (count - 23)), r2 = (i * 0.61803398875) % 1;
+    const a = 1 - r1, b = r1 * (1 - r2), c = r1 * r2;
+    layoutA.push({ x: (a * V0.x + b * V1.x + c * V2.x) * 0.78, y: (a * V0.y + b * V1.y + c * V2.y) * 0.78, isOuter: false });
   }
 
-  // Layout B: Rounded Irregular Octagon / Hexagon
   const layoutB = [];
-  const perimeterB = 22;
-  const interiorB = count - perimeterB;
-  const octVertices = [
-    { x: -0.32, y: -0.38 }, { x: 0.08, y: -0.42 }, { x: 0.38, y: -0.26 }, { x: 0.44, y: 0.06 },
-    { x: 0.30, y: 0.38 }, { x: -0.06, y: 0.42 }, { x: -0.38, y: 0.28 }, { x: -0.44, y: -0.08 }
-  ];
-  for (let i = 0; i < perimeterB; i++) {
-    const t = (i / perimeterB) * octVertices.length;
-    const idx = Math.floor(t);
-    const frac = t - idx;
-    const p1 = octVertices[idx % octVertices.length];
-    const p2 = octVertices[(idx + 1) % octVertices.length];
-    layoutB.push({ x: p1.x + (p2.x - p1.x) * frac, y: p1.y + (p2.y - p1.y) * frac, isOuter: true });
+  const oct = [{ x: -0.32, y: -0.38 }, { x: 0.08, y: -0.42 }, { x: 0.38, y: -0.26 }, { x: 0.44, y: 0.06 }, { x: 0.30, y: 0.38 }, { x: -0.06, y: 0.42 }, { x: -0.38, y: 0.28 }, { x: -0.44, y: -0.08 }];
+  for (let i = 0; i < 22; i++) {
+    const t = (i / 22) * 8, idx = Math.floor(t), frac = t - idx;
+    layoutB.push({ x: oct[idx % 8].x + (oct[(idx + 1) % 8].x - oct[idx % 8].x) * frac, y: oct[idx % 8].y + (oct[(idx + 1) % 8].y - oct[idx % 8].y) * frac, isOuter: true });
   }
-  for (let i = 0; i < interiorB; i++) {
-    const angle = (i / interiorB) * Math.PI * 2;
-    const rad = 0.12 + ((i % 3) * 0.07);
-    layoutB.push({ x: Math.cos(angle) * rad, y: Math.sin(angle) * rad * 0.85, isOuter: false });
+  for (let i = 0; i < count - 22; i++) {
+    const ang = (i / (count - 22)) * Math.PI * 2, rad = 0.12 + ((i % 3) * 0.07);
+    layoutB.push({ x: Math.cos(ang) * rad, y: Math.sin(ang) * rad * 0.85, isOuter: false });
   }
 
-  // Layout C: Slanted, Tall Trapezoid
   const layoutC = [];
-  const perimeterC = 24;
-  const interiorC = count - perimeterC;
-  const T0 = { x: -0.20, y: -0.42 };
-  const T1 = { x: 0.26, y: -0.34 };
-  const T2 = { x: 0.42, y: 0.40 };
-  const T3 = { x: -0.38, y: 0.38 };
-
+  const T0 = { x: -0.20, y: -0.42 }, T1 = { x: 0.26, y: -0.34 }, T2 = { x: 0.42, y: 0.40 }, T3 = { x: -0.38, y: 0.38 };
   for (let i = 0; i < 4; i++) layoutC.push({ x: T0.x + (T1.x - T0.x) * (i / 4), y: T0.y + (T1.y - T0.y) * (i / 4), isOuter: true });
   for (let i = 0; i < 8; i++) layoutC.push({ x: T1.x + (T2.x - T1.x) * (i / 8), y: T1.y + (T2.y - T1.y) * (i / 8), isOuter: true });
   for (let i = 0; i < 4; i++) layoutC.push({ x: T2.x + (T3.x - T2.x) * (i / 4), y: T2.y + (T3.y - T2.y) * (i / 4), isOuter: true });
   for (let i = 0; i < 8; i++) layoutC.push({ x: T3.x + (T0.x - T3.x) * (i / 8), y: T3.y + (T0.y - T3.y) * (i / 8), isOuter: true });
-  for (let i = 0; i < interiorC; i++) {
-    const u = ((i % 4) + 1) / 5;
-    const v = (Math.floor(i / 4) + 1) / (Math.ceil(interiorC / 4) + 1);
-    const topPt = { x: T0.x + (T1.x - T0.x) * u, y: T0.y + (T1.y - T0.y) * u };
-    const btmPt = { x: T3.x + (T2.x - T3.x) * u, y: T3.y + (T2.y - T3.y) * u };
-    layoutC.push({ x: topPt.x + (btmPt.x - topPt.x) * v, y: topPt.y + (btmPt.y - topPt.y) * v, isOuter: false });
+  for (let i = 0; i < count - 24; i++) {
+    const u = ((i % 4) + 1) / 5, v = (Math.floor(i / 4) + 1) / (Math.ceil((count - 24) / 4) + 1);
+    layoutC.push({ x: (T0.x + (T1.x - T0.x) * u) * (1 - v) + (T3.x + (T2.x - T3.x) * u) * v, y: (T0.y + (T1.y - T0.y) * u) * (1 - v) + (T3.y + (T2.y - T3.y) * u) * v, isOuter: false });
   }
 
-  // Layout D: Compact Asymmetrical Polygon
   const layoutD = [];
-  const perimeterD = 20;
-  const interiorD = count - perimeterD;
-  const polyVertices = [
-    { x: -0.28, y: -0.26 }, { x: 0.16, y: -0.32 }, { x: 0.36, y: -0.06 },
-    { x: 0.28, y: 0.28 }, { x: -0.06, y: 0.34 }, { x: -0.34, y: 0.14 }
-  ];
-  for (let i = 0; i < perimeterD; i++) {
-    const t = (i / perimeterD) * polyVertices.length;
-    const idx = Math.floor(t);
-    const frac = t - idx;
-    const p1 = polyVertices[idx % polyVertices.length];
-    const p2 = polyVertices[(idx + 1) % polyVertices.length];
-    layoutD.push({ x: p1.x + (p2.x - p1.x) * frac, y: p1.y + (p2.y - p1.y) * frac, isOuter: true });
+  const poly = [{ x: -0.28, y: -0.26 }, { x: 0.16, y: -0.32 }, { x: 0.36, y: -0.06 }, { x: 0.28, y: 0.28 }, { x: -0.06, y: 0.34 }, { x: -0.34, y: 0.14 }];
+  for (let i = 0; i < 20; i++) {
+    const t = (i / 20) * 6, idx = Math.floor(t), frac = t - idx;
+    layoutD.push({ x: poly[idx % 6].x + (poly[(idx + 1) % 6].x - poly[idx % 6].x) * frac, y: poly[idx % 6].y + (poly[(idx + 1) % 6].y - poly[idx % 6].y) * frac, isOuter: true });
   }
-  for (let i = 0; i < interiorD; i++) {
-    const r = (i + 1) / (interiorD + 1);
-    const angle = i * 2.399963;
-    layoutD.push({ x: Math.cos(angle) * 0.16 * Math.sqrt(r), y: Math.sin(angle) * 0.16 * Math.sqrt(r), isOuter: false });
+  for (let i = 0; i < count - 20; i++) {
+    const r = (i + 1) / (count - 19), a = i * 2.399963;
+    layoutD.push({ x: Math.cos(a) * 0.16 * Math.sqrt(r), y: Math.sin(a) * 0.16 * Math.sqrt(r), isOuter: false });
   }
 
   return [layoutA, layoutB, layoutC, layoutD];
 }
 
-let characters = [];
-let layouts = [];
+let typeCharacters = [];
+let typeLayouts = [];
 
-function initCharacters() {
+function initTypeCharacters() {
   const text = state.text.toUpperCase();
-  characters = [];
-  for (let inst = 0; inst < state.instances; inst++) {
+  typeCharacters = [];
+  for (let inst = 0; inst < 4; inst++) {
     for (let c = 0; c < text.length; c++) {
-      characters.push({
+      typeCharacters.push({
         char: text[c],
-        index: inst * text.length + c,
-        x: 0, y: 0,
         driftPhase: Math.random() * Math.PI * 2
       });
     }
   }
-  layouts = generateLayouts(characters.length);
+  typeLayouts = generateLayouts(typeCharacters.length);
 }
+initTypeCharacters();
 
-initCharacters();
-
-// Andrew's Monotone Chain 2D Convex Hull Algorithm (for points)
 function convexHull(points) {
   if (points.length <= 2) return points.slice();
   const pts = points.slice().sort((a, b) => (a.x === b.x ? a.y - b.y : a.x - b.x));
   function cross(o, a, b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); }
-
   const lower = [];
   for (let i = 0; i < pts.length; i++) {
     while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], pts[i]) <= 0) lower.pop();
@@ -390,171 +343,122 @@ function convexHull(points) {
     while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], pts[i]) <= 0) upper.pop();
     upper.push(pts[i]);
   }
-  lower.pop();
-  upper.pop();
+  lower.pop(); upper.pop();
   return lower.concat(upper);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// MODE 2: 6-NODE PULLEY BELT ENGINE & EXTERNAL TANGENT CONVEX HULL
-// ═══════════════════════════════════════════════════════════════════════
+function renderAnim1_TypeHull(t, W, H) {
+  const cycle = ((t % 1.0) + 1.0) % 1.0;
+  const stageFraction = cycle * 4;
+  const stage = Math.min(3, Math.max(0, Math.floor(stageFraction)));
+  const nextStage = (stage + 1) % 4;
+  const stageT = Math.max(0, Math.min(1, stageFraction - stage));
 
-// 6 Circles with radii between 18px and 24px
-const pulleyNodes = [
-  { r: 22, label: "01", x: 0, y: 0, dragX: 0, dragY: 0, isDragged: false },
-  { r: 19, label: "02", x: 0, y: 0, dragX: 0, dragY: 0, isDragged: false },
-  { r: 24, label: "03", x: 0, y: 0, dragX: 0, dragY: 0, isDragged: false },
-  { r: 20, label: "04", x: 0, y: 0, dragX: 0, dragY: 0, isDragged: false },
-  { r: 23, label: "05", x: 0, y: 0, dragX: 0, dragY: 0, isDragged: false },
-  { r: 21, label: "06", x: 0, y: 0, dragX: 0, dragY: 0, isDragged: false }
-];
+  const pA = typeLayouts[stage];
+  const pB = typeLayouts[nextStage];
+  const spanX = Math.min(W * 0.85, H * 1.35 * 0.85);
+  const spanY = Math.min(H * 0.78, W * 0.65);
+  const cx = W / 2, cy = H / 2;
 
-// Calculate coordinates of the 6 pulleys based on active preset
-function updatePulleyPositions(time, W, H, preset) {
-  const t = (time % 1.0);
-  const twoPi = Math.PI * 2;
-  const centerX = W / 2;
-  const centerY = H / 2;
-  const spanX = Math.min(W * 0.42, H * 0.65 * 0.42);
-  const spanY = Math.min(H * 0.38, W * 0.32);
+  const fontSize = Math.max(19, Math.min(Math.round(W * 0.022), 28));
+  ctx.font = `700 ${fontSize}px Helvetica, Arial, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
 
-  for (let i = 0; i < 6; i++) {
-    const node = pulleyNodes[i];
-    if (node.isDragged) {
-      node.x = node.dragX;
-      node.y = node.dragY;
-      continue;
+  const letterPoints = [];
+  for (let i = 0; i < typeCharacters.length; i++) {
+    const ch = typeCharacters[i];
+    const posA = pA[i % pA.length];
+    const posB = pB[i % pB.length];
+    const stagger = (i / typeCharacters.length) * 0.06;
+    const charT = Math.max(0, Math.min(1, (stageT - stagger) / (1 - stagger * 1.5)));
+    const charEased = easeInOutCubic(charT);
+
+    const nx = posA.x + (posB.x - posA.x) * charEased;
+    const ny = posA.y + (posB.y - posA.y) * charEased;
+    const isInterior = !posA.isOuter || !posB.isOuter;
+    const drift = isInterior ? 5 : 1.5;
+    const dx = Math.sin(t * Math.PI * 4 + ch.driftPhase) * drift;
+    const dy = Math.cos(t * Math.PI * 3.5 + ch.driftPhase * 1.3) * drift;
+
+    const px = cx + nx * spanX + dx;
+    const py = cy + ny * spanY + dy;
+    letterPoints.push({ x: px, y: py, char: ch.char });
+  }
+
+  // Draw Convex Hull
+  const hull = convexHull(letterPoints);
+  if (hull.length > 2) {
+    ctx.save();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(hull[0].x, hull[0].y);
+    for (let h = 1; h < hull.length; h++) ctx.lineTo(hull[h].x, hull[h].y);
+    ctx.closePath();
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    for (let h = 0; h < hull.length; h++) {
+      ctx.beginPath();
+      ctx.arc(hull[h].x, hull[h].y, 3, 0, Math.PI * 2);
+      ctx.fill();
     }
+    ctx.restore();
+  }
 
-    let nx = 0, ny = 0;
-
-    switch (preset) {
-      case 0: { // 01 LISSAJOUS HARMONIC
-        const params = [
-          { bx: -0.05, by: -0.15, Ax: 0.72, Ay: 0.60, fx: 1, fy: 2, px: 0, py: Math.PI / 3 },
-          { bx: 0.18,  by: -0.08, Ax: 0.65, Ay: 0.75, fx: 2, fy: 1, px: Math.PI / 4, py: 0 },
-          { bx: 0.12,  by: 0.15,  Ax: 0.75, Ay: 0.58, fx: 3, fy: 2, px: Math.PI / 2, py: Math.PI / 4 },
-          { bx: -0.08, by: 0.20,  Ax: 0.68, Ay: 0.65, fx: 1, fy: 3, px: Math.PI, py: Math.PI / 6 },
-          { bx: -0.22, by: 0.05,  Ax: 0.60, Ay: 0.78, fx: 2, fy: 1, px: 3 * Math.PI / 4, py: Math.PI / 2 },
-          { bx: 0.02,  by: 0.02,  Ax: 0.45, Ay: 0.45, fx: 2, fy: 2, px: 0, py: Math.PI / 2 }
-        ][i];
-        nx = params.bx + params.Ax * 0.5 * Math.cos(params.fx * twoPi * t + params.px);
-        ny = params.by + params.Ay * 0.5 * Math.sin(params.fy * twoPi * t + params.py);
-        break;
-      }
-      case 1: { // 02 ORBITAL
-        // Two orbiting barycenters
-        const f1x = Math.cos(twoPi * t) * 0.25;
-        const f1y = Math.sin(twoPi * t) * 0.25;
-        const f2x = -f1x;
-        const f2y = -f1y;
-
-        if (i < 3) {
-          const ang = (twoPi * t * (i + 1)) + (i * twoPi / 3);
-          nx = f1x + Math.cos(ang) * (0.35 + (i * 0.08));
-          ny = f1y + Math.sin(ang) * (0.35 + (i * 0.08)) * 0.8;
-        } else {
-          const j = i - 3;
-          const ang = -(twoPi * t * (j + 1)) + (j * twoPi / 3);
-          nx = f2x + Math.cos(ang) * (0.35 + (j * 0.08));
-          ny = f2y + Math.sin(ang) * (0.35 + (j * 0.08)) * 0.8;
-        }
-        break;
-      }
-      case 2: { // 03 FIGURE-8 (Lemniscates)
-        const phase = (i / 6) * twoPi;
-        const ang = twoPi * t + phase;
-        const denom = 1 + Math.sin(ang) * Math.sin(ang);
-        nx = (Math.cos(ang) / denom) * 0.65;
-        ny = (Math.sin(ang) * Math.cos(ang) / denom) * 0.75;
-        // Stagger radii orientation
-        const rot = (i * Math.PI / 3);
-        const rx = nx * Math.cos(rot) - ny * Math.sin(rot);
-        const ry = nx * Math.sin(rot) + ny * Math.cos(rot);
-        nx = rx; ny = ry;
-        break;
-      }
-      case 3: { // 04 ELASTIC TENSION
-        const baseAngle = (i / 6) * twoPi;
-        const breath = 0.5 + 0.3 * Math.sin(twoPi * t * 2 + i);
-        const wander = 0.15 * Math.cos(twoPi * t + (i * 1.5));
-        nx = Math.cos(baseAngle + wander) * breath * 0.75;
-        ny = Math.sin(baseAngle + wander) * breath * 0.68;
-        break;
-      }
-    }
-
-    node.x = centerX + nx * spanX;
-    node.y = centerY + ny * spanY;
+  // Draw characters
+  ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < letterPoints.length; i++) {
+    ctx.fillText(letterPoints[i].char, letterPoints[i].x, letterPoints[i].y);
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// EXACT CIRCLE-TO-CIRCLE EXTERNAL TANGENT CONVEX HULL SOLVER
+// ANIMATION 02: PULLEY BELT TANGENT CONVEX HULL ENGINE
 // ═══════════════════════════════════════════════════════════════════════
+
+const pulleyNodes = [
+  { r: 22, x: 0, y: 0 }, { r: 19, x: 0, y: 0 }, { r: 24, x: 0, y: 0 },
+  { r: 20, x: 0, y: 0 }, { r: 23, x: 0, y: 0 }, { r: 21, x: 0, y: 0 }
+];
+
 function getCircleTangentConvexHull(circles) {
   const n = circles.length;
   if (n <= 1) return null;
-  const validTangents = [];
-
+  const valid = [];
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) {
       if (i === j) continue;
-      const c1 = circles[i];
-      const c2 = circles[j];
-      const dx = c2.x - c1.x;
-      const dy = c2.y - c1.y;
-      const d = Math.hypot(dx, dy);
+      const c1 = circles[i], c2 = circles[j];
+      const dx = c2.x - c1.x, dy = c2.y - c1.y, d = Math.hypot(dx, dy);
       if (d <= Math.abs(c1.r - c2.r) + 0.5) continue;
-
       const gamma = Math.atan2(dy, dx);
-      const cosBeta = (c1.r - c2.r) / d;
-      const beta = Math.acos(Math.max(-1, Math.min(1, cosBeta)));
-
-      // Outward normal angle for candidate tangent from c1 to c2
+      const beta = Math.acos(Math.max(-1, Math.min(1, (c1.r - c2.r) / d)));
       const alpha = gamma + beta;
-      const nx = Math.cos(alpha);
-      const ny = Math.sin(alpha);
-      const p1x = c1.x + c1.r * nx;
-      const p1y = c1.y + c1.r * ny;
-
-      // Check if candidate tangent is a support hyperplane for all circles
-      let valid = true;
+      const nx = Math.cos(alpha), ny = Math.sin(alpha);
+      const p1x = c1.x + c1.r * nx, p1y = c1.y + c1.r * ny;
+      let ok = true;
       for (let k = 0; k < n; k++) {
         if (k === i || k === j) continue;
         const ck = circles[k];
-        const dist = (ck.x - p1x) * nx + (ck.y - p1y) * ny + ck.r;
-        if (dist > 1e-3) {
-          valid = false;
-          break;
-        }
+        if ((ck.x - p1x) * nx + (ck.y - p1y) * ny + ck.r > 1e-3) { ok = false; break; }
       }
-
-      if (valid) {
-        validTangents.push({
-          from: i,
-          to: j,
-          angle: alpha,
-          p1: { x: p1x, y: p1y },
-          p2: { x: c2.x + c2.r * nx, y: c2.y + c2.r * ny }
-        });
+      if (ok) {
+        valid.push({ from: i, to: j, angle: alpha, p1: { x: p1x, y: p1y }, p2: { x: c2.x + c2.r * nx, y: c2.y + c2.r * ny } });
       }
     }
   }
-
-  if (validTangents.length === 0) return null;
-
-  // Build directed cycle of tangents
-  const nextTangent = new Map();
-  for (const t of validTangents) nextTangent.set(t.from, t);
-
+  if (valid.length === 0) return null;
+  const next = new Map();
+  for (const t of valid) next.set(t.from, t);
   const cycle = [];
-  const start = validTangents[0].from;
-  let curr = start;
+  let curr = valid[0].from;
   const visited = new Set();
   while (!visited.has(curr)) {
     visited.add(curr);
-    const t = nextTangent.get(curr);
+    const t = next.get(curr);
     if (!t) break;
     cycle.push(t);
     curr = t.to;
@@ -562,9 +466,626 @@ function getCircleTangentConvexHull(circles) {
   return cycle;
 }
 
+function renderAnim2_PulleyBelt(t, W, H) {
+  const twoPi = Math.PI * 2;
+  const cx = W / 2, cy = H / 2;
+  const spanX = Math.min(W * 0.42, H * 0.65 * 0.42);
+  const spanY = Math.min(H * 0.38, W * 0.32);
+
+  const params = [
+    { bx: -0.05, by: -0.15, Ax: 0.72, Ay: 0.60, fx: 1, fy: 2, px: 0, py: Math.PI / 3 },
+    { bx: 0.18,  by: -0.08, Ax: 0.65, Ay: 0.75, fx: 2, fy: 1, px: Math.PI / 4, py: 0 },
+    { bx: 0.12,  by: 0.15,  Ax: 0.75, Ay: 0.58, fx: 3, fy: 2, px: Math.PI / 2, py: Math.PI / 4 },
+    { bx: -0.08, by: 0.20,  Ax: 0.68, Ay: 0.65, fx: 1, fy: 3, px: Math.PI, py: Math.PI / 6 },
+    { bx: -0.22, by: 0.05,  Ax: 0.60, Ay: 0.78, fx: 2, fy: 1, px: 3 * Math.PI / 4, py: Math.PI / 2 },
+    { bx: 0.02,  by: 0.02,  Ax: 0.45, Ay: 0.45, fx: 2, fy: 2, px: 0, py: Math.PI / 2 }
+  ];
+
+  for (let i = 0; i < 6; i++) {
+    const p = params[i];
+    const nx = p.bx + p.Ax * 0.5 * Math.cos(p.fx * twoPi * t + p.px);
+    const ny = p.by + p.Ay * 0.5 * Math.sin(p.fy * twoPi * t + p.py);
+    pulleyNodes[i].x = cx + nx * spanX;
+    pulleyNodes[i].y = cy + ny * spanY;
+  }
+
+  // Draw Tangent Belt
+  const cycle = getCircleTangentConvexHull(pulleyNodes);
+  if (cycle && cycle.length > 0) {
+    ctx.save();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < cycle.length; i++) {
+      const curr = cycle[i], next = cycle[(i + 1) % cycle.length], c = pulleyNodes[curr.to];
+      if (i === 0) ctx.moveTo(curr.p1.x, curr.p1.y);
+      ctx.lineTo(curr.p2.x, curr.p2.y);
+      let sA = curr.angle, eA = next.angle;
+      while (eA < sA) eA += Math.PI * 2;
+      if (eA - sA > Math.PI * 2) eA -= Math.PI * 2;
+      ctx.arc(c.x, c.y, c.r, sA, eA, false);
+    }
+    ctx.closePath();
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 8]);
+    ctx.lineDashOffset = -(t * 220);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Draw 6 Circles
+  const labelText = (state.text.length >= 6 ? state.text : (state.text + "PULLEY")).toUpperCase();
+  pulleyNodes.forEach((c, i) => {
+    ctx.save();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    const spokeRot = (t * Math.PI * 6 * (i % 2 === 0 ? 1 : -1)) + (i * Math.PI / 3);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.lineWidth = 1;
+    for (let s = 0; s < 3; s++) {
+      const a = spokeRot + (s * Math.PI * 2 / 3);
+      ctx.beginPath();
+      ctx.moveTo(c.x, c.y);
+      ctx.lineTo(c.x + Math.cos(a) * (c.r - 2), c.y + Math.sin(a) * (c.r - 2));
+      ctx.stroke();
+    }
+
+    ctx.font = '700 11px Helvetica, Arial, sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(labelText[i] || (i + 1).toString(), c.x, c.y - c.r - 12);
+    ctx.restore();
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════════════
-// EASING FUNCTIONS & RESIZE
+// ANIMATION 03: BREATHING CIRCLE SWARM (300 PARTICLES)
 // ═══════════════════════════════════════════════════════════════════════
+
+const swarmParticles = [];
+for (let i = 0; i < 300; i++) {
+  swarmParticles.push({
+    normR: Math.sqrt((i + 0.5) / 300),
+    baseAngle: i * 2.399963, // Golden angle
+    freqR: 1 + (i % 3),
+    freqT: 1 + ((i * 3) % 4),
+    phase: Math.random() * Math.PI * 2
+  });
+}
+
+function renderAnim3_Swarm(t, W, H) {
+  const cx = W / 2, cy = H / 2;
+  // Cyclical sine-eased pulse: 80px up to 260px and back over 8s
+  const pulse = 0.5 - 0.5 * Math.cos(t * Math.PI * 2);
+  const currentMaxRadius = 80 + pulse * 180; // 80px to 260px
+
+  ctx.save();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.5;
+  ctx.fillStyle = '#0015ff';
+
+  for (let i = 0; i < 300; i++) {
+    const p = swarmParticles[i];
+    // Individual Perlin-like organic jitter & tangential drift
+    const driftAngle = Math.sin(t * Math.PI * 4 + p.phase) * 0.28;
+    const radialJitter = Math.cos(t * Math.PI * 6 + p.phase * 1.5) * 8;
+
+    const r = p.normR * currentMaxRadius + radialJitter;
+    const angle = p.baseAngle + driftAngle + (t * 0.4);
+
+    const px = cx + Math.cos(angle) * r;
+    const py = cy + Math.sin(angle) * r;
+
+    ctx.beginPath();
+    ctx.arc(px, py, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ANIMATION 04: INTERACTIVE VECTOR FIELD (16 x 10 TICKS)
+// ═══════════════════════════════════════════════════════════════════════
+
+function renderAnim4_VectorField(t, W, H) {
+  const cols = 16, rows = 10;
+  const padX = W * 0.1, padY = H * 0.15;
+  const stepX = (W - padX * 2) / (cols - 1);
+  const stepY = (H - padY * 2) / (rows - 1);
+
+  // Focus: smooth Lissajous curve or mouse cursor
+  let focusX = W / 2 + Math.cos(t * Math.PI * 4) * (W * 0.35);
+  let focusY = H / 2 + Math.sin(t * Math.PI * 6 + Math.PI / 4) * (H * 0.30);
+
+  if (state.isHovering && state.mouseX > 0) {
+    focusX = state.mouseX;
+    focusY = state.mouseY;
+  }
+
+  // Draw Focal Target Ring
+  ctx.save();
+  ctx.strokeStyle = '#00ff44';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(focusX, focusY, 22, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = '#00ff44';
+  ctx.beginPath();
+  ctx.arc(focusX, focusY, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Draw 16x10 Grid of Ticks
+  const tickLen = 22;
+  const halfLen = tickLen / 2;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const gx = padX + c * stepX;
+      const gy = padY + r * stepY;
+
+      const dx = focusX - gx;
+      const dy = focusY - gy;
+      const dist = Math.hypot(dx, dy);
+      const angle = Math.atan2(dy, dx);
+
+      // Color dynamics: within 220px, interpolate white (#ffffff) to bright green (#00ff44)
+      ctx.save();
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+
+      if (dist < 220) {
+        const factor = 1 - (dist / 220);
+        const red = Math.round(255 * (1 - factor));
+        const blue = Math.round(255 * (1 - factor) + 68 * factor);
+        ctx.strokeStyle = `rgb(${red}, 255, ${blue})`;
+      } else {
+        ctx.strokeStyle = '#ffffff';
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(gx - Math.cos(angle) * halfLen, gy - Math.sin(angle) * halfLen);
+      ctx.lineTo(gx + Math.cos(angle) * halfLen, gy + Math.sin(angle) * halfLen);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ANIMATION 05: UNDULATING WAVE BASELINE ("-STROKE-")
+// ═══════════════════════════════════════════════════════════════════════
+
+function renderAnim5_Undulation(t, W, H) {
+  const text = state.text.length > 0 ? `-${state.text}-` : "-STROKE-";
+  const cx = W / 2, cy = H / 2;
+  const waveWidth = Math.min(W * 0.8, 900);
+  const maxAmp = H * 0.22;
+  const amp = Math.sin(t * Math.PI * 2) * maxAmp; // Undulate between U and -U arch
+
+  // Draw subtle baseline curve
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 6]);
+  ctx.beginPath();
+  const samples = 60;
+  for (let s = 0; s <= samples; s++) {
+    const u = (s / samples) * 2 - 1; // [-1, 1]
+    const px = cx + u * (waveWidth / 2);
+    const py = cy + amp * Math.cos(u * Math.PI / 2);
+    if (s === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  // Render Stroked Glyphs along the baseline
+  const fontSize = Math.max(38, Math.min(Math.round(W * 0.075), 90));
+  ctx.save();
+  ctx.font = `900 ${fontSize}px Helvetica, Arial, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2.5;
+
+  const totalChars = text.length;
+  for (let i = 0; i < totalChars; i++) {
+    const u = ((i + 0.5) / totalChars) * 1.7 - 0.85; // [-0.85, 0.85]
+    const px = cx + u * (waveWidth / 2);
+    const py = cy + amp * Math.cos(u * Math.PI / 2);
+
+    // Tangent angle
+    const slope = -amp * (Math.PI / waveWidth) * Math.sin(u * Math.PI / 2);
+    const angle = Math.atan(slope);
+
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(angle);
+    ctx.strokeText(text[i], 0, 0);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ANIMATION 06: ANIMATED GRAPH NETWORK (8 RING NODES)
+// ═══════════════════════════════════════════════════════════════════════
+
+const netKeyframes = [
+  // Keyframe A: Loose oval constellation
+  [
+    { x: -0.32, y: -0.22 }, { x: 0.05, y: -0.35 }, { x: 0.35, y: -0.18 }, { x: 0.38, y: 0.12 },
+    { x: 0.18, y: 0.32 }, { x: -0.15, y: 0.36 }, { x: -0.38, y: 0.15 }, { x: -0.05, y: -0.05 }
+  ],
+  // Keyframe B: Compact high-tension cluster
+  [
+    { x: -0.12, y: -0.14 }, { x: 0.08, y: -0.16 }, { x: 0.16, y: -0.04 }, { x: 0.12, y: 0.12 },
+    { x: -0.02, y: 0.15 }, { x: -0.14, y: 0.08 }, { x: -0.18, y: -0.06 }, { x: 0.01, y: -0.01 }
+  ],
+  // Keyframe C: Tilted linear diagonal formation
+  [
+    { x: -0.38, y: -0.35 }, { x: -0.26, y: -0.24 }, { x: -0.14, y: -0.12 }, { x: -0.02, y: 0.02 },
+    { x: 0.10, y: 0.14 }, { x: 0.22, y: 0.24 }, { x: 0.34, y: 0.35 }, { x: 0.02, y: -0.15 }
+  ]
+];
+
+function renderAnim6_Network(t, W, H) {
+  const cx = W / 2, cy = H / 2;
+  const span = Math.min(W * 0.85, H * 0.78);
+
+  const stage = (t * 3) % 3;
+  const idx = Math.floor(stage);
+  const nextIdx = (idx + 1) % 3;
+  const ease = easeInOutCubic(stage - idx);
+
+  const kA = netKeyframes[idx];
+  const kB = netKeyframes[nextIdx];
+
+  const currentNodes = [];
+  for (let i = 0; i < 8; i++) {
+    const nx = kA[i].x + (kB[i].x - kA[i].x) * ease;
+    const ny = kA[i].y + (kB[i].y - kA[i].y) * ease;
+    currentNodes.push({
+      x: cx + nx * span,
+      y: cy + ny * span
+    });
+  }
+
+  // Connect close node pairs with bowed quadratic curves
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+  ctx.lineWidth = 1;
+
+  for (let i = 0; i < 8; i++) {
+    for (let j = i + 1; j < 8; j++) {
+      const p1 = currentNodes[i], p2 = currentNodes[j];
+      const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+      if (dist < span * 0.45) {
+        // Midpoint and bowed control point toward cluster center (cx, cy)
+        const mx = (p1.x + p2.x) / 2;
+        const my = (p1.y + p2.y) / 2;
+        const cpx = mx + (cx - mx) * 0.28;
+        const cpy = my + (cy - my) * 0.28;
+
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.quadraticCurveTo(cpx, cpy, p2.x, p2.y);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Draw 8 Ring Nodes: radius 8px, stroke 2.5px white, fill #0015ff
+  for (let i = 0; i < 8; i++) {
+    const node = currentNodes[i];
+    ctx.fillStyle = '#0015ff';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2.5;
+
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ANIMATION 07: RADIAL TYPOGRAPHY RADAR
+// ═══════════════════════════════════════════════════════════════════════
+
+function renderAnim7_Radar(t, W, H) {
+  const word = state.text.length > 0 ? state.text.toUpperCase() : "HELVETICA";
+  const spacing = 48;
+  const cols = Math.ceil(W / spacing) + 1;
+  const rows = Math.ceil(H / spacing) + 1;
+
+  // Satellite Hub trajectory
+  const hubX = W / 2 + Math.cos(t * Math.PI * 2) * (W * 0.32);
+  const hubY = H / 2 + Math.sin(t * Math.PI * 4) * (H * 0.26);
+  const radarRadius = 250;
+
+  ctx.save();
+  ctx.font = '700 13px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // Draw grid characters and raycasts
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const gx = c * spacing;
+      const gy = r * spacing;
+      const char = word[(c + r * 3) % word.length];
+      const dist = Math.hypot(hubX - gx, hubY - gy);
+
+      if (dist < radarRadius) {
+        const alpha = 1 - (dist / radarRadius);
+        // Draw Raycast line
+        ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.65})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(hubX, hubY);
+        ctx.lineTo(gx, gy);
+        ctx.stroke();
+
+        // Connected character pulses and counter-rotates
+        const scale = 1.0 + alpha * 0.7;
+        const angle = -Math.PI / 4 + (alpha * Math.PI * 0.5);
+
+        ctx.save();
+        ctx.translate(gx, gy);
+        ctx.rotate(angle);
+        ctx.scale(scale, scale);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(char, 0, 0);
+        ctx.restore();
+      } else {
+        // Base character rotated at -45 degrees
+        ctx.save();
+        ctx.translate(gx, gy);
+        ctx.rotate(-Math.PI / 4);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+        ctx.fillText(char, 0, 0);
+        ctx.restore();
+      }
+    }
+  }
+
+  // Draw Satellite Hub
+  ctx.save();
+  ctx.translate(hubX, hubY);
+  ctx.fillStyle = '#0015ff';
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(0, 0, 42, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(0, 0, 250, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Circular Wordmark inside Hub
+  ctx.font = '800 10px Syne, sans-serif';
+  ctx.fillStyle = '#ffffff';
+  const hubChars = word.split('');
+  for (let i = 0; i < hubChars.length; i++) {
+    const a = (i / hubChars.length) * Math.PI * 2 + (t * Math.PI * 2);
+    ctx.save();
+    ctx.rotate(a);
+    ctx.fillText(hubChars[i], 0, -28);
+    ctx.restore();
+  }
+
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(0, 0, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ANIMATION 08: ROLLERCOASTER TYPOGRAPHY TRACK
+// ═══════════════════════════════════════════════════════════════════════
+
+function getRollercoasterPos(u, W, H) {
+  const cx = W / 2, cy = H / 2;
+  const Ax = Math.min(W * 0.36, 460);
+  const Ay = Math.min(H * 0.32, 340);
+
+  // Elegant closed 3D-feeling Lissajous ribbon knot
+  const x = cx + Math.sin(u) * Ax + Math.sin(2 * u) * (Ax * 0.35);
+  const y = cy + Math.cos(u) * Ay + Math.sin(3 * u) * (Ay * 0.22);
+
+  // Tangent derivatives
+  const dx = Math.cos(u) * Ax + 2 * Math.cos(2 * u) * (Ax * 0.35);
+  const dy = -Math.sin(u) * Ay + 3 * Math.cos(3 * u) * (Ay * 0.22);
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len;
+  const ny = dx / len;
+
+  return { x, y, dx, dy, nx, ny, angle: Math.atan2(dy, dx) };
+}
+
+function renderAnim8_Rollercoaster(t, W, H) {
+  const steps = 180;
+  const offsets = [-8, 0, 8];
+
+  // Draw 3 Parallel Ribbon Offset Spline Lines
+  ctx.save();
+  ctx.lineWidth = 0.8;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+
+  offsets.forEach(offset => {
+    ctx.beginPath();
+    for (let s = 0; s <= steps; s++) {
+      const u = (s / steps) * Math.PI * 2;
+      const pt = getRollercoasterPos(u, W, H);
+      const px = pt.x + pt.nx * offset;
+      const py = pt.y + pt.ny * offset;
+      if (s === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+  });
+  ctx.restore();
+
+  // Train: 9 circular white outline tokens containing letters
+  const word = state.text.length >= 9 ? state.text : (state.text + "HELVETICA").slice(0, 9);
+  const numTokens = 9;
+
+  for (let k = 0; k < numTokens; k++) {
+    // Constant arc-length separation along the path
+    const u = (t * Math.PI * 2 + (k / numTokens) * Math.PI * 2) % (Math.PI * 2);
+    const pt = getRollercoasterPos(u, W, H);
+
+    ctx.save();
+    ctx.translate(pt.x, pt.y);
+    ctx.rotate(pt.angle);
+
+    // Token Circle: radius 16px, fill #0015ff, stroke 2px white
+    ctx.fillStyle = '#0015ff';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Letter
+    ctx.font = '700 13px Helvetica, Arial, sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(word[k], 0, 0);
+
+    ctx.restore();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ANIMATION 09: TYPOGRAPHY MORPH (GEOMETRY <-> WORDMARK)
+// ═══════════════════════════════════════════════════════════════════════
+
+function renderAnim9_Morph(t, W, H) {
+  const word = state.text.length > 0 ? state.text.toUpperCase() : "HELVETICA";
+  const cx = W / 2, cy = H / 2;
+  const fontSize = Math.max(48, Math.min(Math.round(W * 0.085), 115));
+
+  // Sequence:
+  // 0.0 - 0.35: Abstract Geometry Primitive Blocks
+  // 0.35 - 0.65: Transition / Sharp Legible Wordmark
+  // 0.65 - 1.00: Dissolve back to Geometry
+  const cycle = (t % 1.0);
+  let morphT = 0; // 0 = Abstract, 1 = Wordmark
+
+  if (cycle < 0.25) {
+    morphT = 0;
+  } else if (cycle < 0.50) {
+    morphT = easeInOutCubic((cycle - 0.25) / 0.25);
+  } else if (cycle < 0.75) {
+    morphT = 1.0;
+  } else {
+    morphT = 1.0 - easeInOutCubic((cycle - 0.75) / 0.25);
+  }
+
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  // Measure word width
+  ctx.font = `900 ${fontSize}px Syne, Helvetica, Arial, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const totalW = ctx.measureText(word).width;
+  const charSpacing = totalW / word.length;
+  const startX = -totalW / 2 + charSpacing / 2;
+
+  for (let i = 0; i < word.length; i++) {
+    const px = startX + i * charSpacing;
+    const py = 0;
+
+    // Abstract geometric primitive
+    const h = fontSize * 0.85;
+    const w = charSpacing * 0.75;
+
+    ctx.save();
+    ctx.translate(px, py);
+
+    if (morphT < 0.98) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.5;
+      ctx.fillStyle = '#0015ff';
+
+      // Shape variation based on letter index
+      const mode = i % 4;
+      const alpha = 1 - morphT;
+      ctx.globalAlpha = alpha;
+
+      if (mode === 0) {
+        // Vertical pillar rectangle
+        ctx.strokeRect(-w / 2, -h / 2, w, h);
+      } else if (mode === 1) {
+        // Arch block
+        ctx.beginPath();
+        ctx.arc(0, 0, w / 2, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (mode === 2) {
+        // Diagonal split wedges
+        ctx.beginPath();
+        ctx.moveTo(-w / 2, h / 2);
+        ctx.lineTo(w / 2, -h / 2);
+        ctx.stroke();
+        ctx.strokeRect(-w / 2, -h / 2, w, h);
+      } else {
+        // Concentric geometric frame
+        ctx.strokeRect(-w / 2, -h / 2, w, h);
+        ctx.beginPath();
+        ctx.arc(0, 0, w / 4, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+
+    if (morphT > 0.02) {
+      ctx.globalAlpha = morphT;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(word[i], 0, 0);
+    }
+
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// EASING & UTILITIES
+// ═══════════════════════════════════════════════════════════════════════
+
 function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
 }
@@ -587,9 +1108,22 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
+// Mouse tracking for interactive vector field
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  state.mouseX = e.clientX - rect.left;
+  state.mouseY = e.clientY - rect.top;
+  state.isHovering = true;
+});
+
+canvas.addEventListener('mouseleave', () => {
+  state.isHovering = false;
+});
+
 // ═══════════════════════════════════════════════════════════════════════
-// MAIN ANIMATION RENDER LOOP (60 FPS)
+// MAIN RENDER LOOP (60 FPS)
 // ═══════════════════════════════════════════════════════════════════════
+
 let lastTime = 0;
 let frameCount = 0;
 let lastFpsUpdate = performance.now();
@@ -606,39 +1140,39 @@ function animate(currentTime) {
   const W = state.width;
   const H = state.height;
 
-  // Clear canvas with vibrant Klein electric blue
+  // Clear canvas with deep Klein electric blue
   ctx.fillStyle = '#0015ff';
   ctx.fillRect(0, 0, W, H);
 
-  // Draw subtle motion grid
+  // Subtle background motion grid
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
   ctx.lineWidth = 1;
   const gridSize = 40;
   ctx.beginPath();
-  for (let x = 0; x < W; x += gridSize) {
-    ctx.moveTo(x, 0); ctx.lineTo(x, H);
-  }
-  for (let y = 0; y < H; y += gridSize) {
-    ctx.moveTo(0, y); ctx.lineTo(W, y);
-  }
+  for (let x = 0; x < W; x += gridSize) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+  for (let y = 0; y < H; y += gridSize) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
   ctx.stroke();
 
-  // ─────────────────────────────────────────────────────────────────────
-  // RENDER ACTIVE MODE
-  // ─────────────────────────────────────────────────────────────────────
-  if (state.mode === 'type') {
-    renderTypeMode(W, H);
-  } else {
-    renderPulleyMode(W, H);
+  // Render current active animation
+  switch (state.currentAnim) {
+    case 0: renderAnim1_TypeHull(state.time, W, H); break;
+    case 1: renderAnim2_PulleyBelt(state.time, W, H); break;
+    case 2: renderAnim3_Swarm(state.time, W, H); break;
+    case 3: renderAnim4_VectorField(state.time, W, H); break;
+    case 4: renderAnim5_Undulation(state.time, W, H); break;
+    case 5: renderAnim6_Network(state.time, W, H); break;
+    case 6: renderAnim7_Radar(state.time, W, H); break;
+    case 7: renderAnim8_Rollercoaster(state.time, W, H); break;
+    case 8: renderAnim9_Morph(state.time, W, H); break;
   }
 
-  // Update Loop Progress Scrubber
+  // Loop Progress Ring
   const loopFraction = ((state.time % 1.0) + 1.0) % 1.0;
   const strokeOffset = 88 - (loopFraction * 88);
   document.getElementById('loopProgressCircle').style.strokeDashoffset = strokeOffset;
   document.getElementById('loopPercent').textContent = `${Math.round(loopFraction * 100)}%`;
 
-  // FPS Counter
+  // FPS Calculation
   frameCount++;
   if (currentTime - lastFpsUpdate >= 500) {
     const fps = Math.round((frameCount * 1000) / (currentTime - lastFpsUpdate));
@@ -650,189 +1184,6 @@ function animate(currentTime) {
   requestAnimationFrame(animate);
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// RENDER MODE 1: KINETIC TYPOGRAPHY CONVEX HULL
-// ─────────────────────────────────────────────────────────────────────
-function renderTypeMode(W, H) {
-  const cycle = ((state.time % 1.0) + 1.0) % 1.0;
-  const stageFraction = cycle * 4;
-  const currentStage = Math.min(3, Math.max(0, Math.floor(stageFraction)));
-  const nextStage = (currentStage + 1) % 4;
-  const stageT = Math.max(0, Math.min(1, stageFraction - currentStage));
-
-  if (state.currentLayoutIdx !== currentStage) {
-    state.currentLayoutIdx = currentStage;
-    updatePillUI(currentStage);
-  }
-
-  const currentLayout = layouts[currentStage];
-  const nextLayout = layouts[nextStage];
-
-  const spanX = Math.min(W * 0.85, H * 1.35 * 0.85);
-  const spanY = Math.min(H * 0.78, W * 0.65);
-  const centerX = W / 2;
-  const centerY = H / 2;
-
-  const fontSize = Math.max(19, Math.min(Math.round(W * 0.022), 28));
-  ctx.font = `700 ${fontSize}px Helvetica, Arial, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  const letterPoints = [];
-
-  for (let i = 0; i < characters.length; i++) {
-    const ch = characters[i];
-    const pA = currentLayout[i % currentLayout.length];
-    const pB = nextLayout[i % nextLayout.length];
-
-    const stagger = (i / characters.length) * 0.06;
-    const charT = Math.max(0, Math.min(1, (stageT - stagger) / (1 - stagger * 1.5)));
-    const charEased = easeInOutCubic(charT);
-
-    const nx = pA.x + (pB.x - pA.x) * charEased;
-    const ny = pA.y + (pB.y - pA.y) * charEased;
-
-    const isInterior = !pA.isOuter || !pB.isOuter;
-    const driftAmp = isInterior ? 5 : 1.5;
-    const driftX = Math.sin(state.time * Math.PI * 4 + ch.driftPhase) * driftAmp;
-    const driftY = Math.cos(state.time * Math.PI * 3.5 + ch.driftPhase * 1.3) * driftAmp;
-
-    const posX = centerX + nx * spanX + driftX;
-    const posY = centerY + ny * spanY + driftY;
-
-    ch.x = posX;
-    ch.y = posY;
-    letterPoints.push({ x: posX, y: posY, char: ch.char });
-  }
-
-  // Draw 2D Convex Hull
-  if (state.showHull) {
-    const hull = convexHull(letterPoints);
-    if (hull.length > 2) {
-      ctx.save();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.5;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-
-      ctx.beginPath();
-      ctx.moveTo(hull[0].x, hull[0].y);
-      for (let h = 1; h < hull.length; h++) ctx.lineTo(hull[h].x, hull[h].y);
-      ctx.closePath();
-      ctx.stroke();
-
-      ctx.fillStyle = '#ffffff';
-      for (let h = 0; h < hull.length; h++) {
-        ctx.beginPath();
-        ctx.arc(hull[h].x, hull[h].y, 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-    }
-  }
-
-  // Draw Helvetica Characters
-  ctx.fillStyle = '#ffffff';
-  for (let i = 0; i < letterPoints.length; i++) {
-    const pt = letterPoints[i];
-    ctx.fillText(pt.char, pt.x, pt.y);
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// RENDER MODE 2: 6-NODE PULLEY BELT TANGENT CONVEX HULL
-// ─────────────────────────────────────────────────────────────────────
-function renderPulleyMode(W, H) {
-  // Update positions of the 6 circles
-  updatePulleyPositions(state.time, W, H, state.pulleyPresetIdx);
-
-  // Compute smooth external tangent convex hull
-  const cycle = getCircleTangentConvexHull(pulleyNodes);
-
-  // Draw Continuous Closed Tangent Belt
-  if (state.showHull && cycle && cycle.length > 0) {
-    ctx.save();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-
-    for (let i = 0; i < cycle.length; i++) {
-      const curr = cycle[i];
-      const next = cycle[(i + 1) % cycle.length];
-      const c = pulleyNodes[curr.to];
-
-      // Tangent line segment from curr.p1 to curr.p2
-      if (i === 0) {
-        ctx.moveTo(curr.p1.x, curr.p1.y);
-      }
-      ctx.lineTo(curr.p2.x, curr.p2.y);
-
-      // Smooth circular arc along perimeter of circle curr.to
-      let startAngle = curr.angle;
-      let endAngle = next.angle;
-
-      while (endAngle < startAngle) endAngle += Math.PI * 2;
-      if (endAngle - startAngle > Math.PI * 2) endAngle -= Math.PI * 2;
-
-      ctx.arc(c.x, c.y, c.r, startAngle, endAngle, false);
-    }
-
-    ctx.closePath();
-    ctx.stroke();
-
-    // Traveling belt markers (subtle kinetic dashes tracking motion)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 8]);
-    ctx.lineDashOffset = -(state.time * 200);
-    ctx.stroke();
-
-    ctx.restore();
-  }
-
-  // Draw 6 Pulley Nodes (white stroke 2px, transparent fill, radius 18-24px)
-  const textChars = (state.text.length >= 6 ? state.text : (state.text + "PULLEY")).toUpperCase();
-
-  pulleyNodes.forEach((c, i) => {
-    ctx.save();
-    // Transparent fill with 2px white stroke
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Center axle dot (radius 2.5px)
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(c.x, c.y, 2.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Rotating internal spokes synchronized with belt travel speed
-    const spokeRot = (state.time * Math.PI * 6 * (i % 2 === 0 ? 1 : -1)) + (i * Math.PI / 3);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.lineWidth = 1;
-    for (let s = 0; s < 3; s++) {
-      const a = spokeRot + (s * Math.PI * 2 / 3);
-      ctx.beginPath();
-      ctx.moveTo(c.x, c.y);
-      ctx.lineTo(c.x + Math.cos(a) * (c.r - 2), c.y + Math.sin(a) * (c.r - 2));
-      ctx.stroke();
-    }
-
-    // Node label badge
-    ctx.font = '700 11px Helvetica, Arial, sans-serif';
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(textChars[i] || (i + 1).toString(), c.x, c.y - c.r - 12);
-
-    ctx.restore();
-  });
-}
-
 requestAnimationFrame(animate);
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -841,88 +1192,40 @@ requestAnimationFrame(animate);
 
 lucide.createIcons();
 
-// Mode Switcher (01 TYPE HULL / 02 PULLEY BELT)
-const modeTypeBtn = document.getElementById('modeTypeBtn');
-const modePulleyBtn = document.getElementById('modePulleyBtn');
-
-function setMode(mode) {
-  state.mode = mode;
-
-  if (mode === 'type') {
-    modeTypeBtn.classList.add('bg-white', 'text-typoman-blue', 'font-bold', 'shadow-sm');
-    modeTypeBtn.classList.remove('text-white/70');
-    modePulleyBtn.classList.remove('bg-white', 'text-typoman-blue', 'font-bold', 'shadow-sm');
-    modePulleyBtn.classList.add('text-white/70');
-
-    document.getElementById('headerSubtitle').textContent = "Kinetic Typography Studio • Dynamic Convex Hull";
-    document.getElementById('textInputLabel').textContent = "TEXT";
-    updatePillLabels(TYPE_LAYOUT_META);
-    updatePillUI(state.currentLayoutIdx);
-  } else {
-    modePulleyBtn.classList.add('bg-white', 'text-typoman-blue', 'font-bold', 'shadow-sm');
-    modePulleyBtn.classList.remove('text-white/70');
-    modeTypeBtn.classList.remove('bg-white', 'text-typoman-blue', 'font-bold', 'shadow-sm');
-    modeTypeBtn.classList.add('text-white/70');
-
-    document.getElementById('headerSubtitle').textContent = "Pulley Belt Engine • Smooth External Tangent Convex Hull";
-    document.getElementById('textInputLabel').textContent = "NODES";
-    updatePillLabels(PULLEY_PRESET_META);
-    updatePillUI(state.pulleyPresetIdx);
-  }
-}
-
-modeTypeBtn.addEventListener('click', () => setMode('type'));
-modePulleyBtn.addEventListener('click', () => setMode('pulley'));
-
-// Pill Bar Button Handlers
-const pillButtons = document.querySelectorAll('.preset-pill-btn');
-pillButtons.forEach(btn => {
-  btn.addEventListener('click', () => {
-    const idx = parseInt(btn.dataset.idx);
-    if (state.mode === 'type') {
-      state.time = idx * 0.25;
-      updatePillUI(idx);
-    } else {
-      state.pulleyPresetIdx = idx;
-      updatePillUI(idx);
-    }
-  });
+// Build Top 9-Pill Bar
+const navBar = document.getElementById('animNavBar');
+ANIMATIONS.forEach((anim, idx) => {
+  const btn = document.createElement('button');
+  btn.className = `anim-btn px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${idx === 0 ? 'bg-white text-typoman-blue shadow-[0_0_15px_rgba(255,255,255,0.6)]' : 'text-white/70 hover:text-white hover:bg-white/10'}`;
+  btn.innerHTML = `<span class="opacity-60 font-mono text-[8px]">0${idx + 1}</span> <span>${anim.name}</span>`;
+  btn.dataset.idx = idx;
+  btn.addEventListener('click', () => switchAnimation(idx));
+  navBar.appendChild(btn);
 });
 
-function updatePillLabels(metaList) {
-  pillButtons.forEach((b, i) => {
-    const labelSpan = b.querySelector('.pill-label');
-    if (labelSpan && metaList[i]) {
-      labelSpan.textContent = metaList[i].label;
-    }
-  });
-}
-
-function updatePillUI(idx) {
-  const metaList = state.mode === 'type' ? TYPE_LAYOUT_META : PULLEY_PRESET_META;
-  if (idx < 0 || idx >= metaList.length) return;
-  const meta = metaList[idx];
-
-  pillButtons.forEach((b, i) => {
+function switchAnimation(idx) {
+  state.currentAnim = idx;
+  const buttons = document.querySelectorAll('.anim-btn');
+  buttons.forEach((b, i) => {
     if (i === idx) {
-      b.classList.remove('font-medium', 'text-white/80', 'hover:bg-white/10');
-      b.classList.add('font-bold', 'bg-white', 'text-typoman-blue', 'shadow-[0_0_15px_rgba(255,255,255,0.6)]');
+      b.className = 'anim-btn px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5 whitespace-nowrap bg-white text-typoman-blue shadow-[0_0_15px_rgba(255,255,255,0.6)]';
     } else {
-      b.classList.remove('font-bold', 'bg-white', 'text-typoman-blue', 'shadow-[0_0_15px_rgba(255,255,255,0.6)]');
-      b.classList.add('font-medium', 'text-white/80', 'hover:bg-white/10');
+      b.className = 'anim-btn px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5 whitespace-nowrap text-white/70 hover:text-white hover:bg-white/10';
     }
   });
 
-  document.getElementById('shapeTitle').textContent = meta.title;
-  document.getElementById('shapeDesc').textContent = meta.desc;
+  const anim = ANIMATIONS[idx];
+  document.getElementById('animTitle').textContent = anim.title;
+  document.getElementById('animDesc').textContent = anim.desc;
 }
+window.switchAnimation = switchAnimation;
 
 // Live Text Input
 const textInput = document.getElementById('textInput');
 textInput.addEventListener('input', e => {
   const val = e.target.value.trim().toUpperCase();
-  state.text = val.length > 0 ? val : (state.mode === 'type' ? "HELVETICA" : "PULLEY");
-  if (state.mode === 'type') initCharacters();
+  state.text = val.length > 0 ? val : "HELVETICA";
+  initTypeCharacters();
 });
 
 // Play / Pause Toggle
@@ -948,26 +1251,7 @@ speedSlider.addEventListener('input', e => {
   speedDisplay.textContent = `${state.speed.toFixed(1)}×`;
 });
 
-// Convex Hull / Belt Toggle
-const hullToggleBtn = document.getElementById('hullToggleBtn');
-const hullStatusText = document.getElementById('hullStatusText');
-
-function toggleHull() {
-  state.showHull = !state.showHull;
-  if (state.showHull) {
-    hullStatusText.textContent = state.mode === 'type' ? "HULL ON" : "BELT ON";
-    hullToggleBtn.classList.remove('opacity-60');
-    hullToggleBtn.classList.add('bg-white/15');
-  } else {
-    hullStatusText.textContent = state.mode === 'type' ? "HULL OFF" : "BELT OFF";
-    hullToggleBtn.classList.add('opacity-60');
-    hullToggleBtn.classList.remove('bg-white/15');
-  }
-}
-
-hullToggleBtn.addEventListener('click', toggleHull);
-
-// Reset / Sync Phase
+// Reset Phase
 document.getElementById('resetPhaseBtn').addEventListener('click', () => {
   state.time = 0;
 });
@@ -981,81 +1265,7 @@ document.getElementById('fullscreenBtn').addEventListener('click', () => {
   }
 });
 
-// Interactive Dragging for Pulley Nodes
-let draggedNode = null;
-
-canvas.addEventListener('mousedown', e => {
-  if (state.mode !== 'pulley') return;
-  const rect = canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
-
-  for (let i = 0; i < pulleyNodes.length; i++) {
-    const c = pulleyNodes[i];
-    if (Math.hypot(mx - c.x, my - c.y) <= c.r + 14) {
-      draggedNode = i;
-      c.isDragged = true;
-      c.dragX = mx;
-      c.dragY = my;
-      break;
-    }
-  }
-});
-
-window.addEventListener('mousemove', e => {
-  if (draggedNode !== null && state.mode === 'pulley') {
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    pulleyNodes[draggedNode].dragX = mx;
-    pulleyNodes[draggedNode].dragY = my;
-  }
-});
-
-window.addEventListener('mouseup', () => {
-  if (draggedNode !== null) {
-    pulleyNodes[draggedNode].isDragged = false;
-    draggedNode = null;
-  }
-});
-
-// Touch support for dragging pulleys
-canvas.addEventListener('touchstart', e => {
-  if (state.mode !== 'pulley' || e.touches.length === 0) return;
-  const rect = canvas.getBoundingClientRect();
-  const mx = e.touches[0].clientX - rect.left;
-  const my = e.touches[0].clientY - rect.top;
-
-  for (let i = 0; i < pulleyNodes.length; i++) {
-    const c = pulleyNodes[i];
-    if (Math.hypot(mx - c.x, my - c.y) <= c.r + 16) {
-      draggedNode = i;
-      c.isDragged = true;
-      c.dragX = mx;
-      c.dragY = my;
-      break;
-    }
-  }
-}, { passive: true });
-
-window.addEventListener('touchmove', e => {
-  if (draggedNode !== null && state.mode === 'pulley' && e.touches.length > 0) {
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.touches[0].clientX - rect.left;
-    const my = e.touches[0].clientY - rect.top;
-    pulleyNodes[draggedNode].dragX = mx;
-    pulleyNodes[draggedNode].dragY = my;
-  }
-}, { passive: true });
-
-window.addEventListener('touchend', () => {
-  if (draggedNode !== null) {
-    pulleyNodes[draggedNode].isDragged = false;
-    draggedNode = null;
-  }
-});
-
-// Keyboard Shortcuts
+// Keyboard Shortcuts (1-9 for instant animation switching, Space for play/pause)
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
 
@@ -1064,31 +1274,21 @@ document.addEventListener('keydown', e => {
     togglePlay();
   } else if (e.key === 'r' || e.key === 'R') {
     state.time = 0;
-  } else if (e.key === 'h' || e.key === 'H') {
-    toggleHull();
-  } else if (e.key === '1') {
-    setMode('type');
-  } else if (e.key === '2') {
-    setMode('pulley');
+  } else if (e.key >= '1' && e.key <= '9') {
+    switchAnimation(parseInt(e.key) - 1);
   }
 });
 
-// URL Query Parameter Deep Linking (?mode=type|pulley, ?preset=0..3, ?text=...)
+// URL Query Parameter Deep Linking (?anim=0..8 or ?anim=swarm)
 const urlParams = new URLSearchParams(window.location.search);
-if (urlParams.has('mode')) {
-  const m = urlParams.get('mode').toLowerCase();
-  if (m === 'pulley' || m === 'type') setMode(m);
-}
-if (urlParams.has('preset')) {
-  const p = parseInt(urlParams.get('preset'));
-  if (!isNaN(p) && p >= 0 && p <= 3) {
-    if (state.mode === 'pulley') {
-      state.pulleyPresetIdx = p;
-      updatePillUI(p);
-    } else {
-      state.time = p * 0.25;
-      updatePillUI(p);
-    }
+if (urlParams.has('anim')) {
+  const val = urlParams.get('anim');
+  const num = parseInt(val);
+  if (!isNaN(num) && num >= 0 && num < ANIMATIONS.length) {
+    switchAnimation(num);
+  } else {
+    const found = ANIMATIONS.findIndex(a => a.id === val.toLowerCase() || a.name.toLowerCase() === val.toLowerCase());
+    if (found !== -1) switchAnimation(found);
   }
 }
 if (urlParams.has('text')) {
@@ -1096,7 +1296,7 @@ if (urlParams.has('text')) {
   if (txt) {
     state.text = txt;
     textInput.value = txt;
-    if (state.mode === 'type') initCharacters();
+    initTypeCharacters();
   }
 }
 </script>
