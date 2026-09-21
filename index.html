@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TYPOMAN V3 — Kinetic Typography Studio</title>
-<meta name="description" content="Typoman V3: High-performance kinetic typography studio featuring dynamic 2D convex hull perimeter morphing.">
+<title>TYPOMAN V3 — Kinetic Motion & Convex Hull Studio</title>
+<meta name="description" content="Typoman V3: High-performance kinetic typography and procedural motion studio featuring dynamic convex hull and pulley-belt tangent hull animations.">
 
 <!-- Fonts -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -96,11 +96,21 @@ input[type=range]::-webkit-slider-thumb:hover {
         <h1 class="font-syne font-black text-sm tracking-wider text-white uppercase flex items-center gap-2">
           TYPOMAN <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/20 border border-white/30 text-white">V3</span>
         </h1>
-        <p class="text-[10px] text-white/70 font-mono tracking-tight">Kinetic Typography Studio • Dynamic Convex Hull</p>
+        <p class="text-[10px] text-white/70 font-mono tracking-tight" id="headerSubtitle">Kinetic Typography Studio • Dynamic Convex Hull</p>
       </div>
     </div>
 
     <div class="flex items-center gap-3 pointer-events-auto">
+      <!-- Mode Switcher (01 TYPE HULL / 02 PULLEY BELT) -->
+      <div class="flex rounded-lg p-0.5 bg-black/40 border border-white/20 text-[10px] font-mono">
+        <button id="modeTypeBtn" class="mode-btn px-2.5 py-1 rounded font-bold transition-all bg-white text-typoman-blue shadow-sm" data-mode="type" title="Mode 1: Kinetic Type Convex Hull">
+          01 TYPE HULL
+        </button>
+        <button id="modePulleyBtn" class="mode-btn px-2.5 py-1 rounded font-medium transition-all text-white/70 hover:text-white" data-mode="pulley" title="Mode 2: 6-Node Pulley Belt Tangent Hull">
+          02 PULLEY BELT
+        </button>
+      </div>
+
       <!-- Link to Cavalry 7D -->
       <a href="cavalry.html" class="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 border border-white/20 text-[10px] font-mono font-bold text-white flex items-center gap-1.5 transition-all shadow-sm" title="Cavalry 7 Days Motion Graphics">
         <i data-lucide="sparkles" class="w-3 h-3"></i>
@@ -125,19 +135,19 @@ input[type=range]::-webkit-slider-thumb:hover {
     <canvas id="motionCanvas" class="w-full h-full block cursor-grab active:cursor-grabbing"></canvas>
   </main>
 
-  <!-- Shape Selector Pill Bar (Layout A - D) -->
-  <nav class="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 p-1.5 rounded-xl glass-panel text-[11px] font-mono tracking-wide shadow-2xl">
-    <button class="shape-btn px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 bg-white text-typoman-blue shadow-[0_0_15px_rgba(255,255,255,0.6)]" data-layout="0">
-      <span class="opacity-60 text-[9px]">A</span> TRIANGLE
+  <!-- Dynamic Shape / Trajectory Selector Pill Bar -->
+  <nav class="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 p-1.5 rounded-xl glass-panel text-[11px] font-mono tracking-wide shadow-2xl" id="presetNavBar">
+    <button class="preset-pill-btn px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 bg-white text-typoman-blue shadow-[0_0_15px_rgba(255,255,255,0.6)]" data-idx="0">
+      <span class="opacity-60 text-[9px]">A</span> <span class="pill-label">TRIANGLE</span>
     </button>
-    <button class="shape-btn px-3 py-1.5 rounded-lg font-medium transition-all text-white/80 hover:text-white hover:bg-white/10 flex items-center gap-1.5" data-layout="1">
-      <span class="opacity-60 text-[9px]">B</span> OCTAGON
+    <button class="preset-pill-btn px-3 py-1.5 rounded-lg font-medium transition-all text-white/80 hover:text-white hover:bg-white/10 flex items-center gap-1.5" data-idx="1">
+      <span class="opacity-60 text-[9px]">B</span> <span class="pill-label">OCTAGON</span>
     </button>
-    <button class="shape-btn px-3 py-1.5 rounded-lg font-medium transition-all text-white/80 hover:text-white hover:bg-white/10 flex items-center gap-1.5" data-layout="2">
-      <span class="opacity-60 text-[9px]">C</span> TRAPEZOID
+    <button class="preset-pill-btn px-3 py-1.5 rounded-lg font-medium transition-all text-white/80 hover:text-white hover:bg-white/10 flex items-center gap-1.5" data-idx="2">
+      <span class="opacity-60 text-[9px]">C</span> <span class="pill-label">TRAPEZOID</span>
     </button>
-    <button class="shape-btn px-3 py-1.5 rounded-lg font-medium transition-all text-white/80 hover:text-white hover:bg-white/10 flex items-center gap-1.5" data-layout="3">
-      <span class="opacity-60 text-[9px]">D</span> POLYGON
+    <button class="preset-pill-btn px-3 py-1.5 rounded-lg font-medium transition-all text-white/80 hover:text-white hover:bg-white/10 flex items-center gap-1.5" data-idx="3">
+      <span class="opacity-60 text-[9px]">D</span> <span class="pill-label">POLYGON</span>
     </button>
   </nav>
 
@@ -147,7 +157,7 @@ input[type=range]::-webkit-slider-thumb:hover {
     <div class="flex items-center gap-3 flex-1 min-w-[240px]">
       <div class="flex items-center gap-2 text-white/70">
         <i data-lucide="type" class="w-4 h-4 text-white"></i>
-        <span class="text-[10px] font-mono uppercase tracking-wider font-semibold">TEXT</span>
+        <span class="text-[10px] font-mono uppercase tracking-wider font-semibold" id="textInputLabel">TEXT</span>
       </div>
       <input type="text" id="textInput" value="HELVETICA" maxlength="20" placeholder="Type word..."
         class="bg-white/10 border border-white/25 rounded-lg px-3 py-1.5 text-xs font-syne font-bold uppercase tracking-widest text-white placeholder-white/30 focus:outline-none focus:border-white focus:ring-1 focus:ring-white transition-all w-full max-w-[200px]" />
@@ -167,8 +177,8 @@ input[type=range]::-webkit-slider-thumb:hover {
         <span id="speedDisplay" class="text-[11px] font-mono font-bold text-white min-w-[28px]">1.0×</span>
       </div>
 
-      <!-- Convex Hull Toggle Button -->
-      <button id="hullToggleBtn" class="px-2.5 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 border border-white/30 text-white font-mono text-[10px] font-bold flex items-center gap-1.5 transition-all shadow-sm" title="Toggle Convex Hull Perimeter (H)">
+      <!-- Convex Hull / Belt Toggle Button -->
+      <button id="hullToggleBtn" class="px-2.5 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 border border-white/30 text-white font-mono text-[10px] font-bold flex items-center gap-1.5 transition-all shadow-sm" title="Toggle Convex Hull / Belt (H)">
         <i data-lucide="hexagon" class="w-3.5 h-3.5 text-white"></i>
         <span id="hullStatusText">HULL ON</span>
       </button>
@@ -179,11 +189,11 @@ input[type=range]::-webkit-slider-thumb:hover {
       </button>
     </div>
 
-    <!-- Right: Active Shape Info & Loop Scrubber -->
+    <!-- Right: Active Shape / Info & Loop Scrubber -->
     <div class="flex items-center gap-3 w-full md:w-auto justify-end">
       <div class="text-right hidden sm:block">
         <div id="shapeTitle" class="font-syne font-extrabold text-xs text-white tracking-wide uppercase">LAYOUT A: TRIANGLE</div>
-        <div id="shapeDesc" class="font-mono text-[9px] text-white/70">Tilted sharp triangle stretched wide</div>
+        <div id="shapeDesc" class="font-mono text-[9px] text-white/70">Tilted sharp triangle with vertices stretched wide</div>
       </div>
       <!-- Loop Progress Ring -->
       <div class="w-10 h-10 relative flex items-center justify-center">
@@ -198,7 +208,7 @@ input[type=range]::-webkit-slider-thumb:hover {
 
 <script>
 // ═══════════════════════════════════════════════════════════════════════
-// TYPOMAN V3: KINETIC TYPOGRAPHY & DYNAMIC CONVEX HULL ENGINE
+// TYPOMAN V3: KINETIC TYPOGRAPHY & PULLEY-BELT TANGENT HULL ENGINE
 // ═══════════════════════════════════════════════════════════════════════
 
 const canvas = document.getElementById('motionCanvas');
@@ -206,6 +216,7 @@ const ctx = canvas.getContext('2d', { alpha: false });
 
 // Application State
 const state = {
+  mode: 'type', // 'type' | 'pulley'
   text: "HELVETICA",
   instances: 4,
   playing: true,
@@ -214,67 +225,54 @@ const state = {
   time: 0,
   showHull: true,
   currentLayoutIdx: 0,
+  pulleyPresetIdx: 0,
   width: 0,
   height: 0,
   dpr: Math.min(window.devicePixelRatio || 1, 2)
 };
 
-// Layout Metadata
-const LAYOUT_META = [
-  { title: "LAYOUT A: TRIANGLE", desc: "Tilted sharp triangle with vertices stretched wide" },
-  { title: "LAYOUT B: OCTAGON", desc: "Rounded irregular octagon with balanced perimeter" },
-  { title: "LAYOUT C: TRAPEZOID", desc: "Slanted, tall trapezoid with staggered diagonals" },
-  { title: "LAYOUT D: POLYGON", desc: "Compact asymmetrical polygon with sharp corners" }
+// Metadata for Mode 1 (Kinetic Typography)
+const TYPE_LAYOUT_META = [
+  { label: "TRIANGLE", title: "LAYOUT A: TRIANGLE", desc: "Tilted sharp triangle with vertices stretched wide" },
+  { label: "OCTAGON", title: "LAYOUT B: OCTAGON", desc: "Rounded irregular octagon with balanced perimeter" },
+  { label: "TRAPEZOID", title: "LAYOUT C: TRAPEZOID", desc: "Slanted, tall trapezoid with staggered diagonals" },
+  { label: "POLYGON", title: "LAYOUT D: POLYGON", desc: "Compact asymmetrical polygon with sharp corners" }
+];
+
+// Metadata for Mode 2 (Pulley Belt)
+const PULLEY_PRESET_META = [
+  { label: "LISSAJOUS", title: "PULLEY 01: LISSAJOUS", desc: "Harmonic 1:2:3 Lissajous curves with tangent belt" },
+  { label: "ORBITAL", title: "PULLEY 02: ORBITAL", desc: "Wandering dual focal centers with eccentric orbits" },
+  { label: "FIGURE-8", title: "PULLEY 03: FIGURE-8", desc: "Counter-crossing lemniscates with weaving nodes" },
+  { label: "ELASTIC", title: "PULLEY 04: ELASTIC", desc: "Dynamic tension breathing with asymmetrical expansion" }
 ];
 
 // ═══════════════════════════════════════════════════════════════════════
-// 4 SPATIAL LAYOUT COORDINATE MATRICES
-// Normalized [-0.5, 0.5] coordinates for discrete characters.
-// Outer letters define the perimeter; interior letters drift within.
+// MODE 1: KINETIC TYPOGRAPHY LAYOUTS & OBJECTS
 // ═══════════════════════════════════════════════════════════════════════
 
-// Generate 36 discrete normalized coordinate points for each layout
 function generateLayouts(count) {
   // Layout A: Tilted Sharp Triangle
-  // 3 outer vertices: V0=(-0.42, -0.38), V1=(0.44, -0.12), V2=(-0.18, 0.42)
   const layoutA = [];
   const V0 = { x: -0.42, y: -0.38 };
   const V1 = { x: 0.44, y: -0.12 };
   const V2 = { x: -0.18, y: 0.42 };
-
   const perimeterA = 24;
   const interiorA = count - perimeterA;
 
-  // Along edge 0: V0 -> V1 (8 points)
   for (let i = 0; i < 8; i++) {
     const f = i / 8;
-    layoutA.push({
-      x: V0.x + (V1.x - V0.x) * f,
-      y: V0.y + (V1.y - V0.y) * f,
-      isOuter: true
-    });
+    layoutA.push({ x: V0.x + (V1.x - V0.x) * f, y: V0.y + (V1.y - V0.y) * f, isOuter: true });
   }
-  // Along edge 1: V1 -> V2 (8 points)
   for (let i = 0; i < 8; i++) {
     const f = i / 8;
-    layoutA.push({
-      x: V1.x + (V2.x - V1.x) * f,
-      y: V1.y + (V2.y - V1.y) * f,
-      isOuter: true
-    });
+    layoutA.push({ x: V1.x + (V2.x - V1.x) * f, y: V1.y + (V2.y - V1.y) * f, isOuter: true });
   }
-  // Along edge 2: V2 -> V0 (8 points)
   for (let i = 0; i < 8; i++) {
     const f = i / 8;
-    layoutA.push({
-      x: V2.x + (V0.x - V2.x) * f,
-      y: V2.y + (V0.y - V2.y) * f,
-      isOuter: true
-    });
+    layoutA.push({ x: V2.x + (V0.x - V2.x) * f, y: V2.y + (V0.y - V2.y) * f, isOuter: true });
   }
-  // Interior points inside triangle
   for (let i = 0; i < interiorA; i++) {
-    // Barycentric sampling
     const r1 = Math.sqrt((i + 1) / (interiorA + 1));
     const r2 = (i * 0.61803398875) % 1;
     const a = 1 - r1;
@@ -292,14 +290,8 @@ function generateLayouts(count) {
   const perimeterB = 22;
   const interiorB = count - perimeterB;
   const octVertices = [
-    { x: -0.32, y: -0.38 },
-    { x: 0.08, y: -0.42 },
-    { x: 0.38, y: -0.26 },
-    { x: 0.44, y: 0.06 },
-    { x: 0.30, y: 0.38 },
-    { x: -0.06, y: 0.42 },
-    { x: -0.38, y: 0.28 },
-    { x: -0.44, y: -0.08 }
+    { x: -0.32, y: -0.38 }, { x: 0.08, y: -0.42 }, { x: 0.38, y: -0.26 }, { x: 0.44, y: 0.06 },
+    { x: 0.30, y: 0.38 }, { x: -0.06, y: 0.42 }, { x: -0.38, y: 0.28 }, { x: -0.44, y: -0.08 }
   ];
   for (let i = 0; i < perimeterB; i++) {
     const t = (i / perimeterB) * octVertices.length;
@@ -307,62 +299,33 @@ function generateLayouts(count) {
     const frac = t - idx;
     const p1 = octVertices[idx % octVertices.length];
     const p2 = octVertices[(idx + 1) % octVertices.length];
-    layoutB.push({
-      x: p1.x + (p2.x - p1.x) * frac,
-      y: p1.y + (p2.y - p1.y) * frac,
-      isOuter: true
-    });
+    layoutB.push({ x: p1.x + (p2.x - p1.x) * frac, y: p1.y + (p2.y - p1.y) * frac, isOuter: true });
   }
   for (let i = 0; i < interiorB; i++) {
     const angle = (i / interiorB) * Math.PI * 2;
     const rad = 0.12 + ((i % 3) * 0.07);
-    layoutB.push({
-      x: Math.cos(angle) * rad,
-      y: Math.sin(angle) * rad * 0.85,
-      isOuter: false
-    });
+    layoutB.push({ x: Math.cos(angle) * rad, y: Math.sin(angle) * rad * 0.85, isOuter: false });
   }
 
   // Layout C: Slanted, Tall Trapezoid
   const layoutC = [];
   const perimeterC = 24;
   const interiorC = count - perimeterC;
-  const T0 = { x: -0.20, y: -0.42 }; // Top-left
-  const T1 = { x: 0.26, y: -0.34 };  // Top-right
-  const T2 = { x: 0.42, y: 0.40 };   // Bottom-right
-  const T3 = { x: -0.38, y: 0.38 };  // Bottom-left
+  const T0 = { x: -0.20, y: -0.42 };
+  const T1 = { x: 0.26, y: -0.34 };
+  const T2 = { x: 0.42, y: 0.40 };
+  const T3 = { x: -0.38, y: 0.38 };
 
-  // Top edge (4 points)
-  for (let i = 0; i < 4; i++) {
-    const f = i / 4;
-    layoutC.push({ x: T0.x + (T1.x - T0.x) * f, y: T0.y + (T1.y - T0.y) * f, isOuter: true });
-  }
-  // Right slanted edge (8 points)
-  for (let i = 0; i < 8; i++) {
-    const f = i / 8;
-    layoutC.push({ x: T1.x + (T2.x - T1.x) * f, y: T1.y + (T2.y - T1.y) * f, isOuter: true });
-  }
-  // Bottom edge (4 points)
-  for (let i = 0; i < 4; i++) {
-    const f = i / 4;
-    layoutC.push({ x: T2.x + (T3.x - T2.x) * f, y: T2.y + (T3.y - T2.y) * f, isOuter: true });
-  }
-  // Left slanted edge (8 points)
-  for (let i = 0; i < 8; i++) {
-    const f = i / 8;
-    layoutC.push({ x: T3.x + (T0.x - T3.x) * f, y: T3.y + (T0.y - T3.y) * f, isOuter: true });
-  }
-  // Interior cascading lines
+  for (let i = 0; i < 4; i++) layoutC.push({ x: T0.x + (T1.x - T0.x) * (i / 4), y: T0.y + (T1.y - T0.y) * (i / 4), isOuter: true });
+  for (let i = 0; i < 8; i++) layoutC.push({ x: T1.x + (T2.x - T1.x) * (i / 8), y: T1.y + (T2.y - T1.y) * (i / 8), isOuter: true });
+  for (let i = 0; i < 4; i++) layoutC.push({ x: T2.x + (T3.x - T2.x) * (i / 4), y: T2.y + (T3.y - T2.y) * (i / 4), isOuter: true });
+  for (let i = 0; i < 8; i++) layoutC.push({ x: T3.x + (T0.x - T3.x) * (i / 8), y: T3.y + (T0.y - T3.y) * (i / 8), isOuter: true });
   for (let i = 0; i < interiorC; i++) {
     const u = ((i % 4) + 1) / 5;
     const v = (Math.floor(i / 4) + 1) / (Math.ceil(interiorC / 4) + 1);
     const topPt = { x: T0.x + (T1.x - T0.x) * u, y: T0.y + (T1.y - T0.y) * u };
     const btmPt = { x: T3.x + (T2.x - T3.x) * u, y: T3.y + (T2.y - T3.y) * u };
-    layoutC.push({
-      x: topPt.x + (btmPt.x - topPt.x) * v,
-      y: topPt.y + (btmPt.y - topPt.y) * v,
-      isOuter: false
-    });
+    layoutC.push({ x: topPt.x + (btmPt.x - topPt.x) * v, y: topPt.y + (btmPt.y - topPt.y) * v, isOuter: false });
   }
 
   // Layout D: Compact Asymmetrical Polygon
@@ -370,12 +333,8 @@ function generateLayouts(count) {
   const perimeterD = 20;
   const interiorD = count - perimeterD;
   const polyVertices = [
-    { x: -0.28, y: -0.26 },
-    { x: 0.16, y: -0.32 },
-    { x: 0.36, y: -0.06 },
-    { x: 0.28, y: 0.28 },
-    { x: -0.06, y: 0.34 },
-    { x: -0.34, y: 0.14 }
+    { x: -0.28, y: -0.26 }, { x: 0.16, y: -0.32 }, { x: 0.36, y: -0.06 },
+    { x: 0.28, y: 0.28 }, { x: -0.06, y: 0.34 }, { x: -0.34, y: 0.14 }
   ];
   for (let i = 0; i < perimeterD; i++) {
     const t = (i / perimeterD) * polyVertices.length;
@@ -383,108 +342,233 @@ function generateLayouts(count) {
     const frac = t - idx;
     const p1 = polyVertices[idx % polyVertices.length];
     const p2 = polyVertices[(idx + 1) % polyVertices.length];
-    layoutD.push({
-      x: p1.x + (p2.x - p1.x) * frac,
-      y: p1.y + (p2.y - p1.y) * frac,
-      isOuter: true
-    });
+    layoutD.push({ x: p1.x + (p2.x - p1.x) * frac, y: p1.y + (p2.y - p1.y) * frac, isOuter: true });
   }
   for (let i = 0; i < interiorD; i++) {
     const r = (i + 1) / (interiorD + 1);
-    const angle = i * 2.399963; // Golden angle
-    layoutD.push({
-      x: Math.cos(angle) * 0.16 * Math.sqrt(r),
-      y: Math.sin(angle) * 0.16 * Math.sqrt(r),
-      isOuter: false
-    });
+    const angle = i * 2.399963;
+    layoutD.push({ x: Math.cos(angle) * 0.16 * Math.sqrt(r), y: Math.sin(angle) * 0.16 * Math.sqrt(r), isOuter: false });
   }
 
   return [layoutA, layoutB, layoutC, layoutD];
 }
 
-// Build discrete character objects
 let characters = [];
 let layouts = [];
 
 function initCharacters() {
   const text = state.text.toUpperCase();
-  const totalLetters = text.length * state.instances;
   characters = [];
-
   for (let inst = 0; inst < state.instances; inst++) {
     for (let c = 0; c < text.length; c++) {
       characters.push({
         char: text[c],
         index: inst * text.length + c,
-        x: 0,
-        y: 0,
-        targetX: 0,
-        targetY: 0,
+        x: 0, y: 0,
         driftPhase: Math.random() * Math.PI * 2
       });
     }
   }
-
   layouts = generateLayouts(characters.length);
 }
 
 initCharacters();
 
-// ═══════════════════════════════════════════════════════════════════════
-// ANDREW'S MONOTONE CHAIN 2D CONVEX HULL ALGORITHM
-// Computes strictly convex polygon of letter center points in O(N log N)
-// ═══════════════════════════════════════════════════════════════════════
+// Andrew's Monotone Chain 2D Convex Hull Algorithm (for points)
 function convexHull(points) {
   if (points.length <= 2) return points.slice();
-
-  // 1. Sort points lexicographically by x, then y
   const pts = points.slice().sort((a, b) => (a.x === b.x ? a.y - b.y : a.x - b.x));
+  function cross(o, a, b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); }
 
-  // 2D cross product of OA and OB vectors:
-  // > 0 for counter-clockwise, < 0 for clockwise, 0 for collinear
-  function cross(o, a, b) {
-    return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-  }
-
-  // 2. Build lower hull
   const lower = [];
   for (let i = 0; i < pts.length; i++) {
-    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], pts[i]) <= 0) {
-      lower.pop();
-    }
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], pts[i]) <= 0) lower.pop();
     lower.push(pts[i]);
   }
-
-  // 3. Build upper hull
   const upper = [];
   for (let i = pts.length - 1; i >= 0; i--) {
-    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], pts[i]) <= 0) {
-      upper.pop();
-    }
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], pts[i]) <= 0) upper.pop();
     upper.push(pts[i]);
   }
-
-  // Remove duplicate end points
   lower.pop();
   upper.pop();
-
   return lower.concat(upper);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// SMOOTH EASING & INTERPOLATION MATH
+// MODE 2: 6-NODE PULLEY BELT ENGINE & EXTERNAL TANGENT CONVEX HULL
 // ═══════════════════════════════════════════════════════════════════════
-function easeInOutQuint(t) {
-  return t < 0.5 ? 16 * t * t * t * t * t : 1 + 16 * (--t) * t * t * t * t;
+
+// 6 Circles with radii between 18px and 24px
+const pulleyNodes = [
+  { r: 22, label: "01", x: 0, y: 0, dragX: 0, dragY: 0, isDragged: false },
+  { r: 19, label: "02", x: 0, y: 0, dragX: 0, dragY: 0, isDragged: false },
+  { r: 24, label: "03", x: 0, y: 0, dragX: 0, dragY: 0, isDragged: false },
+  { r: 20, label: "04", x: 0, y: 0, dragX: 0, dragY: 0, isDragged: false },
+  { r: 23, label: "05", x: 0, y: 0, dragX: 0, dragY: 0, isDragged: false },
+  { r: 21, label: "06", x: 0, y: 0, dragX: 0, dragY: 0, isDragged: false }
+];
+
+// Calculate coordinates of the 6 pulleys based on active preset
+function updatePulleyPositions(time, W, H, preset) {
+  const t = (time % 1.0);
+  const twoPi = Math.PI * 2;
+  const centerX = W / 2;
+  const centerY = H / 2;
+  const spanX = Math.min(W * 0.42, H * 0.65 * 0.42);
+  const spanY = Math.min(H * 0.38, W * 0.32);
+
+  for (let i = 0; i < 6; i++) {
+    const node = pulleyNodes[i];
+    if (node.isDragged) {
+      node.x = node.dragX;
+      node.y = node.dragY;
+      continue;
+    }
+
+    let nx = 0, ny = 0;
+
+    switch (preset) {
+      case 0: { // 01 LISSAJOUS HARMONIC
+        const params = [
+          { bx: -0.05, by: -0.15, Ax: 0.72, Ay: 0.60, fx: 1, fy: 2, px: 0, py: Math.PI / 3 },
+          { bx: 0.18,  by: -0.08, Ax: 0.65, Ay: 0.75, fx: 2, fy: 1, px: Math.PI / 4, py: 0 },
+          { bx: 0.12,  by: 0.15,  Ax: 0.75, Ay: 0.58, fx: 3, fy: 2, px: Math.PI / 2, py: Math.PI / 4 },
+          { bx: -0.08, by: 0.20,  Ax: 0.68, Ay: 0.65, fx: 1, fy: 3, px: Math.PI, py: Math.PI / 6 },
+          { bx: -0.22, by: 0.05,  Ax: 0.60, Ay: 0.78, fx: 2, fy: 1, px: 3 * Math.PI / 4, py: Math.PI / 2 },
+          { bx: 0.02,  by: 0.02,  Ax: 0.45, Ay: 0.45, fx: 2, fy: 2, px: 0, py: Math.PI / 2 }
+        ][i];
+        nx = params.bx + params.Ax * 0.5 * Math.cos(params.fx * twoPi * t + params.px);
+        ny = params.by + params.Ay * 0.5 * Math.sin(params.fy * twoPi * t + params.py);
+        break;
+      }
+      case 1: { // 02 ORBITAL
+        // Two orbiting barycenters
+        const f1x = Math.cos(twoPi * t) * 0.25;
+        const f1y = Math.sin(twoPi * t) * 0.25;
+        const f2x = -f1x;
+        const f2y = -f1y;
+
+        if (i < 3) {
+          const ang = (twoPi * t * (i + 1)) + (i * twoPi / 3);
+          nx = f1x + Math.cos(ang) * (0.35 + (i * 0.08));
+          ny = f1y + Math.sin(ang) * (0.35 + (i * 0.08)) * 0.8;
+        } else {
+          const j = i - 3;
+          const ang = -(twoPi * t * (j + 1)) + (j * twoPi / 3);
+          nx = f2x + Math.cos(ang) * (0.35 + (j * 0.08));
+          ny = f2y + Math.sin(ang) * (0.35 + (j * 0.08)) * 0.8;
+        }
+        break;
+      }
+      case 2: { // 03 FIGURE-8 (Lemniscates)
+        const phase = (i / 6) * twoPi;
+        const ang = twoPi * t + phase;
+        const denom = 1 + Math.sin(ang) * Math.sin(ang);
+        nx = (Math.cos(ang) / denom) * 0.65;
+        ny = (Math.sin(ang) * Math.cos(ang) / denom) * 0.75;
+        // Stagger radii orientation
+        const rot = (i * Math.PI / 3);
+        const rx = nx * Math.cos(rot) - ny * Math.sin(rot);
+        const ry = nx * Math.sin(rot) + ny * Math.cos(rot);
+        nx = rx; ny = ry;
+        break;
+      }
+      case 3: { // 04 ELASTIC TENSION
+        const baseAngle = (i / 6) * twoPi;
+        const breath = 0.5 + 0.3 * Math.sin(twoPi * t * 2 + i);
+        const wander = 0.15 * Math.cos(twoPi * t + (i * 1.5));
+        nx = Math.cos(baseAngle + wander) * breath * 0.75;
+        ny = Math.sin(baseAngle + wander) * breath * 0.68;
+        break;
+      }
+    }
+
+    node.x = centerX + nx * spanX;
+    node.y = centerY + ny * spanY;
+  }
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// EXACT CIRCLE-TO-CIRCLE EXTERNAL TANGENT CONVEX HULL SOLVER
+// ═══════════════════════════════════════════════════════════════════════
+function getCircleTangentConvexHull(circles) {
+  const n = circles.length;
+  if (n <= 1) return null;
+  const validTangents = [];
+
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      if (i === j) continue;
+      const c1 = circles[i];
+      const c2 = circles[j];
+      const dx = c2.x - c1.x;
+      const dy = c2.y - c1.y;
+      const d = Math.hypot(dx, dy);
+      if (d <= Math.abs(c1.r - c2.r) + 0.5) continue;
+
+      const gamma = Math.atan2(dy, dx);
+      const cosBeta = (c1.r - c2.r) / d;
+      const beta = Math.acos(Math.max(-1, Math.min(1, cosBeta)));
+
+      // Outward normal angle for candidate tangent from c1 to c2
+      const alpha = gamma + beta;
+      const nx = Math.cos(alpha);
+      const ny = Math.sin(alpha);
+      const p1x = c1.x + c1.r * nx;
+      const p1y = c1.y + c1.r * ny;
+
+      // Check if candidate tangent is a support hyperplane for all circles
+      let valid = true;
+      for (let k = 0; k < n; k++) {
+        if (k === i || k === j) continue;
+        const ck = circles[k];
+        const dist = (ck.x - p1x) * nx + (ck.y - p1y) * ny + ck.r;
+        if (dist > 1e-3) {
+          valid = false;
+          break;
+        }
+      }
+
+      if (valid) {
+        validTangents.push({
+          from: i,
+          to: j,
+          angle: alpha,
+          p1: { x: p1x, y: p1y },
+          p2: { x: c2.x + c2.r * nx, y: c2.y + c2.r * ny }
+        });
+      }
+    }
+  }
+
+  if (validTangents.length === 0) return null;
+
+  // Build directed cycle of tangents
+  const nextTangent = new Map();
+  for (const t of validTangents) nextTangent.set(t.from, t);
+
+  const cycle = [];
+  const start = validTangents[0].from;
+  let curr = start;
+  const visited = new Set();
+  while (!visited.has(curr)) {
+    visited.add(curr);
+    const t = nextTangent.get(curr);
+    if (!t) break;
+    cycle.push(t);
+    curr = t.to;
+  }
+  return cycle;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// EASING FUNCTIONS & RESIZE
+// ═══════════════════════════════════════════════════════════════════════
 function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// CANVAS RESIZE & RETINA DPR SCALING
-// ═══════════════════════════════════════════════════════════════════════
 function resizeCanvas() {
   const W = window.innerWidth;
   const H = window.innerHeight;
@@ -504,7 +588,7 @@ window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
 // ═══════════════════════════════════════════════════════════════════════
-// MAIN ANIMATION LOOP
+// MAIN ANIMATION RENDER LOOP (60 FPS)
 // ═══════════════════════════════════════════════════════════════════════
 let lastTime = 0;
 let frameCount = 0;
@@ -522,7 +606,7 @@ function animate(currentTime) {
   const W = state.width;
   const H = state.height;
 
-  // Clear canvas with deep Klein electric blue
+  // Clear canvas with vibrant Klein electric blue
   ctx.fillStyle = '#0015ff';
   ctx.fillRect(0, 0, W, H);
 
@@ -539,116 +623,22 @@ function animate(currentTime) {
   }
   ctx.stroke();
 
-  // Determine current morph stage across 4 layouts (strictly non-negative)
-  const cycle = ((state.time % 1.0) + 1.0) % 1.0;
-  const stageFraction = cycle * 4;
-  const currentStage = Math.min(3, Math.max(0, Math.floor(stageFraction)));
-  const nextStage = (currentStage + 1) % 4;
-  const stageT = Math.max(0, Math.min(1, stageFraction - currentStage));
-  const easedT = easeInOutCubic(stageT);
-
-  // Update layout button UI if stage changed
-  if (state.currentLayoutIdx !== currentStage) {
-    state.currentLayoutIdx = currentStage;
-    updateShapeUI(currentStage);
-  }
-
-  const currentLayout = layouts[currentStage];
-  const nextLayout = layouts[nextStage];
-
-  // Geometric scale factors responsive to screen bounds
-  const spanX = Math.min(W * 0.85, H * 1.35 * 0.85);
-  const spanY = Math.min(H * 0.78, W * 0.65);
-  const centerX = W / 2;
-  const centerY = H / 2;
-
-  // Responsive font size: Helvetica 20-28px
-  const fontSize = Math.max(19, Math.min(Math.round(W * 0.022), 28));
-  ctx.font = `700 ${fontSize}px Helvetica, Arial, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  const letterPoints = [];
-
-  // Interpolate and calculate positions for each character
-  for (let i = 0; i < characters.length; i++) {
-    const ch = characters[i];
-    const pA = currentLayout[i % currentLayout.length];
-    const pB = nextLayout[i % nextLayout.length];
-
-    // Individual character stagger for organic fluid flow
-    const stagger = (i / characters.length) * 0.06;
-    const charT = Math.max(0, Math.min(1, (stageT - stagger) / (1 - stagger * 1.5)));
-    const charEased = easeInOutCubic(charT);
-
-    const nx = pA.x + (pB.x - pA.x) * charEased;
-    const ny = pA.y + (pB.y - pA.y) * charEased;
-
-    // Organic drift for interior characters
-    const isInterior = !pA.isOuter || !pB.isOuter;
-    const driftAmp = isInterior ? 5 : 1.5;
-    const driftX = Math.sin(state.time * Math.PI * 4 + ch.driftPhase) * driftAmp;
-    const driftY = Math.cos(state.time * Math.PI * 3.5 + ch.driftPhase * 1.3) * driftAmp;
-
-    const posX = centerX + nx * spanX + driftX;
-    const posY = centerY + ny * spanY + driftY;
-
-    ch.x = posX;
-    ch.y = posY;
-
-    letterPoints.push({ x: posX, y: posY, char: ch.char, isOuter: !isInterior });
-  }
-
-  // ═════════════════════════════════════════════════════════════════════
-  // DYNAMIC CONVEX HULL CALCULATION (Andrew's Monotone Chain)
-  // ═════════════════════════════════════════════════════════════════════
-  if (state.showHull) {
-    const hull = convexHull(letterPoints);
-
-    if (hull.length > 2) {
-      ctx.save();
-      // 1.5px solid white line enclosing all characters
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.5;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-
-      ctx.beginPath();
-      ctx.moveTo(hull[0].x, hull[0].y);
-      for (let h = 1; h < hull.length; h++) {
-        ctx.lineTo(hull[h].x, hull[h].y);
-      }
-      ctx.closePath();
-      ctx.stroke();
-
-      // Subtle vertex markers at hull corners
-      ctx.fillStyle = '#ffffff';
-      for (let h = 0; h < hull.length; h++) {
-        ctx.beginPath();
-        ctx.arc(hull[h].x, hull[h].y, 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      ctx.restore();
-    }
-  }
-
-  // ═════════════════════════════════════════════════════════════════════
-  // DRAW CHARACTERS (Crisp White Helvetica)
-  // ═════════════════════════════════════════════════════════════════════
-  ctx.fillStyle = '#ffffff';
-  for (let i = 0; i < letterPoints.length; i++) {
-    const pt = letterPoints[i];
-    ctx.fillText(pt.char, pt.x, pt.y);
+  // ─────────────────────────────────────────────────────────────────────
+  // RENDER ACTIVE MODE
+  // ─────────────────────────────────────────────────────────────────────
+  if (state.mode === 'type') {
+    renderTypeMode(W, H);
+  } else {
+    renderPulleyMode(W, H);
   }
 
   // Update Loop Progress Scrubber
-  const loopFraction = (state.time % 1.0);
+  const loopFraction = ((state.time % 1.0) + 1.0) % 1.0;
   const strokeOffset = 88 - (loopFraction * 88);
   document.getElementById('loopProgressCircle').style.strokeDashoffset = strokeOffset;
   document.getElementById('loopPercent').textContent = `${Math.round(loopFraction * 100)}%`;
 
-  // FPS Counter calculation
+  // FPS Counter
   frameCount++;
   if (currentTime - lastFpsUpdate >= 500) {
     const fps = Math.round((frameCount * 1000) / (currentTime - lastFpsUpdate));
@@ -660,38 +650,260 @@ function animate(currentTime) {
   requestAnimationFrame(animate);
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// RENDER MODE 1: KINETIC TYPOGRAPHY CONVEX HULL
+// ─────────────────────────────────────────────────────────────────────
+function renderTypeMode(W, H) {
+  const cycle = ((state.time % 1.0) + 1.0) % 1.0;
+  const stageFraction = cycle * 4;
+  const currentStage = Math.min(3, Math.max(0, Math.floor(stageFraction)));
+  const nextStage = (currentStage + 1) % 4;
+  const stageT = Math.max(0, Math.min(1, stageFraction - currentStage));
+
+  if (state.currentLayoutIdx !== currentStage) {
+    state.currentLayoutIdx = currentStage;
+    updatePillUI(currentStage);
+  }
+
+  const currentLayout = layouts[currentStage];
+  const nextLayout = layouts[nextStage];
+
+  const spanX = Math.min(W * 0.85, H * 1.35 * 0.85);
+  const spanY = Math.min(H * 0.78, W * 0.65);
+  const centerX = W / 2;
+  const centerY = H / 2;
+
+  const fontSize = Math.max(19, Math.min(Math.round(W * 0.022), 28));
+  ctx.font = `700 ${fontSize}px Helvetica, Arial, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const letterPoints = [];
+
+  for (let i = 0; i < characters.length; i++) {
+    const ch = characters[i];
+    const pA = currentLayout[i % currentLayout.length];
+    const pB = nextLayout[i % nextLayout.length];
+
+    const stagger = (i / characters.length) * 0.06;
+    const charT = Math.max(0, Math.min(1, (stageT - stagger) / (1 - stagger * 1.5)));
+    const charEased = easeInOutCubic(charT);
+
+    const nx = pA.x + (pB.x - pA.x) * charEased;
+    const ny = pA.y + (pB.y - pA.y) * charEased;
+
+    const isInterior = !pA.isOuter || !pB.isOuter;
+    const driftAmp = isInterior ? 5 : 1.5;
+    const driftX = Math.sin(state.time * Math.PI * 4 + ch.driftPhase) * driftAmp;
+    const driftY = Math.cos(state.time * Math.PI * 3.5 + ch.driftPhase * 1.3) * driftAmp;
+
+    const posX = centerX + nx * spanX + driftX;
+    const posY = centerY + ny * spanY + driftY;
+
+    ch.x = posX;
+    ch.y = posY;
+    letterPoints.push({ x: posX, y: posY, char: ch.char });
+  }
+
+  // Draw 2D Convex Hull
+  if (state.showHull) {
+    const hull = convexHull(letterPoints);
+    if (hull.length > 2) {
+      ctx.save();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+
+      ctx.beginPath();
+      ctx.moveTo(hull[0].x, hull[0].y);
+      for (let h = 1; h < hull.length; h++) ctx.lineTo(hull[h].x, hull[h].y);
+      ctx.closePath();
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      for (let h = 0; h < hull.length; h++) {
+        ctx.beginPath();
+        ctx.arc(hull[h].x, hull[h].y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  // Draw Helvetica Characters
+  ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < letterPoints.length; i++) {
+    const pt = letterPoints[i];
+    ctx.fillText(pt.char, pt.x, pt.y);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// RENDER MODE 2: 6-NODE PULLEY BELT TANGENT CONVEX HULL
+// ─────────────────────────────────────────────────────────────────────
+function renderPulleyMode(W, H) {
+  // Update positions of the 6 circles
+  updatePulleyPositions(state.time, W, H, state.pulleyPresetIdx);
+
+  // Compute smooth external tangent convex hull
+  const cycle = getCircleTangentConvexHull(pulleyNodes);
+
+  // Draw Continuous Closed Tangent Belt
+  if (state.showHull && cycle && cycle.length > 0) {
+    ctx.save();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+
+    for (let i = 0; i < cycle.length; i++) {
+      const curr = cycle[i];
+      const next = cycle[(i + 1) % cycle.length];
+      const c = pulleyNodes[curr.to];
+
+      // Tangent line segment from curr.p1 to curr.p2
+      if (i === 0) {
+        ctx.moveTo(curr.p1.x, curr.p1.y);
+      }
+      ctx.lineTo(curr.p2.x, curr.p2.y);
+
+      // Smooth circular arc along perimeter of circle curr.to
+      let startAngle = curr.angle;
+      let endAngle = next.angle;
+
+      while (endAngle < startAngle) endAngle += Math.PI * 2;
+      if (endAngle - startAngle > Math.PI * 2) endAngle -= Math.PI * 2;
+
+      ctx.arc(c.x, c.y, c.r, startAngle, endAngle, false);
+    }
+
+    ctx.closePath();
+    ctx.stroke();
+
+    // Traveling belt markers (subtle kinetic dashes tracking motion)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 8]);
+    ctx.lineDashOffset = -(state.time * 200);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // Draw 6 Pulley Nodes (white stroke 2px, transparent fill, radius 18-24px)
+  const textChars = (state.text.length >= 6 ? state.text : (state.text + "PULLEY")).toUpperCase();
+
+  pulleyNodes.forEach((c, i) => {
+    ctx.save();
+    // Transparent fill with 2px white stroke
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Center axle dot (radius 2.5px)
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Rotating internal spokes synchronized with belt travel speed
+    const spokeRot = (state.time * Math.PI * 6 * (i % 2 === 0 ? 1 : -1)) + (i * Math.PI / 3);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 1;
+    for (let s = 0; s < 3; s++) {
+      const a = spokeRot + (s * Math.PI * 2 / 3);
+      ctx.beginPath();
+      ctx.moveTo(c.x, c.y);
+      ctx.lineTo(c.x + Math.cos(a) * (c.r - 2), c.y + Math.sin(a) * (c.r - 2));
+      ctx.stroke();
+    }
+
+    // Node label badge
+    ctx.font = '700 11px Helvetica, Arial, sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(textChars[i] || (i + 1).toString(), c.x, c.y - c.r - 12);
+
+    ctx.restore();
+  });
+}
+
 requestAnimationFrame(animate);
 
 // ═══════════════════════════════════════════════════════════════════════
 // UI & EVENT INTERACTION
 // ═══════════════════════════════════════════════════════════════════════
 
-// Initialize Lucide Icons
 lucide.createIcons();
 
-// Shape / Layout Selector
-const shapeButtons = document.querySelectorAll('.shape-btn');
-shapeButtons.forEach(btn => {
+// Mode Switcher (01 TYPE HULL / 02 PULLEY BELT)
+const modeTypeBtn = document.getElementById('modeTypeBtn');
+const modePulleyBtn = document.getElementById('modePulleyBtn');
+
+function setMode(mode) {
+  state.mode = mode;
+
+  if (mode === 'type') {
+    modeTypeBtn.classList.add('bg-white', 'text-typoman-blue', 'font-bold', 'shadow-sm');
+    modeTypeBtn.classList.remove('text-white/70');
+    modePulleyBtn.classList.remove('bg-white', 'text-typoman-blue', 'font-bold', 'shadow-sm');
+    modePulleyBtn.classList.add('text-white/70');
+
+    document.getElementById('headerSubtitle').textContent = "Kinetic Typography Studio • Dynamic Convex Hull";
+    document.getElementById('textInputLabel').textContent = "TEXT";
+    updatePillLabels(TYPE_LAYOUT_META);
+    updatePillUI(state.currentLayoutIdx);
+  } else {
+    modePulleyBtn.classList.add('bg-white', 'text-typoman-blue', 'font-bold', 'shadow-sm');
+    modePulleyBtn.classList.remove('text-white/70');
+    modeTypeBtn.classList.remove('bg-white', 'text-typoman-blue', 'font-bold', 'shadow-sm');
+    modeTypeBtn.classList.add('text-white/70');
+
+    document.getElementById('headerSubtitle').textContent = "Pulley Belt Engine • Smooth External Tangent Convex Hull";
+    document.getElementById('textInputLabel').textContent = "NODES";
+    updatePillLabels(PULLEY_PRESET_META);
+    updatePillUI(state.pulleyPresetIdx);
+  }
+}
+
+modeTypeBtn.addEventListener('click', () => setMode('type'));
+modePulleyBtn.addEventListener('click', () => setMode('pulley'));
+
+// Pill Bar Button Handlers
+const pillButtons = document.querySelectorAll('.preset-pill-btn');
+pillButtons.forEach(btn => {
   btn.addEventListener('click', () => {
-    const layoutIdx = parseInt(btn.dataset.layout);
-    jumpToLayout(layoutIdx);
+    const idx = parseInt(btn.dataset.idx);
+    if (state.mode === 'type') {
+      state.time = idx * 0.25;
+      updatePillUI(idx);
+    } else {
+      state.pulleyPresetIdx = idx;
+      updatePillUI(idx);
+    }
   });
 });
 
-function jumpToLayout(idx) {
-  // Jump to start of specified layout stage
-  state.time = idx * 0.25;
-  updateShapeUI(idx);
+function updatePillLabels(metaList) {
+  pillButtons.forEach((b, i) => {
+    const labelSpan = b.querySelector('.pill-label');
+    if (labelSpan && metaList[i]) {
+      labelSpan.textContent = metaList[i].label;
+    }
+  });
 }
-window.jumpToLayout = jumpToLayout;
-window.state = state;
 
-function updateShapeUI(idx) {
-  if (idx < 0 || idx >= LAYOUT_META.length) return;
-  const meta = LAYOUT_META[idx];
-  if (!meta) return;
+function updatePillUI(idx) {
+  const metaList = state.mode === 'type' ? TYPE_LAYOUT_META : PULLEY_PRESET_META;
+  if (idx < 0 || idx >= metaList.length) return;
+  const meta = metaList[idx];
 
-  shapeButtons.forEach((b, i) => {
+  pillButtons.forEach((b, i) => {
     if (i === idx) {
       b.classList.remove('font-medium', 'text-white/80', 'hover:bg-white/10');
       b.classList.add('font-bold', 'bg-white', 'text-typoman-blue', 'shadow-[0_0_15px_rgba(255,255,255,0.6)]');
@@ -709,8 +921,8 @@ function updateShapeUI(idx) {
 const textInput = document.getElementById('textInput');
 textInput.addEventListener('input', e => {
   const val = e.target.value.trim().toUpperCase();
-  state.text = val.length > 0 ? val : "HELVETICA";
-  initCharacters();
+  state.text = val.length > 0 ? val : (state.mode === 'type' ? "HELVETICA" : "PULLEY");
+  if (state.mode === 'type') initCharacters();
 });
 
 // Play / Pause Toggle
@@ -736,18 +948,18 @@ speedSlider.addEventListener('input', e => {
   speedDisplay.textContent = `${state.speed.toFixed(1)}×`;
 });
 
-// Convex Hull Toggle
+// Convex Hull / Belt Toggle
 const hullToggleBtn = document.getElementById('hullToggleBtn');
 const hullStatusText = document.getElementById('hullStatusText');
 
 function toggleHull() {
   state.showHull = !state.showHull;
   if (state.showHull) {
-    hullStatusText.textContent = "HULL ON";
+    hullStatusText.textContent = state.mode === 'type' ? "HULL ON" : "BELT ON";
     hullToggleBtn.classList.remove('opacity-60');
     hullToggleBtn.classList.add('bg-white/15');
   } else {
-    hullStatusText.textContent = "HULL OFF";
+    hullStatusText.textContent = state.mode === 'type' ? "HULL OFF" : "BELT OFF";
     hullToggleBtn.classList.add('opacity-60');
     hullToggleBtn.classList.remove('bg-white/15');
   }
@@ -769,6 +981,80 @@ document.getElementById('fullscreenBtn').addEventListener('click', () => {
   }
 });
 
+// Interactive Dragging for Pulley Nodes
+let draggedNode = null;
+
+canvas.addEventListener('mousedown', e => {
+  if (state.mode !== 'pulley') return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  for (let i = 0; i < pulleyNodes.length; i++) {
+    const c = pulleyNodes[i];
+    if (Math.hypot(mx - c.x, my - c.y) <= c.r + 14) {
+      draggedNode = i;
+      c.isDragged = true;
+      c.dragX = mx;
+      c.dragY = my;
+      break;
+    }
+  }
+});
+
+window.addEventListener('mousemove', e => {
+  if (draggedNode !== null && state.mode === 'pulley') {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    pulleyNodes[draggedNode].dragX = mx;
+    pulleyNodes[draggedNode].dragY = my;
+  }
+});
+
+window.addEventListener('mouseup', () => {
+  if (draggedNode !== null) {
+    pulleyNodes[draggedNode].isDragged = false;
+    draggedNode = null;
+  }
+});
+
+// Touch support for dragging pulleys
+canvas.addEventListener('touchstart', e => {
+  if (state.mode !== 'pulley' || e.touches.length === 0) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.touches[0].clientX - rect.left;
+  const my = e.touches[0].clientY - rect.top;
+
+  for (let i = 0; i < pulleyNodes.length; i++) {
+    const c = pulleyNodes[i];
+    if (Math.hypot(mx - c.x, my - c.y) <= c.r + 16) {
+      draggedNode = i;
+      c.isDragged = true;
+      c.dragX = mx;
+      c.dragY = my;
+      break;
+    }
+  }
+}, { passive: true });
+
+window.addEventListener('touchmove', e => {
+  if (draggedNode !== null && state.mode === 'pulley' && e.touches.length > 0) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.touches[0].clientX - rect.left;
+    const my = e.touches[0].clientY - rect.top;
+    pulleyNodes[draggedNode].dragX = mx;
+    pulleyNodes[draggedNode].dragY = my;
+  }
+}, { passive: true });
+
+window.addEventListener('touchend', () => {
+  if (draggedNode !== null) {
+    pulleyNodes[draggedNode].isDragged = false;
+    draggedNode = null;
+  }
+});
+
 // Keyboard Shortcuts
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
@@ -780,10 +1066,39 @@ document.addEventListener('keydown', e => {
     state.time = 0;
   } else if (e.key === 'h' || e.key === 'H') {
     toggleHull();
-  } else if (e.key >= '1' && e.key <= '4') {
-    jumpToLayout(parseInt(e.key) - 1);
+  } else if (e.key === '1') {
+    setMode('type');
+  } else if (e.key === '2') {
+    setMode('pulley');
   }
 });
+
+// URL Query Parameter Deep Linking (?mode=type|pulley, ?preset=0..3, ?text=...)
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.has('mode')) {
+  const m = urlParams.get('mode').toLowerCase();
+  if (m === 'pulley' || m === 'type') setMode(m);
+}
+if (urlParams.has('preset')) {
+  const p = parseInt(urlParams.get('preset'));
+  if (!isNaN(p) && p >= 0 && p <= 3) {
+    if (state.mode === 'pulley') {
+      state.pulleyPresetIdx = p;
+      updatePillUI(p);
+    } else {
+      state.time = p * 0.25;
+      updatePillUI(p);
+    }
+  }
+}
+if (urlParams.has('text')) {
+  const txt = urlParams.get('text').trim().toUpperCase();
+  if (txt) {
+    state.text = txt;
+    textInput.value = txt;
+    if (state.mode === 'type') initCharacters();
+  }
+}
 </script>
 </body>
 </html>
