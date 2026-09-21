@@ -40,8 +40,9 @@ tailwind.config = {
 </script>
 
 <style>
+:root { --bg: #0015ff; --bg-glass: rgba(0, 15, 180, 0.7); }
 *{box-sizing:border-box;margin:0;padding:0;}
-html,body{width:100%;height:100%;overflow:hidden;background:#0015ff;color:#ffffff;font-family:'JetBrains Mono',monospace;-webkit-font-smoothing:antialiased;}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:#ffffff;font-family:'JetBrains Mono',monospace;-webkit-font-smoothing:antialiased;}
 
 /* Custom Range Slider */
 input[type=range] {
@@ -70,7 +71,7 @@ input[type=range]::-webkit-slider-thumb:hover {
 
 /* Glassmorphic Panel */
 .glass-panel {
-  background: rgba(0, 15, 180, 0.7);
+  background: var(--bg-glass);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -88,6 +89,27 @@ input[type=range]::-webkit-slider-thumb:hover {
 /* Custom Scrollbar for top pill nav */
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Color swatch */
+.color-swatch {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.3);
+  cursor: pointer; transition: all 0.15s;
+}
+.color-swatch:hover { transform: scale(1.2); border-color: rgba(255,255,255,0.8); }
+.color-swatch.active { border-color: #ffffff; box-shadow: 0 0 10px rgba(255,255,255,0.6); transform: scale(1.15); }
+
+/* Color input hidden but clickable */
+input[type=color] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px; height: 18px; border: none;
+  border-radius: 50%; cursor: pointer;
+  background: conic-gradient(red,yellow,lime,aqua,blue,magenta,red);
+  padding: 0;
+}
+input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+input[type=color]::-webkit-color-swatch { border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; }
 </style>
 </head>
 <body class="relative w-screen h-screen overflow-hidden select-none bg-grid" id="appBody">
@@ -125,19 +147,22 @@ input[type=range]::-webkit-slider-thumb:hover {
 
   <!-- 9 Animation Selector Pill Bar -->
   <nav class="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 p-1.5 rounded-xl glass-panel text-[11px] font-mono tracking-wide shadow-2xl max-w-[96vw] overflow-x-auto hide-scrollbar" id="animNavBar">
-    <!-- Buttons dynamically rendered / updated in script -->
+  </nav>
+
+  <!-- Variation Sub-Pill Bar (below main nav) -->
+  <nav class="absolute top-[104px] left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 p-1 rounded-lg glass-panel text-[10px] font-mono tracking-wide shadow-xl transition-all duration-200" id="varNavBar" style="display:none;">
   </nav>
 
   <!-- Bottom Floating Control Dashboard -->
   <footer class="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 w-[94%] max-w-4xl px-5 py-3.5 rounded-2xl glass-panel flex flex-wrap items-center justify-between gap-4 shadow-2xl">
     <!-- Left: Custom Text Input -->
-    <div class="flex items-center gap-3 flex-1 min-w-[220px]">
+    <div class="flex items-center gap-3 flex-1 min-w-[180px]">
       <div class="flex items-center gap-2 text-white/70">
         <i data-lucide="type" class="w-4 h-4 text-white"></i>
         <span class="text-[10px] font-mono uppercase tracking-wider font-semibold" id="textInputLabel">TEXT</span>
       </div>
       <input type="text" id="textInput" value="HELVETICA" maxlength="20" placeholder="Type word..."
-        class="bg-white/10 border border-white/25 rounded-lg px-3 py-1.5 text-xs font-syne font-bold uppercase tracking-widest text-white placeholder-white/30 focus:outline-none focus:border-white focus:ring-1 focus:ring-white transition-all w-full max-w-[200px]" />
+        class="bg-white/10 border border-white/25 rounded-lg px-3 py-1.5 text-xs font-syne font-bold uppercase tracking-widest text-white placeholder-white/30 focus:outline-none focus:border-white focus:ring-1 focus:ring-white transition-all w-full max-w-[160px]" />
     </div>
 
     <!-- Center: Playback Controls & Speed -->
@@ -150,18 +175,32 @@ input[type=range]::-webkit-slider-thumb:hover {
       <!-- Speed Slider -->
       <div class="flex items-center gap-2">
         <span class="text-[10px] font-mono text-white/70 uppercase">SPEED</span>
-        <input type="range" id="speedSlider" min="0.2" max="3.0" step="0.1" value="1.0" class="w-20 sm:w-28" />
+        <input type="range" id="speedSlider" min="0.2" max="3.0" step="0.1" value="1.0" class="w-20 sm:w-24" />
         <span id="speedDisplay" class="text-[11px] font-mono font-bold text-white min-w-[28px]">1.0×</span>
       </div>
 
-      <!-- Reset / Sync Phase Button -->
+      <!-- Reset Phase -->
       <button id="resetPhaseBtn" class="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white border border-white/15 transition-all text-[10px] font-mono flex items-center gap-1" title="Sync Phase to 0 (R)">
         <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
       </button>
     </div>
 
-    <!-- Right: Active Animation Info & Loop Scrubber -->
+    <!-- Right: BG Color + Animation Info + Loop -->
     <div class="flex items-center gap-3 w-full md:w-auto justify-end">
+      <!-- Background Color Presets -->
+      <div class="flex items-center gap-1.5" id="bgColorBar">
+        <span class="text-[9px] font-mono text-white/50 uppercase mr-0.5 hidden sm:inline">BG</span>
+        <div class="color-swatch active" data-color="#0015ff" style="background:#0015ff;" title="Klein Blue"></div>
+        <div class="color-swatch" data-color="#030373" style="background:#030373;" title="Deep Navy"></div>
+        <div class="color-swatch" data-color="#000000" style="background:#000000;" title="Void Black"></div>
+        <div class="color-swatch" data-color="#1a1a2e" style="background:#1a1a2e;" title="Midnight"></div>
+        <div class="color-swatch" data-color="#0d1b2a" style="background:#0d1b2a;" title="Dark Slate"></div>
+        <div class="color-swatch" data-color="#2d0050" style="background:#2d0050;" title="Deep Purple"></div>
+        <input type="color" id="bgColorPicker" value="#0015ff" title="Custom Color" />
+      </div>
+
+      <div class="w-px h-6 bg-white/20 hidden sm:block"></div>
+
       <div class="text-right hidden sm:block">
         <div id="animTitle" class="font-syne font-extrabold text-xs text-white tracking-wide uppercase">01: CONVEX HULL</div>
         <div id="animDesc" class="font-mono text-[9px] text-white/70">4-layout kinetic typography convex hull</div>
@@ -188,6 +227,7 @@ const ctx = canvas.getContext('2d', { alpha: false });
 // Global Suite State
 const state = {
   currentAnim: 0,
+  variationIdx: 0,
   text: "HELVETICA",
   playing: true,
   speed: 1.0,
@@ -198,66 +238,103 @@ const state = {
   dpr: Math.min(window.devicePixelRatio || 1, 2),
   mouseX: -9999,
   mouseY: -9999,
-  isHovering: false
+  isHovering: false,
+  bgColor: '#0015ff'
 };
 
-// 9 Animation Definitions
+// 9 Animation Definitions with Variations
 const ANIMATIONS = [
   {
     id: 'type-hull',
     name: 'TYPE HULL',
     title: '01: CONVEX HULL TYPOGRAPHY',
-    desc: '4 spatial layouts with dynamic Andrew Monotone convex hull'
+    desc: '4 spatial layouts with dynamic Andrew Monotone convex hull',
+    variations: ['Drift', 'Snap', 'Elastic']
   },
   {
     id: 'pulley-belt',
     name: 'PULLEY BELT',
     title: '02: PULLEY BELT ENGINE',
-    desc: '6 circular nodes with smooth external tangent convex hull'
+    desc: '6 circular nodes with smooth external tangent convex hull',
+    variations: ['Lissajous', 'Orbital', 'Figure-8', 'Elastic']
   },
   {
     id: 'swarm',
     name: 'SWARM',
     title: '03: BREATHING CIRCLE SWARM',
-    desc: '300 circular particles expanding 80px to 260px with Perlin jitter'
+    desc: '400 circular particles expanding with Perlin jitter',
+    variations: ['Golden Spiral', 'Grid Expand', 'Random Burst']
   },
   {
     id: 'vector-field',
     name: 'VECTOR FIELD',
     title: '04: INTERACTIVE VECTOR FIELD',
-    desc: '16x10 tick grid rotating towards Lissajous / cursor focus'
+    desc: '16x10 tick grid rotating towards focus point',
+    variations: ['Lissajous', 'Spiral', 'Mouse Only']
   },
   {
     id: 'undulation',
     name: 'UNDULATION',
     title: '05: UNDULATING WAVE BASELINE',
-    desc: 'Heavy stroked text translating along undulating sine arch'
+    desc: 'Heavy stroked text translating along undulating wave',
+    variations: ['Sine Wave', 'Zigzag', 'Bounce']
   },
   {
     id: 'network',
     name: 'NETWORK',
     title: '06: ANIMATED GRAPH NETWORK',
-    desc: '8 ring nodes with inward-bowed quadratic spring connections'
+    desc: '8 ring nodes with inward-bowed quadratic connections',
+    variations: ['Orbit', 'Breathe', 'Swirl']
   },
   {
     id: 'radar',
     name: 'RADAR',
     title: '07: RADIAL TYPOGRAPHY RADAR',
-    desc: 'Cartesian grid scanned by moving satellite hub with raycasts'
+    desc: 'Cartesian grid scanned by moving satellite hub',
+    variations: ['Lissajous', 'Circular', 'Random Walk']
   },
   {
     id: 'rollercoaster',
     name: 'ROLLERCOASTER',
     title: '08: ROLLERCOASTER TRACK',
-    desc: '3-rail parallel ribbon spline with 9 letter token trains'
+    desc: '3-rail parallel ribbon spline with letter tokens',
+    variations: ['Lissajous Knot', 'Figure-8', 'Cardioid']
   },
   {
     id: 'morph',
     name: 'MORPH',
     title: '09: TYPOGRAPHY MORPH',
-    desc: 'Abstract geometric primitives morphing into Helvetica wordmark'
+    desc: 'Abstract geometric primitives morphing into wordmark',
+    variations: ['Geometric', 'Pixel Grid', 'Shatter']
   }
 ];
+
+// ═══════════════════════════════════════════════════════════════════════
+// EASING LIBRARY
+// ═══════════════════════════════════════════════════════════════════════
+
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
+}
+
+function easeInOutQuint(t) {
+  return t < 0.5 ? 16 * t * t * t * t * t : 1 - Math.pow(-2 * t + 2, 5) / 2;
+}
+
+function easeOutBack(t) {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+
+function easeOutElastic(t) {
+  if (t === 0 || t === 1) return t;
+  return Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * (2 * Math.PI) / 3) + 1;
+}
+
+function easeStep(t, steps) {
+  return Math.floor(t * steps) / steps;
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // ANIMATION 01: CONVEX HULL TYPOGRAPHY ENGINE
@@ -348,11 +425,12 @@ function convexHull(points) {
 }
 
 function renderAnim1_TypeHull(t, W, H) {
+  const variant = state.variationIdx; // 0=Drift, 1=Snap, 2=Elastic
   const cycle = ((t % 1.0) + 1.0) % 1.0;
   const stageFraction = cycle * 4;
   const stage = Math.min(3, Math.max(0, Math.floor(stageFraction)));
   const nextStage = (stage + 1) % 4;
-  const stageT = Math.max(0, Math.min(1, stageFraction - stage));
+  const rawStageT = Math.max(0, Math.min(1, stageFraction - stage));
 
   const pA = typeLayouts[stage];
   const pB = typeLayouts[nextStage];
@@ -370,9 +448,21 @@ function renderAnim1_TypeHull(t, W, H) {
     const ch = typeCharacters[i];
     const posA = pA[i % pA.length];
     const posB = pB[i % pB.length];
-    const stagger = (i / typeCharacters.length) * 0.06;
-    const charT = Math.max(0, Math.min(1, (stageT - stagger) / (1 - stagger * 1.5)));
-    const charEased = easeInOutCubic(charT);
+    const stagger = (i / typeCharacters.length) * 0.08;
+    let charT = Math.max(0, Math.min(1, (rawStageT - stagger) / (1 - stagger * 1.5)));
+
+    // Variation easing
+    let charEased;
+    if (variant === 1) {
+      // Snap: stepped quantized motion
+      charEased = easeStep(charT, 6);
+    } else if (variant === 2) {
+      // Elastic: spring overshoot
+      charEased = easeOutElastic(charT);
+    } else {
+      // Drift: smooth cubic
+      charEased = easeInOutCubic(charT);
+    }
 
     const nx = posA.x + (posB.x - posA.x) * charEased;
     const ny = posA.y + (posB.y - posA.y) * charEased;
@@ -386,18 +476,22 @@ function renderAnim1_TypeHull(t, W, H) {
     letterPoints.push({ x: px, y: py, char: ch.char });
   }
 
-  // Draw Convex Hull
+  // Draw Convex Hull with glow
   const hull = convexHull(letterPoints);
   if (hull.length > 2) {
     ctx.save();
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1.5;
+    ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
+    ctx.shadowBlur = 8;
     ctx.beginPath();
     ctx.moveTo(hull[0].x, hull[0].y);
     for (let h = 1; h < hull.length; h++) ctx.lineTo(hull[h].x, hull[h].y);
     ctx.closePath();
     ctx.stroke();
+    ctx.shadowBlur = 0;
 
     ctx.fillStyle = '#ffffff';
     for (let h = 0; h < hull.length; h++) {
@@ -467,24 +561,51 @@ function getCircleTangentConvexHull(circles) {
 }
 
 function renderAnim2_PulleyBelt(t, W, H) {
+  const variant = state.variationIdx; // 0=Lissajous, 1=Orbital, 2=Figure-8, 3=Elastic
   const twoPi = Math.PI * 2;
   const cx = W / 2, cy = H / 2;
   const spanX = Math.min(W * 0.42, H * 0.65 * 0.42);
   const spanY = Math.min(H * 0.38, W * 0.32);
 
-  const params = [
-    { bx: -0.05, by: -0.15, Ax: 0.72, Ay: 0.60, fx: 1, fy: 2, px: 0, py: Math.PI / 3 },
-    { bx: 0.18,  by: -0.08, Ax: 0.65, Ay: 0.75, fx: 2, fy: 1, px: Math.PI / 4, py: 0 },
-    { bx: 0.12,  by: 0.15,  Ax: 0.75, Ay: 0.58, fx: 3, fy: 2, px: Math.PI / 2, py: Math.PI / 4 },
-    { bx: -0.08, by: 0.20,  Ax: 0.68, Ay: 0.65, fx: 1, fy: 3, px: Math.PI, py: Math.PI / 6 },
-    { bx: -0.22, by: 0.05,  Ax: 0.60, Ay: 0.78, fx: 2, fy: 1, px: 3 * Math.PI / 4, py: Math.PI / 2 },
-    { bx: 0.02,  by: 0.02,  Ax: 0.45, Ay: 0.45, fx: 2, fy: 2, px: 0, py: Math.PI / 2 }
-  ];
-
+  // Position nodes based on variation
   for (let i = 0; i < 6; i++) {
-    const p = params[i];
-    const nx = p.bx + p.Ax * 0.5 * Math.cos(p.fx * twoPi * t + p.px);
-    const ny = p.by + p.Ay * 0.5 * Math.sin(p.fy * twoPi * t + p.py);
+    let nx, ny;
+    const phase = i * twoPi / 6;
+
+    if (variant === 1) {
+      // Orbital: circular orbits with varying radii
+      const orbitR = 0.35 + (i % 3) * 0.12;
+      const speed = 1 + (i % 2) * 0.5;
+      nx = Math.cos(t * twoPi * speed + phase) * orbitR;
+      ny = Math.sin(t * twoPi * speed + phase) * orbitR * 0.85;
+    } else if (variant === 2) {
+      // Figure-8: infinity-shaped paths
+      const speed = 0.8 + (i % 3) * 0.2;
+      const offset = i * 0.15;
+      nx = Math.sin(t * twoPi * speed + phase) * (0.55 + offset * 0.3);
+      ny = Math.sin(t * twoPi * speed * 2 + phase) * (0.35 + offset * 0.2);
+    } else if (variant === 3) {
+      // Elastic: spring bounce with overshoot
+      const baseAngle = phase + t * twoPi * 0.4;
+      const bounce = Math.sin(t * twoPi * 3 + i * 1.2) * 0.15;
+      const r = 0.38 + bounce;
+      nx = Math.cos(baseAngle) * r + Math.sin(t * twoPi * 2 + i) * 0.08;
+      ny = Math.sin(baseAngle) * r * 0.85 + Math.cos(t * twoPi * 1.5 + i) * 0.06;
+    } else {
+      // Lissajous (default)
+      const params = [
+        { bx: -0.05, by: -0.15, Ax: 0.72, Ay: 0.60, fx: 1, fy: 2, px: 0, py: Math.PI / 3 },
+        { bx: 0.18,  by: -0.08, Ax: 0.65, Ay: 0.75, fx: 2, fy: 1, px: Math.PI / 4, py: 0 },
+        { bx: 0.12,  by: 0.15,  Ax: 0.75, Ay: 0.58, fx: 3, fy: 2, px: Math.PI / 2, py: Math.PI / 4 },
+        { bx: -0.08, by: 0.20,  Ax: 0.68, Ay: 0.65, fx: 1, fy: 3, px: Math.PI, py: Math.PI / 6 },
+        { bx: -0.22, by: 0.05,  Ax: 0.60, Ay: 0.78, fx: 2, fy: 1, px: 3 * Math.PI / 4, py: Math.PI / 2 },
+        { bx: 0.02,  by: 0.02,  Ax: 0.45, Ay: 0.45, fx: 2, fy: 2, px: 0, py: Math.PI / 2 }
+      ];
+      const p = params[i];
+      nx = p.bx + p.Ax * 0.5 * Math.cos(p.fx * twoPi * t + p.px);
+      ny = p.by + p.Ay * 0.5 * Math.sin(p.fy * twoPi * t + p.py);
+    }
+
     pulleyNodes[i].x = cx + nx * spanX;
     pulleyNodes[i].y = cy + ny * spanY;
   }
@@ -495,7 +616,10 @@ function renderAnim2_PulleyBelt(t, W, H) {
     ctx.save();
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.3)';
+    ctx.shadowBlur = 6;
     ctx.beginPath();
     for (let i = 0; i < cycle.length; i++) {
       const curr = cycle[i], next = cycle[(i + 1) % cycle.length], c = pulleyNodes[curr.to];
@@ -508,6 +632,7 @@ function renderAnim2_PulleyBelt(t, W, H) {
     }
     ctx.closePath();
     ctx.stroke();
+    ctx.shadowBlur = 0;
 
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
     ctx.lineWidth = 1;
@@ -553,42 +678,83 @@ function renderAnim2_PulleyBelt(t, W, H) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// ANIMATION 03: BREATHING CIRCLE SWARM (300 PARTICLES)
+// ANIMATION 03: BREATHING CIRCLE SWARM (400 PARTICLES)
 // ═══════════════════════════════════════════════════════════════════════
 
+const SWARM_COUNT = 400;
 const swarmParticles = [];
-for (let i = 0; i < 300; i++) {
+for (let i = 0; i < SWARM_COUNT; i++) {
   swarmParticles.push({
-    normR: Math.sqrt((i + 0.5) / 300),
+    normR: Math.sqrt((i + 0.5) / SWARM_COUNT),
     baseAngle: i * 2.399963, // Golden angle
     freqR: 1 + (i % 3),
     freqT: 1 + ((i * 3) % 4),
-    phase: Math.random() * Math.PI * 2
+    phase: Math.random() * Math.PI * 2,
+    // Grid position for Grid Expand variant
+    gridX: (i % 20) / 19 - 0.5,
+    gridY: Math.floor(i / 20) / 19 - 0.5,
+    // Random position for Random Burst variant
+    randAngle: Math.random() * Math.PI * 2,
+    randR: Math.random()
   });
 }
 
 function renderAnim3_Swarm(t, W, H) {
+  const variant = state.variationIdx; // 0=Golden Spiral, 1=Grid Expand, 2=Random Burst
   const cx = W / 2, cy = H / 2;
-  // Cyclical sine-eased pulse: 80px up to 260px and back over 8s
   const pulse = 0.5 - 0.5 * Math.cos(t * Math.PI * 2);
-  const currentMaxRadius = 80 + pulse * 180; // 80px to 260px
+  const currentMaxRadius = 80 + pulse * 180;
 
   ctx.save();
   ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 1.5;
-  ctx.fillStyle = '#0015ff';
+  ctx.lineCap = 'round';
+  ctx.fillStyle = state.bgColor;
 
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < SWARM_COUNT; i++) {
     const p = swarmParticles[i];
-    // Individual Perlin-like organic jitter & tangential drift
-    const driftAngle = Math.sin(t * Math.PI * 4 + p.phase) * 0.28;
-    const radialJitter = Math.cos(t * Math.PI * 6 + p.phase * 1.5) * 8;
+    let px, py;
 
-    const r = p.normR * currentMaxRadius + radialJitter;
-    const angle = p.baseAngle + driftAngle + (t * 0.4);
+    if (variant === 1) {
+      // Grid Expand: square grid morphing to circle
+      const gridScale = 80 + pulse * 200;
+      const gridPx = cx + p.gridX * gridScale * 2.5;
+      const gridPy = cy + p.gridY * gridScale * 2.5;
+      // Circular position
+      const circAngle = p.baseAngle + t * 0.4;
+      const circR = p.normR * currentMaxRadius;
+      const circPx = cx + Math.cos(circAngle) * circR;
+      const circPy = cy + Math.sin(circAngle) * circR;
+      // Blend between grid and circle
+      const blend = 0.5 - 0.5 * Math.cos(t * Math.PI * 4);
+      px = gridPx + (circPx - gridPx) * blend;
+      py = gridPy + (circPy - gridPy) * blend;
+    } else if (variant === 2) {
+      // Random Burst: explosive scatter from center
+      const burstPhase = (t * 2 + p.phase / Math.PI) % 1.0;
+      const burstEased = easeOutBack(Math.min(1, burstPhase * 1.3));
+      const burstR = burstEased * (80 + pulse * 200);
+      const burstAngle = p.randAngle + Math.sin(t * Math.PI * 2 + p.phase) * 0.3;
+      px = cx + Math.cos(burstAngle) * burstR * p.randR;
+      py = cy + Math.sin(burstAngle) * burstR * p.randR;
+    } else {
+      // Golden Spiral (default)
+      const driftAngle = Math.sin(t * Math.PI * 4 + p.phase) * 0.28;
+      const radialJitter = Math.cos(t * Math.PI * 6 + p.phase * 1.5) * 8;
+      const r = p.normR * currentMaxRadius + radialJitter;
+      const angle = p.baseAngle + driftAngle + (t * 0.4);
+      px = cx + Math.cos(angle) * r;
+      py = cy + Math.sin(angle) * r;
+    }
 
-    const px = cx + Math.cos(angle) * r;
-    const py = cy + Math.sin(angle) * r;
+    // Subtle glow for particles near center
+    const distCenter = Math.hypot(px - cx, py - cy);
+    if (distCenter < 60) {
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+      ctx.shadowBlur = 6;
+    } else {
+      ctx.shadowBlur = 0;
+    }
 
     ctx.beginPath();
     ctx.arc(px, py, 7, 0, Math.PI * 2);
@@ -603,16 +769,33 @@ function renderAnim3_Swarm(t, W, H) {
 // ═══════════════════════════════════════════════════════════════════════
 
 function renderAnim4_VectorField(t, W, H) {
+  const variant = state.variationIdx; // 0=Lissajous, 1=Spiral, 2=Mouse Only
   const cols = 16, rows = 10;
   const padX = W * 0.1, padY = H * 0.15;
   const stepX = (W - padX * 2) / (cols - 1);
   const stepY = (H - padY * 2) / (rows - 1);
 
-  // Focus: smooth Lissajous curve or mouse cursor
-  let focusX = W / 2 + Math.cos(t * Math.PI * 4) * (W * 0.35);
-  let focusY = H / 2 + Math.sin(t * Math.PI * 6 + Math.PI / 4) * (H * 0.30);
+  // Focus point based on variation
+  let focusX, focusY;
+  if (variant === 1) {
+    // Spiral: Archimedean spiral
+    const spiralT = (t * 0.5) % 1.0;
+    const spiralR = spiralT * Math.min(W, H) * 0.4;
+    const spiralAngle = spiralT * Math.PI * 8;
+    focusX = W / 2 + Math.cos(spiralAngle) * spiralR;
+    focusY = H / 2 + Math.sin(spiralAngle) * spiralR;
+  } else if (variant === 2) {
+    // Mouse Only: only responds to cursor
+    focusX = state.isHovering ? state.mouseX : W / 2;
+    focusY = state.isHovering ? state.mouseY : H / 2;
+  } else {
+    // Lissajous (default)
+    focusX = W / 2 + Math.cos(t * Math.PI * 4) * (W * 0.35);
+    focusY = H / 2 + Math.sin(t * Math.PI * 6 + Math.PI / 4) * (H * 0.30);
+  }
 
-  if (state.isHovering && state.mouseX > 0) {
+  // Override with mouse if hovering (except Mouse Only which already uses it)
+  if (variant !== 2 && state.isHovering && state.mouseX > 0) {
     focusX = state.mouseX;
     focusY = state.mouseY;
   }
@@ -621,9 +804,12 @@ function renderAnim4_VectorField(t, W, H) {
   ctx.save();
   ctx.strokeStyle = '#00ff44';
   ctx.lineWidth = 1.5;
+  ctx.shadowColor = 'rgba(0, 255, 68, 0.5)';
+  ctx.shadowBlur = 10;
   ctx.beginPath();
   ctx.arc(focusX, focusY, 22, 0, Math.PI * 2);
   ctx.stroke();
+  ctx.shadowBlur = 0;
   ctx.fillStyle = '#00ff44';
   ctx.beginPath();
   ctx.arc(focusX, focusY, 3, 0, Math.PI * 2);
@@ -644,7 +830,6 @@ function renderAnim4_VectorField(t, W, H) {
       const dist = Math.hypot(dx, dy);
       const angle = Math.atan2(dy, dx);
 
-      // Color dynamics: within 220px, interpolate white (#ffffff) to bright green (#00ff44)
       ctx.save();
       ctx.lineWidth = 2;
       ctx.lineCap = 'round';
@@ -654,6 +839,10 @@ function renderAnim4_VectorField(t, W, H) {
         const red = Math.round(255 * (1 - factor));
         const blue = Math.round(255 * (1 - factor) + 68 * factor);
         ctx.strokeStyle = `rgb(${red}, 255, ${blue})`;
+        if (dist < 80) {
+          ctx.shadowColor = `rgba(0, 255, 68, ${factor * 0.4})`;
+          ctx.shadowBlur = 6;
+        }
       } else {
         ctx.strokeStyle = '#ffffff';
       }
@@ -668,17 +857,33 @@ function renderAnim4_VectorField(t, W, H) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// ANIMATION 05: UNDULATING WAVE BASELINE ("-STROKE-")
+// ANIMATION 05: UNDULATING WAVE BASELINE
 // ═══════════════════════════════════════════════════════════════════════
 
 function renderAnim5_Undulation(t, W, H) {
+  const variant = state.variationIdx; // 0=Sine Wave, 1=Zigzag, 2=Bounce
   const text = state.text.length > 0 ? `-${state.text}-` : "-STROKE-";
   const cx = W / 2, cy = H / 2;
   const waveWidth = Math.min(W * 0.8, 900);
   const maxAmp = H * 0.22;
-  const amp = Math.sin(t * Math.PI * 2) * maxAmp; // Undulate between U and -U arch
 
-  // Draw subtle baseline curve
+  let ampFunc;
+  if (variant === 1) {
+    // Zigzag: sawtooth wave
+    const zigPhase = (t * 2) % 1.0;
+    const zigVal = zigPhase < 0.5 ? zigPhase * 4 - 1 : 3 - zigPhase * 4;
+    ampFunc = (u) => zigVal * maxAmp * (1 - Math.abs(u) * 0.4);
+  } else if (variant === 2) {
+    // Bounce: abs-sine bounce
+    const bounceAmp = Math.abs(Math.sin(t * Math.PI * 2)) * maxAmp;
+    ampFunc = (u) => -bounceAmp * Math.cos(u * Math.PI);
+  } else {
+    // Sine Wave (default)
+    const amp = Math.sin(t * Math.PI * 2) * maxAmp;
+    ampFunc = (u) => amp * Math.cos(u * Math.PI / 2);
+  }
+
+  // Draw baseline curve
   ctx.save();
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
   ctx.lineWidth = 1;
@@ -686,9 +891,9 @@ function renderAnim5_Undulation(t, W, H) {
   ctx.beginPath();
   const samples = 60;
   for (let s = 0; s <= samples; s++) {
-    const u = (s / samples) * 2 - 1; // [-1, 1]
+    const u = (s / samples) * 2 - 1;
     const px = cx + u * (waveWidth / 2);
-    const py = cy + amp * Math.cos(u * Math.PI / 2);
+    const py = cy + ampFunc(u);
     if (s === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
   }
   ctx.stroke();
@@ -702,15 +907,20 @@ function renderAnim5_Undulation(t, W, H) {
   ctx.textBaseline = 'middle';
   ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.shadowColor = 'rgba(255, 255, 255, 0.25)';
+  ctx.shadowBlur = 4;
 
   const totalChars = text.length;
   for (let i = 0; i < totalChars; i++) {
-    const u = ((i + 0.5) / totalChars) * 1.7 - 0.85; // [-0.85, 0.85]
+    const u = ((i + 0.5) / totalChars) * 1.7 - 0.85;
     const px = cx + u * (waveWidth / 2);
-    const py = cy + amp * Math.cos(u * Math.PI / 2);
+    const py = cy + ampFunc(u);
 
-    // Tangent angle
-    const slope = -amp * (Math.PI / waveWidth) * Math.sin(u * Math.PI / 2);
+    // Tangent angle (numerical derivative)
+    const eps = 0.001;
+    const py2 = cy + ampFunc(u + eps);
+    const slope = (py2 - py) / (eps * waveWidth / 2);
     const angle = Math.atan(slope);
 
     ctx.save();
@@ -727,61 +937,72 @@ function renderAnim5_Undulation(t, W, H) {
 // ═══════════════════════════════════════════════════════════════════════
 
 const netKeyframes = [
-  // Keyframe A: Loose oval constellation
-  [
-    { x: -0.32, y: -0.22 }, { x: 0.05, y: -0.35 }, { x: 0.35, y: -0.18 }, { x: 0.38, y: 0.12 },
-    { x: 0.18, y: 0.32 }, { x: -0.15, y: 0.36 }, { x: -0.38, y: 0.15 }, { x: -0.05, y: -0.05 }
-  ],
-  // Keyframe B: Compact high-tension cluster
-  [
-    { x: -0.12, y: -0.14 }, { x: 0.08, y: -0.16 }, { x: 0.16, y: -0.04 }, { x: 0.12, y: 0.12 },
-    { x: -0.02, y: 0.15 }, { x: -0.14, y: 0.08 }, { x: -0.18, y: -0.06 }, { x: 0.01, y: -0.01 }
-  ],
-  // Keyframe C: Tilted linear diagonal formation
-  [
-    { x: -0.38, y: -0.35 }, { x: -0.26, y: -0.24 }, { x: -0.14, y: -0.12 }, { x: -0.02, y: 0.02 },
-    { x: 0.10, y: 0.14 }, { x: 0.22, y: 0.24 }, { x: 0.34, y: 0.35 }, { x: 0.02, y: -0.15 }
-  ]
+  [{ x: -0.32, y: -0.22 }, { x: 0.05, y: -0.35 }, { x: 0.35, y: -0.18 }, { x: 0.38, y: 0.12 },
+   { x: 0.18, y: 0.32 }, { x: -0.15, y: 0.36 }, { x: -0.38, y: 0.15 }, { x: -0.05, y: -0.05 }],
+  [{ x: -0.12, y: -0.14 }, { x: 0.08, y: -0.16 }, { x: 0.16, y: -0.04 }, { x: 0.12, y: 0.12 },
+   { x: -0.02, y: 0.15 }, { x: -0.14, y: 0.08 }, { x: -0.18, y: -0.06 }, { x: 0.01, y: -0.01 }],
+  [{ x: -0.38, y: -0.35 }, { x: -0.26, y: -0.24 }, { x: -0.14, y: -0.12 }, { x: -0.02, y: 0.02 },
+   { x: 0.10, y: 0.14 }, { x: 0.22, y: 0.24 }, { x: 0.34, y: 0.35 }, { x: 0.02, y: -0.15 }]
 ];
 
 function renderAnim6_Network(t, W, H) {
+  const variant = state.variationIdx; // 0=Orbit, 1=Breathe, 2=Swirl
   const cx = W / 2, cy = H / 2;
   const span = Math.min(W * 0.85, H * 0.78);
 
-  const stage = (t * 3) % 3;
-  const idx = Math.floor(stage);
-  const nextIdx = (idx + 1) % 3;
-  const ease = easeInOutCubic(stage - idx);
-
-  const kA = netKeyframes[idx];
-  const kB = netKeyframes[nextIdx];
-
   const currentNodes = [];
-  for (let i = 0; i < 8; i++) {
-    const nx = kA[i].x + (kB[i].x - kA[i].x) * ease;
-    const ny = kA[i].y + (kB[i].y - kA[i].y) * ease;
-    currentNodes.push({
-      x: cx + nx * span,
-      y: cy + ny * span
-    });
+
+  if (variant === 1) {
+    // Breathe: expand/contract radial
+    const breatheR = 0.15 + (0.5 - 0.5 * Math.cos(t * Math.PI * 2)) * 0.28;
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2 + t * Math.PI * 0.3;
+      currentNodes.push({
+        x: cx + Math.cos(angle) * breatheR * span,
+        y: cy + Math.sin(angle) * breatheR * span
+      });
+    }
+  } else if (variant === 2) {
+    // Swirl: rotational vortex
+    for (let i = 0; i < 8; i++) {
+      const baseAngle = (i / 8) * Math.PI * 2;
+      const r = 0.18 + (i % 3) * 0.08 + Math.sin(t * Math.PI * 4 + i) * 0.06;
+      const swirlAngle = baseAngle + t * Math.PI * 2 * (0.5 + (i % 2) * 0.3);
+      currentNodes.push({
+        x: cx + Math.cos(swirlAngle) * r * span,
+        y: cy + Math.sin(swirlAngle) * r * span
+      });
+    }
+  } else {
+    // Orbit (default 3-keyframe)
+    const stage = (t * 3) % 3;
+    const idx = Math.floor(stage);
+    const nextIdx = (idx + 1) % 3;
+    const ease = easeInOutCubic(stage - idx);
+    const kA = netKeyframes[idx];
+    const kB = netKeyframes[nextIdx];
+    for (let i = 0; i < 8; i++) {
+      const nx = kA[i].x + (kB[i].x - kA[i].x) * ease;
+      const ny = kA[i].y + (kB[i].y - kA[i].y) * ease;
+      currentNodes.push({ x: cx + nx * span, y: cy + ny * span });
+    }
   }
 
   // Connect close node pairs with bowed quadratic curves
   ctx.save();
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
   ctx.lineWidth = 1;
+  ctx.lineCap = 'round';
 
   for (let i = 0; i < 8; i++) {
     for (let j = i + 1; j < 8; j++) {
       const p1 = currentNodes[i], p2 = currentNodes[j];
       const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
       if (dist < span * 0.45) {
-        // Midpoint and bowed control point toward cluster center (cx, cy)
         const mx = (p1.x + p2.x) / 2;
         const my = (p1.y + p2.y) / 2;
         const cpx = mx + (cx - mx) * 0.28;
         const cpy = my + (cy - my) * 0.28;
-
         ctx.beginPath();
         ctx.moveTo(p1.x, p1.y);
         ctx.quadraticCurveTo(cpx, cpy, p2.x, p2.y);
@@ -790,13 +1011,12 @@ function renderAnim6_Network(t, W, H) {
     }
   }
 
-  // Draw 8 Ring Nodes: radius 8px, stroke 2.5px white, fill #0015ff
+  // Draw 8 Ring Nodes
   for (let i = 0; i < 8; i++) {
     const node = currentNodes[i];
-    ctx.fillStyle = '#0015ff';
+    ctx.fillStyle = state.bgColor;
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2.5;
-
     ctx.beginPath();
     ctx.arc(node.x, node.y, 8, 0, Math.PI * 2);
     ctx.fill();
@@ -814,15 +1034,41 @@ function renderAnim6_Network(t, W, H) {
 // ANIMATION 07: RADIAL TYPOGRAPHY RADAR
 // ═══════════════════════════════════════════════════════════════════════
 
+let radarWalkX = 0, radarWalkY = 0, radarWalkVx = 1, radarWalkVy = 0.7;
+
 function renderAnim7_Radar(t, W, H) {
+  const variant = state.variationIdx; // 0=Lissajous, 1=Circular, 2=Random Walk
   const word = state.text.length > 0 ? state.text.toUpperCase() : "HELVETICA";
   const spacing = 48;
   const cols = Math.ceil(W / spacing) + 1;
   const rows = Math.ceil(H / spacing) + 1;
 
-  // Satellite Hub trajectory
-  const hubX = W / 2 + Math.cos(t * Math.PI * 2) * (W * 0.32);
-  const hubY = H / 2 + Math.sin(t * Math.PI * 4) * (H * 0.26);
+  // Satellite Hub trajectory based on variation
+  let hubX, hubY;
+  if (variant === 1) {
+    // Circular: constant radius sweep
+    const sweepAngle = t * Math.PI * 2;
+    hubX = W / 2 + Math.cos(sweepAngle) * (W * 0.32);
+    hubY = H / 2 + Math.sin(sweepAngle) * (H * 0.28);
+  } else if (variant === 2) {
+    // Random Walk: Brownian-like wander with bounds
+    radarWalkVx += (Math.sin(t * 17.3) * 0.4);
+    radarWalkVy += (Math.cos(t * 13.7) * 0.4);
+    radarWalkVx *= 0.98;
+    radarWalkVy *= 0.98;
+    radarWalkX += radarWalkVx * 0.8;
+    radarWalkY += radarWalkVy * 0.8;
+    // Soft bounds
+    if (Math.abs(radarWalkX) > W * 0.35) radarWalkVx -= radarWalkX * 0.01;
+    if (Math.abs(radarWalkY) > H * 0.30) radarWalkVy -= radarWalkY * 0.01;
+    hubX = W / 2 + radarWalkX;
+    hubY = H / 2 + radarWalkY;
+  } else {
+    // Lissajous (default)
+    hubX = W / 2 + Math.cos(t * Math.PI * 2) * (W * 0.32);
+    hubY = H / 2 + Math.sin(t * Math.PI * 4) * (H * 0.26);
+  }
+
   const radarRadius = 250;
 
   ctx.save();
@@ -830,7 +1076,6 @@ function renderAnim7_Radar(t, W, H) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  // Draw grid characters and raycasts
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const gx = c * spacing;
@@ -840,7 +1085,6 @@ function renderAnim7_Radar(t, W, H) {
 
       if (dist < radarRadius) {
         const alpha = 1 - (dist / radarRadius);
-        // Draw Raycast line
         ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.65})`;
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -848,7 +1092,6 @@ function renderAnim7_Radar(t, W, H) {
         ctx.lineTo(gx, gy);
         ctx.stroke();
 
-        // Connected character pulses and counter-rotates
         const scale = 1.0 + alpha * 0.7;
         const angle = -Math.PI / 4 + (alpha * Math.PI * 0.5);
 
@@ -860,7 +1103,6 @@ function renderAnim7_Radar(t, W, H) {
         ctx.fillText(char, 0, 0);
         ctx.restore();
       } else {
-        // Base character rotated at -45 degrees
         ctx.save();
         ctx.translate(gx, gy);
         ctx.rotate(-Math.PI / 4);
@@ -874,13 +1116,16 @@ function renderAnim7_Radar(t, W, H) {
   // Draw Satellite Hub
   ctx.save();
   ctx.translate(hubX, hubY);
-  ctx.fillStyle = '#0015ff';
+  ctx.fillStyle = state.bgColor;
   ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 2;
+  ctx.shadowColor = 'rgba(255, 255, 255, 0.3)';
+  ctx.shadowBlur = 12;
   ctx.beginPath();
   ctx.arc(0, 0, 42, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
+  ctx.shadowBlur = 0;
 
   ctx.beginPath();
   ctx.arc(0, 0, 250, 0, Math.PI * 2);
@@ -913,18 +1158,33 @@ function renderAnim7_Radar(t, W, H) {
 // ANIMATION 08: ROLLERCOASTER TYPOGRAPHY TRACK
 // ═══════════════════════════════════════════════════════════════════════
 
-function getRollercoasterPos(u, W, H) {
+function getRollercoasterPos(u, W, H, variant) {
   const cx = W / 2, cy = H / 2;
   const Ax = Math.min(W * 0.36, 460);
   const Ay = Math.min(H * 0.32, 340);
+  let x, y, dx, dy;
 
-  // Elegant closed 3D-feeling Lissajous ribbon knot
-  const x = cx + Math.sin(u) * Ax + Math.sin(2 * u) * (Ax * 0.35);
-  const y = cy + Math.cos(u) * Ay + Math.sin(3 * u) * (Ay * 0.22);
+  if (variant === 1) {
+    // Figure-8: infinity path
+    x = cx + Math.sin(u) * Ax * 1.1;
+    y = cy + Math.sin(u * 2) * Ay * 0.7;
+    dx = Math.cos(u) * Ax * 1.1;
+    dy = Math.cos(u * 2) * 2 * Ay * 0.7;
+  } else if (variant === 2) {
+    // Cardioid: heart-shaped
+    const r = Ax * 0.45 * (1 - Math.cos(u));
+    x = cx + r * Math.cos(u);
+    y = cy + r * Math.sin(u) * 0.85;
+    dx = -Ax * 0.45 * (-Math.sin(u) * Math.cos(u) + (1 - Math.cos(u)) * (-Math.sin(u)));
+    dy = Ax * 0.45 * 0.85 * (Math.sin(u) * Math.sin(u) + (1 - Math.cos(u)) * Math.cos(u));
+  } else {
+    // Lissajous Knot (default)
+    x = cx + Math.sin(u) * Ax + Math.sin(2 * u) * (Ax * 0.35);
+    y = cy + Math.cos(u) * Ay + Math.sin(3 * u) * (Ay * 0.22);
+    dx = Math.cos(u) * Ax + 2 * Math.cos(2 * u) * (Ax * 0.35);
+    dy = -Math.sin(u) * Ay + 3 * Math.cos(3 * u) * (Ay * 0.22);
+  }
 
-  // Tangent derivatives
-  const dx = Math.cos(u) * Ax + 2 * Math.cos(2 * u) * (Ax * 0.35);
-  const dy = -Math.sin(u) * Ay + 3 * Math.cos(3 * u) * (Ay * 0.22);
   const len = Math.hypot(dx, dy) || 1;
   const nx = -dy / len;
   const ny = dx / len;
@@ -933,6 +1193,7 @@ function getRollercoasterPos(u, W, H) {
 }
 
 function renderAnim8_Rollercoaster(t, W, H) {
+  const variant = state.variationIdx;
   const steps = 180;
   const offsets = [-8, 0, 8];
 
@@ -940,12 +1201,13 @@ function renderAnim8_Rollercoaster(t, W, H) {
   ctx.save();
   ctx.lineWidth = 0.8;
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+  ctx.lineCap = 'round';
 
   offsets.forEach(offset => {
     ctx.beginPath();
     for (let s = 0; s <= steps; s++) {
       const u = (s / steps) * Math.PI * 2;
-      const pt = getRollercoasterPos(u, W, H);
+      const pt = getRollercoasterPos(u, W, H, variant);
       const px = pt.x + pt.nx * offset;
       const py = pt.y + pt.ny * offset;
       if (s === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
@@ -955,29 +1217,29 @@ function renderAnim8_Rollercoaster(t, W, H) {
   });
   ctx.restore();
 
-  // Train: 9 circular white outline tokens containing letters
+  // Train tokens
   const word = state.text.length >= 9 ? state.text : (state.text + "HELVETICA").slice(0, 9);
   const numTokens = 9;
 
   for (let k = 0; k < numTokens; k++) {
-    // Constant arc-length separation along the path
     const u = (t * Math.PI * 2 + (k / numTokens) * Math.PI * 2) % (Math.PI * 2);
-    const pt = getRollercoasterPos(u, W, H);
+    const pt = getRollercoasterPos(u, W, H, variant);
 
     ctx.save();
     ctx.translate(pt.x, pt.y);
     ctx.rotate(pt.angle);
 
-    // Token Circle: radius 16px, fill #0015ff, stroke 2px white
-    ctx.fillStyle = '#0015ff';
+    ctx.fillStyle = state.bgColor;
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.3)';
+    ctx.shadowBlur = 6;
     ctx.beginPath();
     ctx.arc(0, 0, 16, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+    ctx.shadowBlur = 0;
 
-    // Letter
     ctx.font = '700 13px Helvetica, Arial, sans-serif';
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
@@ -993,31 +1255,26 @@ function renderAnim8_Rollercoaster(t, W, H) {
 // ═══════════════════════════════════════════════════════════════════════
 
 function renderAnim9_Morph(t, W, H) {
+  const variant = state.variationIdx; // 0=Geometric, 1=Pixel Grid, 2=Shatter
   const word = state.text.length > 0 ? state.text.toUpperCase() : "HELVETICA";
   const cx = W / 2, cy = H / 2;
   const fontSize = Math.max(48, Math.min(Math.round(W * 0.085), 115));
 
-  // Sequence:
-  // 0.0 - 0.35: Abstract Geometry Primitive Blocks
-  // 0.35 - 0.65: Transition / Sharp Legible Wordmark
-  // 0.65 - 1.00: Dissolve back to Geometry
   const cycle = (t % 1.0);
-  let morphT = 0; // 0 = Abstract, 1 = Wordmark
-
+  let morphT = 0;
   if (cycle < 0.25) {
     morphT = 0;
   } else if (cycle < 0.50) {
-    morphT = easeInOutCubic((cycle - 0.25) / 0.25);
+    morphT = easeInOutQuint((cycle - 0.25) / 0.25);
   } else if (cycle < 0.75) {
     morphT = 1.0;
   } else {
-    morphT = 1.0 - easeInOutCubic((cycle - 0.75) / 0.25);
+    morphT = 1.0 - easeInOutQuint((cycle - 0.75) / 0.25);
   }
 
   ctx.save();
   ctx.translate(cx, cy);
 
-  // Measure word width
   ctx.font = `900 ${fontSize}px Syne, Helvetica, Arial, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -1028,8 +1285,6 @@ function renderAnim9_Morph(t, W, H) {
   for (let i = 0; i < word.length; i++) {
     const px = startX + i * charSpacing;
     const py = 0;
-
-    // Abstract geometric primitive
     const h = fontSize * 0.85;
     const w = charSpacing * 0.75;
 
@@ -1039,40 +1294,76 @@ function renderAnim9_Morph(t, W, H) {
     if (morphT < 0.98) {
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2.5;
-      ctx.fillStyle = '#0015ff';
-
-      // Shape variation based on letter index
-      const mode = i % 4;
+      ctx.lineCap = 'round';
+      ctx.fillStyle = state.bgColor;
       const alpha = 1 - morphT;
       ctx.globalAlpha = alpha;
 
-      if (mode === 0) {
-        // Vertical pillar rectangle
-        ctx.strokeRect(-w / 2, -h / 2, w, h);
-      } else if (mode === 1) {
-        // Arch block
+      if (variant === 1) {
+        // Pixel Grid: grid of small squares
+        const gridN = 4;
+        const cellW = w / gridN, cellH = h / gridN;
+        for (let gr = 0; gr < gridN; gr++) {
+          for (let gc = 0; gc < gridN; gc++) {
+            const cx2 = -w / 2 + gc * cellW + cellW / 2;
+            const cy2 = -h / 2 + gr * cellH + cellH / 2;
+            const show = ((gr + gc + i) % 3 !== 0);
+            if (show) {
+              ctx.strokeRect(cx2 - cellW * 0.4, cy2 - cellH * 0.4, cellW * 0.8, cellH * 0.8);
+            }
+          }
+        }
+      } else if (variant === 2) {
+        // Shatter: exploding triangular shards
+        const shatterAngle = (i * 1.3 + t * Math.PI * 4) * (1 - morphT);
+        const shatterDist = (1 - morphT) * 15;
+        ctx.save();
+        ctx.rotate(shatterAngle * 0.3);
+        ctx.translate(Math.sin(i * 2.1 + t * 6) * shatterDist, Math.cos(i * 1.7 + t * 5) * shatterDist);
+        // Triangle shard
         ctx.beginPath();
-        ctx.arc(0, 0, w / 2, 0, Math.PI * 2);
+        ctx.moveTo(0, -h / 3);
+        ctx.lineTo(-w / 3, h / 4);
+        ctx.lineTo(w / 3, h / 4);
+        ctx.closePath();
         ctx.stroke();
-      } else if (mode === 2) {
-        // Diagonal split wedges
+        // Second shard
         ctx.beginPath();
-        ctx.moveTo(-w / 2, h / 2);
-        ctx.lineTo(w / 2, -h / 2);
+        ctx.moveTo(-w / 4, -h / 4);
+        ctx.lineTo(w / 4, -h / 5);
+        ctx.lineTo(0, h / 3);
+        ctx.closePath();
         ctx.stroke();
-        ctx.strokeRect(-w / 2, -h / 2, w, h);
+        ctx.restore();
       } else {
-        // Concentric geometric frame
-        ctx.strokeRect(-w / 2, -h / 2, w, h);
-        ctx.beginPath();
-        ctx.arc(0, 0, w / 4, 0, Math.PI * 2);
-        ctx.stroke();
+        // Geometric (default): pillars, arches, wedges
+        const mode = i % 4;
+        if (mode === 0) {
+          ctx.strokeRect(-w / 2, -h / 2, w, h);
+        } else if (mode === 1) {
+          ctx.beginPath();
+          ctx.arc(0, 0, w / 2, 0, Math.PI * 2);
+          ctx.stroke();
+        } else if (mode === 2) {
+          ctx.beginPath();
+          ctx.moveTo(-w / 2, h / 2);
+          ctx.lineTo(w / 2, -h / 2);
+          ctx.stroke();
+          ctx.strokeRect(-w / 2, -h / 2, w, h);
+        } else {
+          ctx.strokeRect(-w / 2, -h / 2, w, h);
+          ctx.beginPath();
+          ctx.arc(0, 0, w / 4, 0, Math.PI * 2);
+          ctx.stroke();
+        }
       }
     }
 
     if (morphT > 0.02) {
       ctx.globalAlpha = morphT;
       ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.3)';
+      ctx.shadowBlur = morphT * 8;
       ctx.fillText(word[i], 0, 0);
     }
 
@@ -1083,12 +1374,8 @@ function renderAnim9_Morph(t, W, H) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// EASING & UTILITIES
+// CANVAS SETUP & RESIZE
 // ═══════════════════════════════════════════════════════════════════════
-
-function easeInOutCubic(t) {
-  return t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
-}
 
 function resizeCanvas() {
   const W = window.innerWidth;
@@ -1108,7 +1395,7 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-// Mouse tracking for interactive vector field
+// Mouse tracking
 canvas.addEventListener('mousemove', e => {
   const rect = canvas.getBoundingClientRect();
   state.mouseX = e.clientX - rect.left;
@@ -1119,6 +1406,28 @@ canvas.addEventListener('mousemove', e => {
 canvas.addEventListener('mouseleave', () => {
   state.isHovering = false;
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// BACKGROUND COLOR SYSTEM
+// ═══════════════════════════════════════════════════════════════════════
+
+function setBackgroundColor(color) {
+  state.bgColor = color;
+  document.documentElement.style.setProperty('--bg', color);
+
+  // Compute glass panel tint from bg color
+  const r = parseInt(color.slice(1, 3), 16);
+  const g = parseInt(color.slice(3, 5), 16);
+  const b = parseInt(color.slice(5, 7), 16);
+  document.documentElement.style.setProperty('--bg-glass', `rgba(${Math.round(r * 0.7)}, ${Math.round(g * 0.7)}, ${Math.round(b * 0.7)}, 0.7)`);
+
+  document.body.style.background = color;
+
+  // Update active swatch
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+  const match = document.querySelector(`.color-swatch[data-color="${color}"]`);
+  if (match) match.classList.add('active');
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // MAIN RENDER LOOP (60 FPS)
@@ -1140,8 +1449,8 @@ function animate(currentTime) {
   const W = state.width;
   const H = state.height;
 
-  // Clear canvas with deep Klein electric blue
-  ctx.fillStyle = '#0015ff';
+  // Clear canvas with background color
+  ctx.fillStyle = state.bgColor;
   ctx.fillRect(0, 0, W, H);
 
   // Subtle background motion grid
@@ -1203,8 +1512,43 @@ ANIMATIONS.forEach((anim, idx) => {
   navBar.appendChild(btn);
 });
 
+// Variation Sub-Nav
+const varNavBar = document.getElementById('varNavBar');
+
+function buildVariationBar(animIdx) {
+  const anim = ANIMATIONS[animIdx];
+  varNavBar.innerHTML = '';
+  if (!anim.variations || anim.variations.length <= 1) {
+    varNavBar.style.display = 'none';
+    return;
+  }
+  varNavBar.style.display = 'flex';
+  anim.variations.forEach((name, vi) => {
+    const btn = document.createElement('button');
+    btn.className = `var-btn px-2 py-0.5 rounded-md text-[9px] font-bold transition-all whitespace-nowrap ${vi === state.variationIdx ? 'bg-white text-typoman-blue shadow-[0_0_10px_rgba(255,255,255,0.5)]' : 'text-white/60 hover:text-white hover:bg-white/10'}`;
+    btn.textContent = name;
+    btn.dataset.vi = vi;
+    btn.addEventListener('click', () => switchVariation(vi));
+    varNavBar.appendChild(btn);
+  });
+}
+
+function switchVariation(vi) {
+  state.variationIdx = vi;
+  const buttons = document.querySelectorAll('.var-btn');
+  buttons.forEach((b, i) => {
+    if (i === vi) {
+      b.className = 'var-btn px-2 py-0.5 rounded-md text-[9px] font-bold transition-all whitespace-nowrap bg-white text-typoman-blue shadow-[0_0_10px_rgba(255,255,255,0.5)]';
+    } else {
+      b.className = 'var-btn px-2 py-0.5 rounded-md text-[9px] font-bold transition-all whitespace-nowrap text-white/60 hover:text-white hover:bg-white/10';
+    }
+  });
+}
+window.switchVariation = switchVariation;
+
 function switchAnimation(idx) {
   state.currentAnim = idx;
+  state.variationIdx = 0;
   const buttons = document.querySelectorAll('.anim-btn');
   buttons.forEach((b, i) => {
     if (i === idx) {
@@ -1217,8 +1561,26 @@ function switchAnimation(idx) {
   const anim = ANIMATIONS[idx];
   document.getElementById('animTitle').textContent = anim.title;
   document.getElementById('animDesc').textContent = anim.desc;
+  buildVariationBar(idx);
 }
 window.switchAnimation = switchAnimation;
+
+// Initialize variation bar for default animation
+buildVariationBar(0);
+
+// Background Color Swatches
+document.querySelectorAll('.color-swatch').forEach(swatch => {
+  swatch.addEventListener('click', () => {
+    const color = swatch.dataset.color;
+    setBackgroundColor(color);
+    document.getElementById('bgColorPicker').value = color;
+  });
+});
+
+// Custom Color Picker
+document.getElementById('bgColorPicker').addEventListener('input', e => {
+  setBackgroundColor(e.target.value);
+});
 
 // Live Text Input
 const textInput = document.getElementById('textInput');
@@ -1265,7 +1627,7 @@ document.getElementById('fullscreenBtn').addEventListener('click', () => {
   }
 });
 
-// Keyboard Shortcuts (1-9 for instant animation switching, Space for play/pause)
+// Keyboard Shortcuts
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
 
@@ -1276,10 +1638,17 @@ document.addEventListener('keydown', e => {
     state.time = 0;
   } else if (e.key >= '1' && e.key <= '9') {
     switchAnimation(parseInt(e.key) - 1);
+  } else if (e.key === 'ArrowRight') {
+    // Next variation
+    const maxVar = ANIMATIONS[state.currentAnim].variations.length;
+    if (state.variationIdx < maxVar - 1) switchVariation(state.variationIdx + 1);
+  } else if (e.key === 'ArrowLeft') {
+    // Previous variation
+    if (state.variationIdx > 0) switchVariation(state.variationIdx - 1);
   }
 });
 
-// URL Query Parameter Deep Linking (?anim=0..8 or ?anim=swarm)
+// URL Query Parameter Deep Linking
 const urlParams = new URLSearchParams(window.location.search);
 if (urlParams.has('anim')) {
   const val = urlParams.get('anim');
@@ -1297,6 +1666,13 @@ if (urlParams.has('text')) {
     state.text = txt;
     textInput.value = txt;
     initTypeCharacters();
+  }
+}
+if (urlParams.has('bg')) {
+  const bg = urlParams.get('bg');
+  if (/^#[0-9a-fA-F]{6}$/.test(bg)) {
+    setBackgroundColor(bg);
+    document.getElementById('bgColorPicker').value = bg;
   }
 }
 </script>
