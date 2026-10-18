@@ -157,5 +157,52 @@
     ctx.lineJoin = 'round';
   }
 
-  TM.PathKit = { place, shape, tile, affine, weights, quantWeight, keyOf, strokeStyle };
+  const smoothCache = new WeakMap();
+  /**
+   * A copy of the path with corners rounded at about `radius` px (three box-filter passes over an
+   * even resample, ≈ Gaussian). Text laid on it flows round a star's points instead of snapping.
+   * Open paths keep their end points. Cached per sampled path and radius.
+   */
+  function smooth(path, radius) {
+    if (!(radius > 1) || path.n < 3 || path.length < radius * 2) return path;
+    let byR = smoothCache.get(path);
+    if (!byR) smoothCache.set(path, (byR = new Map()));
+    const key = Math.round(radius);
+    let out = byR.get(key);
+    if (out) return out;
+    const n = clamp(Math.round(path.length / Math.max(2, radius / 3)), 64, 720);
+    const step = path.closed ? path.length / n : path.length / (n - 1);
+    let xs = new Float64Array(n), ys = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const p = path.at(Math.min(i * step, path.length));
+      xs[i] = p.x;
+      ys[i] = p.y;
+    }
+    const m = Math.max(1, Math.round(radius / step / 1.7));
+    for (let pass = 0; pass < 3; pass++) {
+      const nx = new Float64Array(n), ny = new Float64Array(n);
+      for (let i = 0; i < n; i++) {
+        let sx = 0, sy = 0, c = 0;
+        for (let j = -m; j <= m; j++) {
+          let k = i + j;
+          if (path.closed) k = ((k % n) + n) % n;
+          else if (k < 0 || k >= n) continue;
+          sx += xs[k];
+          sy += ys[k];
+          c++;
+        }
+        nx[i] = sx / c;
+        ny[i] = sy / c;
+      }
+      if (!path.closed) { nx[0] = xs[0]; ny[0] = ys[0]; nx[n - 1] = xs[n - 1]; ny[n - 1] = ys[n - 1]; }
+      xs = nx;
+      ys = ny;
+    }
+    out = new TM.Path.SampledPath(Float32Array.from(xs), Float32Array.from(ys), path.closed);
+    if (byR.size > 8) byR.clear();
+    byR.set(key, out);
+    return out;
+  }
+
+  TM.PathKit = { place, shape, tile, affine, weights, quantWeight, keyOf, strokeStyle, smooth };
 })(window.TM);
