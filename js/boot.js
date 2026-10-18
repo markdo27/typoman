@@ -39,6 +39,7 @@
     'js/presets/typewriter.js',
     'js/presets/split-flap.js',
     'js/presets/assemble.js',
+    'js/presets/pop.js',
     'js/presets/glitch.js',
   ];
 
