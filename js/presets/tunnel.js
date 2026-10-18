@@ -12,6 +12,7 @@
   const K = TM.PathKit;
   const SEPARATORS = { dot: '•', star: '✦', dash: '—', slash: '/', space: '' };
   const DEG = Math.PI / 180;
+  const BUDGET = 120; // glyphs per frame (rotated glyphs are the cost in software raster)
 
   TM.registerPreset({
     id: 'tunnel',
@@ -22,12 +23,12 @@
     path: 'circle',
     params: [
       TM.P.range('speed', 'Rings per loop', -6, 6, 1, 2, { group: 'Zoom', hint: 'Positive flies in, negative pulls out. Whole steps keep the loop seamless' }),
-      TM.P.range('ratio', 'Ring step', 1.2, 2.2, 0.01, 1.6, { group: 'Zoom', hint: 'Scale between neighbouring rings' }),
+      TM.P.range('ratio', 'Ring step', 1.2, 2.2, 0.01, 1.7, { group: 'Zoom', hint: 'Scale between neighbouring rings' }),
       TM.P.select('rhythm', 'Rhythm', [['glide', 'Glide'], ['pulse', 'Pulse']], 'glide', { group: 'Zoom' }),
       TM.P.ease('pulseEase', 'Pulse ease', 'snap', { group: 'Zoom', showIf: { rhythm: 'pulse' } }),
-      TM.P.range('twist', 'Twist per ring (°)', -45, 45, 0.5, 10, { group: 'Zoom' }),
+      TM.P.range('twist', 'Twist per ring (°)', -90, 90, 0.5, 40, { group: 'Zoom' }),
       TM.P.range('spin', 'Spin (turns per loop)', -3, 3, 1, 0, { group: 'Zoom' }),
-      TM.P.range('textScale', 'Text size', 0.3, 2, 0.01, 0.95, { group: 'Text', hint: '× the layer size on the path itself' }),
+      TM.P.range('textScale', 'Text size', 0.3, 2, 0.01, 1.15, { group: 'Text', hint: '× the layer size on the path itself' }),
       TM.P.select('separator', 'Separator', [['dot', '•'], ['star', '✦'], ['dash', '—'], ['slash', '/'], ['space', 'Space']], 'dot', { group: 'Text' }),
       TM.P.range('gap', 'Gap (em)', 0, 3, 0.05, 0.5, { group: 'Text' }),
       TM.P.range('fog', 'Centre fade', 0, 1, 0.01, 0.6, { group: 'Look', hint: 'How deep the vanishing point fades' }),
@@ -81,9 +82,13 @@
       // Rings appear once their glyphs reach ~9 px and dissolve after they pass the frame's short
       // edge, so the eye stays in the tunnel and huge, costly letters never stack up at the rim.
       const rmax = Math.max(1, sh.rmax);
-      const sMin = 10 / Math.max(1, size * gs);
+      let sMin = 10 / Math.max(1, size * gs);
       const sEdge = Math.max(sMin * ratio * 2, (0.5 * Math.min(f.W, f.H)) / rmax);
       const sMax = sEdge * ratio;
+      // Glyph budget: with long text (many glyphs per ring) the innermost, fogged rings go first,
+      // so a frame never draws more than about BUDGET glyphs whatever the text length.
+      const ringsAllowed = Math.max(2, Math.floor(BUDGET / slots.length));
+      sMin = Math.max(sMin, sMax / Math.pow(ratio, ringsAllowed));
       const mLo = Math.floor(Math.log(sMin) / lr) - 1, mHi = Math.ceil(Math.log(sMax) / lr) + 1;
       const fogEnd = sMin * Math.pow(ratio, 1 + 3 * P.fog);
       const spin = Math.round(P.spin) * TAU * f.p;
