@@ -88,8 +88,14 @@
     return v.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000B-\u001F\u007F]/g, '').slice(0, MAX_TEXT);
   }
 
-  function cleanPath(p) {
-    if (!isObj(p) || !Array.isArray(p.nodes) || p.nodes.length < 1) return null;
+  const PRESET_ID = /^[a-z0-9-]{1,24}$/;
+  function cleanPath(p, aspect) {
+    if (!isObj(p)) return null;
+    // A bare { preset } (how share links store untouched preset paths) is regenerated.
+    if (!Array.isArray(p.nodes) && typeof p.preset === 'string' && PRESET_ID.test(p.preset) && TM.Path.PRESETS.some((x) => x.id === p.preset)) {
+      return TM.Path.preset(p.preset, aspect || 16 / 9);
+    }
+    if (!Array.isArray(p.nodes) || p.nodes.length < 1) return null;
     const nodes = p.nodes.slice(0, MAX_NODES).map((n) => ({
       x: num(n && n.x, 0.5, -1, 2),
       y: num(n && n.y, 0.5, -1, 2),
@@ -100,7 +106,7 @@
       k: pick(n && n.k, ['corner', 'smooth', 'mirror'], 'smooth'),
     }));
     const out = { closed: bool(p.closed, false) && nodes.length > 2, nodes };
-    if (typeof p.preset === 'string' && /^[a-z0-9-]{1,24}$/.test(p.preset)) out.preset = p.preset;
+    if (typeof p.preset === 'string' && PRESET_ID.test(p.preset)) out.preset = p.preset;
     return out;
   }
 
@@ -132,7 +138,7 @@
     const f = s.fill || {}, st = s.stroke || {}, ty = s.type || {}, fx = s.fx || {};
     const palette = Array.isArray(f.palette) ? f.palette.filter(TM.color.isHex).slice(0, 8).map((c) => c.toLowerCase()) : [];
 
-    let path = cleanPath(s.path);
+    let path = cleanPath(s.path, aspect);
     if (!path && preset && preset.usesPath) path = TM.Path.preset(preset.path || 'wave', aspect);
     const pm = s.pathMorph || {};
 
@@ -167,7 +173,7 @@
       path,
       pathMorph: {
         enabled: bool(pm.enabled, false),
-        target: cleanPath(pm.target),
+        target: cleanPath(pm.target, aspect),
         ease: ease(pm.ease, 'smooth'),
       },
       fx: {
@@ -258,7 +264,10 @@
       const base = defaultLayer();
       base.preset = l.preset;
       base.params = TM.presetDefaults(l.preset);
-      const m = diff(l, base) || {};
+      // Untouched preset paths travel as just their id; they're regenerated on decode.
+      const slim = { ...l, path: l.path && l.path.preset ? { preset: l.path.preset } : l.path };
+      if (l.pathMorph && l.pathMorph.target && l.pathMorph.target.preset) slim.pathMorph = { ...l.pathMorph, target: { preset: l.pathMorph.target.preset } };
+      const m = diff(slim, base) || {};
       m.preset = l.preset; // always explicit
       return m;
     });
