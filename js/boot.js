@@ -42,6 +42,10 @@
     'js/presets/typewriter.js',
     'js/presets/split-flap.js',
     'js/presets/assemble.js',
+    'js/presets/pop.js',
+    'js/presets/glitch.js',
+    'js/presets/cylinder.js',
+    'js/presets/flip.js',
   ];
 
   // ── Export & embed runtime (owner: export team) ──
