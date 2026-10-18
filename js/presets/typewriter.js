@@ -110,7 +110,8 @@
       }
 
       // Live centring: each line's offset for every state.
-      const af = L.lines.length && f.layer.type.align === 'right' ? 1 : f.layer.type.align === 'left' ? 0 : 0.5;
+      const align = f.layer.type.align;
+      const af = align === 'right' ? 1 : align === 'left' ? 0 : 0.5; // share of the untyped width a line shifts by
       const offsets = pos.map((ps) => L.lines.map((line, li) => {
         const typed = ps.line > li ? line.width : ps.line === li ? Math.max(0, ps.x - half - line.x) : 0;
         return af * (line.width - typed);

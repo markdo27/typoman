@@ -98,7 +98,6 @@
             const gather = a > 0 ? Math.sin(Math.PI / 2 * clamp(kout / a)) * (1 - smoothstep(a, a + 0.12, kout)) : 0;
             const w = clamp((kout - a * 0.85) / (1 - a * 0.85));
             const d = eOut(w) * P.blast * f.unit * sg.bf;
-            const hx = f.cx + g.cx, hy = f.cy + g.cy;
             // Gather toward the block centre, then blast.
             x += -g.cx * 0.09 * ant * gather + sg.bx * d;
             y += -g.cy * 0.09 * ant * gather + sg.by * d;
@@ -106,7 +105,6 @@
             rot += sg.bspin * 300 * DEG * eOut(w);
             z += sg.bz * P.depth * 1.1 * eOut(w);
             alpha *= 1 - smoothstep(0.45, 1, w);
-            void hx; void hy;
           } else {
             const w = s.vout;
             x += sg.ox * R * w;
@@ -122,7 +120,7 @@
         const persp = 1 / (1 - zz * 0.6);
         alpha *= zz < 0 ? 1 + zz * 0.55 : 1; // far letters sink into the background
         if (alpha <= 0.002) continue;
-        items.push({ g, z: zz, x: f.cx + g.cx * 1 + x * 1, y: f.cy + g.cy + y, rot, scale: scale * persp, alpha, persp });
+        items.push({ g, z: zz, x: f.cx + g.cx + x, y: f.cy + g.cy + y, rot, scale: scale * persp, alpha, persp });
       }
 
       items.sort((a, b) => a.z - b.z);

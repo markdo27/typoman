@@ -13,7 +13,7 @@
  */
 (function (TM) {
   'use strict';
-  const { clamp, smoothstep, fract } = TM.math;
+  const { smoothstep, fract } = TM.math;
   const NOISE = '#%&@$¥§01/\\|=+<>?!';
 
   function makeCanvas(w, h) {
