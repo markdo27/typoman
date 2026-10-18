@@ -31,6 +31,8 @@
 
   // ── Presets: path & loop family (owner: preset team A) ──
   var PRESETS_A = [
+    'js/presets/path-kit.js',
+    'js/presets/wave.js',
   ];
 
   // ── Presets: reveal, glitch & dimensional family (owner: preset team B) ──
