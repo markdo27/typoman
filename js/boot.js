@@ -42,6 +42,7 @@
     'js/presets/pop.js',
     'js/presets/glitch.js',
     'js/presets/cylinder.js',
+    'js/presets/flip.js',
   ];
 
   // ── Export & embed runtime (owner: export team) ──
