@@ -236,14 +236,6 @@
     const u = 1 - t, a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
     return [a * s[0] + b * s[2] + c * s[4] + d * s[6], a * s[1] + b * s[3] + c * s[5] + d * s[7]];
   }
-  function segD1(s, t) {
-    const u = 1 - t, a = 3 * u * u, b = 6 * u * t, c = 3 * t * t;
-    return [a * (s[2] - s[0]) + b * (s[4] - s[2]) + c * (s[6] - s[4]), a * (s[3] - s[1]) + b * (s[5] - s[3]) + c * (s[7] - s[5])];
-  }
-  function segD2(s, t) {
-    const u = 1 - t;
-    return [6 * u * (s[4] - 2 * s[2] + s[0]) + 6 * t * (s[6] - 2 * s[4] + s[2]), 6 * u * (s[5] - 2 * s[3] + s[1]) + 6 * t * (s[7] - 2 * s[5] + s[3])];
-  }
 
   const sampleCache = new Map();
   /** Sample a path definition into a SampledPath in pixel space (cached by content + size). */
@@ -326,28 +318,24 @@
       const s = segs[si];
       const poly = hyp(s[2] - s[0], s[3] - s[1]) + hyp(s[4] - s[2], s[5] - s[3]) + hyp(s[6] - s[4], s[7] - s[5]);
       const N = clamp(Math.ceil(poly / 6), 8, 128);
+      const dist2 = (t) => { const p = segPoint(s, t); return (p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y); };
       let bt = 0, bd = Infinity;
       for (let k = 0; k <= N; k++) {
-        const p = segPoint(s, k / N);
-        const d = (p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y);
+        const d = dist2(k / N);
         if (d < bd) { bd = d; bt = k / N; }
       }
-      if (bd > best.d2 + poly * poly) continue; // this segment cannot win
-      // Newton on (B(t) − P)·B'(t) = 0, kept only where it improves on the coarse pick.
-      let t = bt;
-      for (let it = 0; it < 8; it++) {
-        const p = segPoint(s, t), d1 = segD1(s, t), d2 = segD2(s, t);
-        const ex = p[0] - x, ey = p[1] - y;
-        const num = ex * d1[0] + ey * d1[1];
-        const den = d1[0] * d1[0] + d1[1] * d1[1] + ex * d2[0] + ey * d2[1];
-        if (!(Math.abs(den) > 1e-12)) break;
-        const nt = clamp(t - num / den, 0, 1);
-        const done = Math.abs(nt - t) < 1e-9;
-        t = nt;
-        if (done) break;
+      // The true minimum is at most one coarse step (≤ poly / N px) closer than the pick.
+      if (Math.sqrt(bd) - poly / N > Math.sqrt(best.d2)) continue;
+      // Golden-section search inside the neighbouring coarse intervals: robust even where
+      // B'(t) vanishes (straight segments with retracted handles), unlike Newton.
+      let lo = Math.max(0, bt - 1 / N), hi = Math.min(1, bt + 1 / N);
+      const g = 0.6180339887;
+      let c = hi - g * (hi - lo), e = lo + g * (hi - lo), fc = dist2(c), fe = dist2(e);
+      for (let it = 0; it < 30; it++) {
+        if (fc < fe) { hi = e; e = c; fe = fc; c = hi - g * (hi - lo); fc = dist2(c); }
+        else { lo = c; c = e; fc = fe; e = lo + g * (hi - lo); fe = dist2(e); }
       }
-      const p = segPoint(s, t);
-      const d = (p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y);
+      const t = fc < fe ? c : e, d = Math.min(fc, fe);
       if (d < bd) { bd = d; bt = t; }
       if (bd < best.d2) best = { seg: si, t: bt, d2: bd };
     }
