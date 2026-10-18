@@ -36,6 +36,7 @@
     'js/presets/path-land.js',
     'js/presets/path-draw.js',
     'js/presets/orbit.js',
+    'js/presets/tunnel.js',
   ];
 
   // ── Presets: reveal, glitch & dimensional family (owner: preset team B) ──

@@ -66,14 +66,14 @@
 
   /**
    * Slots that tile `line` (a layout line) along `length` px, kerning kept from the layout.
-   * o: { closed, gap (px between repeats), sep, sepW, repeat (bool), fitMargin (0..1) }
+   * o: { closed, gap (px between repeats), sep, sepW, repeat (bool), fitMargin (0..1), layout }
    * Returns { items:[{ g, off, w }], unit, reps, k } where off is the slot centre from the start
    * of a repeat (already multiplied by k), unit the repeat length and k a down-scale applied when
    * the line is longer than the path. On closed paths the gap stretches so a whole number of
    * repeats closes exactly, with no seam where the path joins.
    */
   function tile(f, line, length, o = {}) {
-    const L = f.layout;
+    const L = o.layout || f.layout;
     const items = [];
     if (!line || !line.glyphs.length) return { items, unit: length || 1, reps: 0, k: 1 };
     const x0 = L.glyphs[line.glyphs[0]].x;
