@@ -61,7 +61,7 @@
   Studio.openCurveEditor = function (anchor, o) {
     let spec = o.get();
     let raf = 0;
-    const G = { w: 280, h: 196, pad: 14 };
+    const G = { w: 280, h: 164, pad: 14 };
     const box = { x: G.pad, y: 8, w: G.w - G.pad * 2, h: G.h - 16 };
     const X = (t) => box.x + t * box.w;
     const Y = (v) => box.y + ((Y_HI - v) / (Y_HI - Y_LO)) * box.h;

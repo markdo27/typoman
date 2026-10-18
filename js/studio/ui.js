@@ -27,7 +27,7 @@
         else el.setAttribute(k, v === true ? '' : v);
       }
     }
-    for (const c of children.flat()) if (c != null && c !== false) el.append(c.nodeType ? c : document.createTextNode(c));
+    for (const c of children.flat(Infinity)) if (c != null && c !== false) el.append(c.nodeType ? c : document.createTextNode(c));
     return el;
   }
   Studio.h = h;
@@ -194,21 +194,16 @@
       const room = container.width - 16;
       if (room >= 240 && width > room) width = room;
       el.style.width = width + 'px';
-      el.style.maxHeight = '';
+      el.style.maxHeight = vh - 16 + 'px';
       const ph = el.offsetHeight;
       let left = a.right - width;
       if (container.width >= width + 16) left = Math.min(Math.max(left, container.left + 8), container.right - width - 8);
       left = Math.min(Math.max(8, left), vw - width - 8);
       const below = vh - a.bottom - 10, above = a.top - 10;
       let top;
-      if (opts.placement !== 'above' && (ph <= below || below >= above)) {
-        top = a.bottom + 6;
-        if (ph > below) el.style.maxHeight = Math.max(160, below) + 'px';
-      } else {
-        const hgt = Math.min(ph, above);
-        if (ph > above) el.style.maxHeight = Math.max(160, above) + 'px';
-        top = a.top - 6 - hgt;
-      }
+      if (opts.placement !== 'above' && ph <= below) top = a.bottom + 6;
+      else if (ph <= above) top = a.top - 6 - ph;
+      else top = Math.max(8, Math.min(a.bottom + 6, vh - ph - 8)); // too tall either side: stay on screen
       el.style.left = Math.round(left) + 'px';
       el.style.top = Math.round(Math.max(8, top)) + 'px';
     }

@@ -187,6 +187,9 @@
       s.layers = [layer];
       layer.visible = true;
       if (!String(layer.text || '').trim()) layer.text = 'Aa';
+      // Preview the look, not the layout: centred and legible even for a small caption layer.
+      layer.anchor = { x: 0.5, y: 0.5 };
+      layer.type.size = Math.max(layer.type.size, 0.15);
       if (layer.preset !== id) {
         layer.preset = id;
         layer.params = TM.presetDefaults(id);

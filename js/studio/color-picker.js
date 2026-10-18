@@ -106,7 +106,6 @@
       title: o.label || 'Colour',
       className: 'color-pop',
       width: 268,
-      onClose() { if (lastHex !== norm(o.get())) return; recent.push(lastHex); },
       build(body) {
         const sv = h('div', { class: 'cp-sv', role: 'slider', tabindex: '0', 'aria-label': 'Saturation and brightness', 'aria-valuemin': '0', 'aria-valuemax': '100', 'data-initial-focus': '' }, h('i', { class: 'cp-thumb' }));
         const thumb = sv.firstChild;
@@ -216,7 +215,7 @@
         const brandRow = swatchRow('Brand kit', kit ? kit.colors : [], addBrand);
         if (brandRow) brandRow.classList.add('cp-brand');
 
-        body.append(sv, hue, row, brandRow, swatchRow('In this scene', sceneColors()), swatchRow('Recent', recent.list()));
+        body.append(...[sv, hue, row, brandRow, swatchRow('In this scene', sceneColors()), swatchRow('Recent', recent.list())].filter(Boolean));
         paint();
       },
     });
