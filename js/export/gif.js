@@ -363,7 +363,7 @@
       info: {
         engine: 'gif',
         codec: 'GIF89a',
-        label: `GIF · ${colors.length} colours${plan.dither ? ' · dithered' : ''}${transparent ? ' · 1-bit transparency' : ''}`,
+        label: `GIF · ${colors.length} colour${colors.length === 1 ? '' : 's'}${plan.dither ? ' · dithered' : ''}${transparent ? ' · 1-bit transparency' : ''}`,
         frames: plan.frames,
         storedFrames: gif.frames,
         merged: gif.merged,

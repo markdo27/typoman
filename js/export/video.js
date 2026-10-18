@@ -218,7 +218,8 @@
       output: (chunk, meta) => { try { onOutput(chunk, meta); } catch (e) { fail(e); } },
       error: fail,
     });
-    const encoder = make((c, m) => sink.color(c, m));
+    let produced = 0;
+    const encoder = make((c, m) => { produced++; sink.color(c, m); });
     const alphaEnc = choice.alphaMode === 'sidecar' ? make((c) => sink.alpha(c)) : null;
     const closeAll = () => [encoder, alphaEnc].forEach((e) => { try { if (e && e.state !== 'closed') e.close(); } catch (err) { /* already closed */ } });
     const onAbort = () => closeAll();
@@ -252,6 +253,7 @@
       await encoder.flush();
       if (alphaEnc) await alphaEnc.flush();
       if (failure) throw failure;
+      if (!produced) throw new Error('the encoder produced no output');
       const out = sink.finish();
       if (out.frames !== plan.frames) throw new Error(`Encoder produced ${out.frames} of ${plan.frames} frames`);
       return out;
@@ -287,10 +289,9 @@
       }
       throw new Error("This browser can't encode video. Try the latest Chrome, Edge or Safari, or export a PNG sequence.");
     }
-    if (!neg.supported.every((c) => c.alphaMode)) await X.loadVendor(plan.format === 'mp4' ? 'mp4' : 'webm');
+    if (neg.supported.some((c) => !c.alphaMode)) await X.loadVendor(plan.format === 'mp4' ? 'mp4' : 'webm');
     let lastErr = null;
     for (const choice of neg.supported) {
-      if (choice.alphaMode == null && plan.format === 'webm' && !window.WebMMuxer) await X.loadVendor('webm');
       try {
         if (hooks.onCodec) hooks.onCodec(choice);
         const t0 = performance.now();
