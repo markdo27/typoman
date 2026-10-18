@@ -1,0 +1,110 @@
+/* TYPOMAN studio — path editor overlay, floating path toolbar and the Path panel.
+ * Injected by js/studio/path-editor.js. Uses the studio tokens, with fallbacks. */
+
+/* ── overlay ── */
+/* Cover the whole artboard: a global `svg { width: 18px; height: 18px }` would shrink it. */
+.path-overlay { width: 100%; height: 100%; fill: none; stroke: none; }
+.editing-path .path-overlay { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.path-overlay[data-pe-cursor="point"] { cursor: pointer; }
+.path-overlay[data-pe-cursor="move"] { cursor: move; }
+.path-overlay[data-pe-cursor="grabbing"] { cursor: grabbing; }
+.path-overlay[data-pe-cursor="draw"], .path-overlay[data-pe-drawing] { cursor: crosshair; }
+
+.pe, .pe * { pointer-events: none; }
+.pe path, .pe polyline, .pe circle, .pe rect { vector-effect: non-scaling-stroke; }
+
+/* Every line gets a dark under-stroke so it reads on light, dark and saturated backgrounds. */
+.pe-curve-u, .pe-ghost-u, .pe-stems-u, .pe-draw-u { fill: none; stroke: rgba(0, 0, 0, .45); stroke-linecap: round; stroke-linejoin: round; }
+.pe-curve-u { stroke-width: 3.5; }
+.pe-curve { fill: none; stroke: #fff; stroke-width: 1.5; stroke-linejoin: round; }
+.pe[data-target="b"] .pe-curve { stroke: #8ff3ff; }
+.pe-ghost-u { stroke-width: 2.5; stroke-dasharray: 5 4; stroke: rgba(0, 0, 0, .3); }
+.pe-ghost { fill: none; stroke: rgba(255, 255, 255, .62); stroke-width: 1; stroke-dasharray: 5 4; }
+.pe[data-target="a"] .pe-ghost { stroke: rgba(143, 243, 255, .7); }
+.pe.is-drawing .pe-curve, .pe.is-drawing .pe-curve-u { opacity: .35; }
+
+.pe-dir { fill: #fff; stroke: rgba(0, 0, 0, .5); stroke-width: 1; stroke-linejoin: round; }
+.pe-stems-u { stroke-width: 3; }
+.pe-stems { fill: none; stroke: rgba(255, 255, 255, .9); stroke-width: 1; }
+.pe-knob { fill: var(--accent, #2f4bff); stroke: #fff; stroke-width: 1.25; }
+.pe-knob.is-hot { fill: #fff; stroke: var(--accent, #2f4bff); stroke-width: 1.5; }
+
+.pe-anchor { fill: #fff; stroke: var(--accent, #2f4bff); stroke-width: 1.5; }
+.pe-anchor.is-start { stroke-width: 2; }
+.pe-anchor.is-sel { fill: var(--accent, #2f4bff); stroke: #fff; stroke-width: 1.5; }
+.pe-anchor.is-hot:not(.is-sel) { fill: #dfe4ff; }
+
+.pe-insert { fill: rgba(47, 75, 255, .35); stroke: #fff; stroke-width: 1.25; }
+.pe-marquee { fill: rgba(47, 75, 255, .14); stroke: var(--accent-hi, #5b72ff); stroke-width: 1; stroke-dasharray: 4 3; }
+.pe-guides { fill: none; stroke: #ff4dd2; stroke-width: 1; stroke-dasharray: 4 3; }
+.pe-draw-u { stroke-width: 4.5; }
+.pe-draw { fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pe-close { fill: rgba(0, 0, 0, .25); stroke: #fff; stroke-width: 1.5; }
+.pe-close.is-on { fill: var(--accent, #2f4bff); }
+.pe-tag { font: 700 10px/1 var(--mono, ui-monospace, monospace); fill: #fff; stroke: rgba(0, 0, 0, .55); stroke-width: 2.5px; paint-order: stroke; text-anchor: middle; }
+.pe-tag-ghost { fill: rgba(255, 255, 255, .7); }
+
+/* ── floating toolbar (inside the artboard, only while editing) ── */
+.pe-bar {
+  position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 4;
+  display: flex; align-items: center; gap: 2px; padding: 3px; max-width: calc(100% - 12px);
+  background: rgba(17, 17, 21, .94); border: 1px solid var(--line-2, #30303a); border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .45); color: var(--text-2, #a6a6b2); font: 600 12px/1 var(--ui, system-ui, sans-serif);
+}
+.pe-bar.at-top { top: 10px; bottom: auto; }
+.pe-bar button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 30px; min-width: 30px; padding: 0 6px;
+  border: 0; border-radius: 7px; background: transparent; color: inherit; font: inherit;
+}
+.pe-bar button:hover:not(:disabled) { background: var(--panel-3, #1e1e25); color: var(--text, #ededf2); }
+.pe-bar button.on { background: var(--accent, #2f4bff); color: #fff; }
+.pe-bar button:disabled { opacity: .35; cursor: default; }
+.pe-bar svg { width: 17px; height: 17px; }
+.pe-bar .pe-done { background: var(--text, #ededf2); color: #000; padding: 0 9px 0 7px; }
+.pe-bar .pe-done:hover:not(:disabled) { background: #fff; color: #000; }
+.pe-abs { display: flex; gap: 2px; padding-right: 3px; margin-right: 1px; border-right: 1px solid var(--line-2, #30303a); }
+.pe-abs .pe-ab { min-width: 26px; font: 700 12px/1 var(--mono, ui-monospace, monospace); }
+.pe-sep { width: 1px; height: 18px; background: var(--line-2, #30303a); margin: 0 3px; flex: none; }
+.pe-hint { padding: 0 6px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+@media (max-width: 860px) {
+  .pe-bar { bottom: 6px; }
+  .pe-bar.at-top { top: 6px; }
+  .pe-bar .pe-done span { display: none; }
+  .pe-hint { max-width: 150px; }
+}
+
+/* ── Path panel ── */
+.pp-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.pp-modes .btn { width: 100%; }
+.pp-modes .btn svg { width: 17px; height: 17px; }
+.pp-caption { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text-2, #a6a6b2); margin-top: 2px; }
+.pp-caption b { color: var(--text, #ededf2); font-weight: 600; }
+.pp-lib { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
+.pp-cell {
+  display: block; padding: 0; overflow: hidden; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--line-2, #30303a); background: var(--panel-2, #17171c); color: var(--text-3, #6e6e7a);
+  transition: border-color .12s, color .12s, background .12s;
+}
+.pp-cell:hover { color: var(--text, #ededf2); border-color: var(--text-3, #6e6e7a); }
+.pp-cell.on { color: #fff; border-color: var(--accent, #2f4bff); background: rgba(47, 75, 255, .16); box-shadow: 0 0 0 1px var(--accent, #2f4bff); }
+.pp-cell.pp-custom { cursor: default; }
+.pp-thumb { display: block; width: 100%; height: auto; fill: none; stroke: none; }
+.pp-frame { fill: rgba(255, 255, 255, .025); stroke: rgba(255, 255, 255, .1); stroke-width: 1; }
+.pp-line { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.pp-dot { fill: var(--accent-hi, #5b72ff); }
+.pp-cell.on .pp-dot { fill: #fff; }
+.pp-acts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+.pp-act {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-width: 0; padding: 7px 2px 6px;
+  border: 1px solid var(--line-2, #30303a); border-radius: 7px; background: var(--panel-2, #17171c); color: var(--text-2, #a6a6b2);
+  font-size: 10.5px; font-weight: 600; white-space: nowrap;
+}
+.pp-act:hover:not(:disabled) { background: var(--panel-3, #1e1e25); color: var(--text, #ededf2); }
+.pp-act:disabled { opacity: .35; cursor: default; }
+.pp-act svg { width: 16px; height: 16px; }
+.pp-act span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.pp-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.pp-pair .btn { width: 100%; padding: 0 8px; }
+.pp-pair .btn svg { width: 16px; height: 16px; }
+.pp-note { margin: 0; color: var(--text-3, #6e6e7a); font-size: 11.5px; line-height: 1.45; }
+.pp-note kbd { font: 600 10.5px/1 var(--mono, ui-monospace, monospace); color: var(--text-2, #a6a6b2); border: 1px solid var(--line-2, #30303a); border-bottom-width: 2px; border-radius: 4px; padding: 1px 4px; }
