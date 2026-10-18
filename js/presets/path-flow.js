@@ -20,6 +20,7 @@
       TM.P.range('offset', 'Start offset', 0, 1, 0.001, 0, { group: 'Motion' }),
       TM.P.ease('travelEase', 'Travel ease', 'inOutSine', { group: 'Motion', showIf: { mode: 'travel' } }),
       TM.P.range('rotate', 'Follow tangent', 0, 1, 0.01, 1, { group: 'Motion' }),
+      TM.P.range('cornerSmooth', 'Corner smoothing', 0, 1, 0.01, 0.5, { group: 'Motion', hint: 'Letters swing round sharp corners instead of snapping' }),
       TM.P.range('wave', 'Wave', 0, 1.5, 0.01, 0, { group: 'Wave' }),
       TM.P.range('waveLength', 'Wavelength (em)', 0.5, 12, 0.1, 4, { group: 'Wave' }),
       TM.P.range('waveSpeed', 'Wave cycles', -4, 4, 1, 1, { group: 'Wave' }),
@@ -116,10 +117,17 @@
       off += Math.sin(TAU * (s / (P.waveLength * size) - P.waveSpeed * f.p)) * P.wave * size * 0.5;
     }
     const x = pt.x + pt.nx * off, y = pt.y + pt.ny * off;
+    // Chord tangent over ~one glyph: smooth rotation through corners.
+    let angle = pt.angle;
+    const win = P.cornerSmooth * size * 0.6;
+    if (win > 0.5) {
+      const a = path.at(s - win), b = path.at(s + win);
+      if (Math.hypot(b.x - a.x, b.y - a.y) > 1e-3) angle = Math.atan2(b.y - a.y, b.x - a.x);
+    }
     f.drawGlyph(g, {
       x,
       y,
-      rot: pt.angle * clamp(P.rotate, 0, 1),
+      rot: angle * clamp(P.rotate, 0, 1),
       alpha,
       ch: ch || undefined,
       anchor: P.align === 'baseline' ? 'baseline' : 'center',
