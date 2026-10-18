@@ -35,6 +35,10 @@
 
   // ── Presets: reveal, glitch & dimensional family (owner: preset team B) ──
   var PRESETS_B = [
+    'js/presets/scramble.js',
+    'js/presets/typewriter.js',
+    'js/presets/split-flap.js',
+    'js/presets/assemble.js',
   ];
 
   // ── Export & embed runtime (owner: export team) ──
