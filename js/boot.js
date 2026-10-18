@@ -52,6 +52,9 @@
     'js/studio/inspector.js',
     'js/studio/gallery.js',
     'js/studio/layers.js',
+    'js/studio/stage.js',
+    'js/studio/timeline.js',
+    'js/studio/onboarding.js',
     'js/studio/app.js',
   ];
 

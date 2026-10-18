@@ -1,15 +1,18 @@
-/* TYPOMAN studio — application shell: boot, stage, render loop, gallery, transport, shortcuts.
+/* TYPOMAN studio — application shell: boot, render loop, top bar, shortcuts, tabs, files.
  * Optional modules hook in when present:
  *   TM.Studio.PathEditor      new PathEditor(store, svgOverlay, view)       (path team)
  *   TM.Studio.openExport      openExport(store)                              (export team)
  *   TM.Studio.openShare       openShare(store)                               (export team)
+ * Studio modules used here: Stage (stage.js), Inspector, Gallery, LayersPanel, Transport,
+ * customFonts, brand, onboarding — each documented in its own file.
  */
 (function (TM) {
   'use strict';
   const Studio = (TM.Studio = TM.Studio || {});
   const h = Studio.h;
+  const UI = Studio.ui;
   const $ = (sel) => document.querySelector(sel);
-  const PREVIEW_MAX_PIXELS = 1920 * 1080;
+  const REMIX_KEY = 'typoman.remixLocks';
 
   function starterScene() {
     const scene = TM.Scene.defaults();
@@ -22,278 +25,148 @@
     return scene;
   }
 
+  const withTimeout = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(r, ms))]);
+
   async function initialScene() {
+    // Custom fonts must be registered before a saved scene is normalised, or it falls back to Anton.
+    if (Studio.customFonts) { try { await withTimeout(Studio.customFonts.restore(), 2500); } catch (e) { /* ignore */ } }
     const hash = location.hash.match(/[#&]c=([^&]+)/);
     if (hash) {
-      try { return await TM.Scene.decode(decodeURIComponent(hash[1])); } catch (e) { toast('Could not open that link: ' + e.message, 'error'); }
+      try { return await TM.Scene.decode(decodeURIComponent(hash[1])); } catch (e) { toast('Could not open that link: ' + e.message, 'error', 6000); }
     }
-    return Studio.Store.loadSaved() || starterScene();
+    const saved = Studio.Store.loadSaved();
+    if (saved && Array.isArray(saved.layers)) {
+      const missing = [...new Set(saved.layers.map((l) => l && l.font && l.font.family).filter((f) => typeof f === 'string' && !TM.fonts.has(f)))];
+      if (missing.length) setTimeout(() => toast(missing.join(', ') + ' isn’t available in this browser, so Anton is used instead.', 'error', 7000), 600);
+    }
+    return saved || starterScene();
   }
 
   // ───────────────────────────── toasts ─────────────────────────────
-  function toast(msg, kind = 'info', ms = 3200) {
+  /** toast(message, kind = 'info' | 'error' | 'ok', ms, action?: { label, run }) */
+  function toast(msg, kind = 'info', ms = 3200, action) {
     let host = $('#toasts');
     if (!host) { host = h('div', { id: 'toasts', 'aria-live': 'polite' }); document.body.append(host); }
-    const t = h('div', { class: 'toast ' + kind, role: kind === 'error' ? 'alert' : 'status' }, msg);
+    const icon = kind === 'error' ? 'warning' : kind === 'ok' ? 'check' : 'info';
+    const t = h('div', { class: 'toast ' + kind, role: kind === 'error' ? 'alert' : 'status' }, UI.icon(icon, 'toast-ic'), h('span', { class: 'toast-msg' }, msg));
+    let timer = 0;
+    const dismiss = () => { clearTimeout(timer); t.classList.add('out'); setTimeout(() => t.remove(), 260); };
+    if (action) t.append(h('button', { type: 'button', class: 'toast-act', onclick: () => { dismiss(); action.run(); } }, action.label));
     host.append(t);
-    setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, ms);
+    while (host.children.length > 3) host.firstChild.remove();
+    timer = setTimeout(dismiss, ms);
+    t.addEventListener('pointerenter', () => clearTimeout(timer));
+    t.addEventListener('pointerleave', () => { timer = setTimeout(dismiss, 1600); });
+    return dismiss;
   }
   Studio.toast = toast;
 
-  // ───────────────────────────── stage ─────────────────────────────
-  class Stage {
-    constructor(store) {
-      this.store = store;
-      this.wrap = $('#stage');
-      this.board = $('#artboard');
-      this.canvas = $('#stageCanvas');
-      this.overlay = $('#pathOverlay');
-      this.renderer = new TM.Renderer(this.canvas, { quality: 'preview' });
-      this.renderer.setScene(store.scene);
-      this.view = { cssW: 0, cssH: 0, scale: 1 }; // artboard CSS size; scale = css px per output px
-      new ResizeObserver(() => this.layout()).observe(this.wrap);
-      store.on('change', () => { this.renderer.setScene(store.scene); this.layout(); this.dirty = true; });
-      this.layout();
-    }
-
-    layout() {
-      const { w, h: hh } = this.store.scene.size;
-      const r = this.wrap.getBoundingClientRect();
-      const pad = r.width < 600 ? 12 : 32;
-      const availW = Math.max(40, r.width - pad * 2), availH = Math.max(40, r.height - pad * 2);
-      const k = Math.min(availW / w, availH / hh);
-      const cssW = Math.floor(w * k), cssH = Math.floor(hh * k);
-      if (cssW === this.view.cssW && cssH === this.view.cssH && this._ow === w && this._oh === hh) return;
-      this._ow = w;
-      this._oh = hh;
-      this.board.style.width = cssW + 'px';
-      this.board.style.height = cssH + 'px';
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      let bw = cssW * dpr, bh = cssH * dpr;
-      const px = bw * bh;
-      if (px > PREVIEW_MAX_PIXELS) { const s = Math.sqrt(PREVIEW_MAX_PIXELS / px); bw *= s; bh *= s; }
-      this.renderer.resize(bw, bh);
-      this.overlay.setAttribute('viewBox', `0 0 ${cssW} ${cssH}`);
-      this.overlay.setAttribute('width', cssW);
-      this.overlay.setAttribute('height', cssH);
-      this.view = { cssW, cssH, scale: cssW / w };
-      this.dirty = true;
-      this.store.emit('view', this.view);
-    }
-
-    render(t) {
-      this.renderer.render(t);
-    }
-  }
-
-  // ───────────────────────────── gallery ─────────────────────────────
-  class Gallery {
-    constructor(store, root) {
-      this.store = store;
-      this.root = root;
-      this.cards = new Map();
-      this.thumbCanvas = document.createElement('canvas');
-      this.thumb = new TM.Renderer(this.thumbCanvas, { quality: 'preview' });
-      this.hover = null;
-      this.filter = 'All';
-      this.build();
-      store.on('change', (d) => {
-        this.markActive();
-        if (!d || d.reason !== 'preset') this.scheduleThumbs();
-      });
-      store.on('select', () => this.markActive());
-      this.scheduleThumbs(50);
-    }
-
-    build() {
-      this.root.innerHTML = '';
-      const cats = ['All'].concat(TM.CATEGORIES.filter((c) => TM.presetOrder.some((id) => TM.presets[id].category === c)));
-      const chips = h('div', { class: 'chips', role: 'tablist', 'aria-label': 'Preset categories' });
-      cats.forEach((c) => {
-        chips.append(h('button', { type: 'button', role: 'tab', class: 'chip' + (c === this.filter ? ' on' : ''), 'aria-selected': c === this.filter ? 'true' : 'false', onclick: () => { this.filter = c; this.build(); this.scheduleThumbs(0); } }, c));
-      });
-      const grid = h('div', { class: 'cards' });
-      TM.presetOrder.forEach((id) => {
-        const p = TM.presets[id];
-        if (this.filter !== 'All' && p.category !== this.filter) return;
-        const cv = h('canvas', { width: 320, height: 180, 'aria-hidden': 'true' });
-        const card = h('button', {
-          type: 'button',
-          class: 'card',
-          title: p.description || p.name,
-          'aria-label': p.name + ' preset' + (p.description ? ': ' + p.description : ''),
-          onclick: () => this.store.setPreset(id),
-          onpointerenter: () => { this.hover = id; },
-          onpointerleave: () => { if (this.hover === id) { this.hover = null; this.drawThumb(id); } },
-          onfocus: () => { this.hover = id; },
-          onblur: () => { if (this.hover === id) { this.hover = null; this.drawThumb(id); } },
-        }, cv, h('span', { class: 'card-name' }, p.name), h('span', { class: 'card-cat' }, p.category + (p.usesPath ? ' · path' : '')));
-        this.cards.set(id, { card, cv });
-        grid.append(card);
-      });
-      this.root.append(chips, grid);
-      this.markActive();
-    }
-
-    markActive() {
-      const cur = this.store.layer.preset;
-      this.cards.forEach(({ card }, id) => {
-        card.classList.toggle('on', id === cur);
-        card.setAttribute('aria-pressed', id === cur ? 'true' : 'false');
-      });
-    }
-
-    sceneFor(id) {
-      const s = TM.Scene.clone(this.store.scene);
-      const layer = s.layers[Math.min(this.store.selected, s.layers.length - 1)];
-      s.layers = [layer];
-      if (layer.preset !== id) {
-        layer.preset = id;
-        layer.params = TM.presetDefaults(id);
-        const p = TM.presets[id];
-        if (p.usesPath && (!layer.path || layer.path.preset)) layer.path = TM.Path.preset(p.path || 'wave', 16 / 9);
-      }
-      s.size = { w: 320, h: 180 };
-      if (layer.path && layer.path.preset) layer.path = TM.Path.preset(layer.path.preset, 16 / 9);
-      layer.fx.blur = 0;
-      return TM.Scene.normalize(s);
-    }
-
-    scheduleThumbs(ms = 350) {
-      clearTimeout(this._timer);
-      this._timer = setTimeout(() => {
-        this.scenes = new Map();
-        this.cards.forEach((_, id) => this.drawThumb(id));
-      }, ms);
-    }
-
-    drawThumb(id, t) {
-      const entry = this.cards.get(id);
-      if (!entry) return;
-      if (!this.scenes) this.scenes = new Map();
-      let scene = this.scenes.get(id);
-      if (!scene) { scene = this.sceneFor(id); this.scenes.set(id, scene); }
-      this.thumb.setScene(scene);
-      this.thumb.resize(320, 180);
-      this.thumb.render(t != null ? t : scene.duration * 0.42);
-      const ctx = entry.cv.getContext('2d');
-      ctx.clearRect(0, 0, 320, 180);
-      ctx.drawImage(this.thumbCanvas, 0, 0);
-    }
-
-    tick(now) {
-      if (this.hover && this.cards.has(this.hover)) this.drawThumb(this.hover, (now / 1000) % (this.store.scene.duration || 4));
-    }
-  }
-
-  // ───────────────────────────── transport ─────────────────────────────
-  class Transport {
-    constructor(store, app) {
-      this.store = store;
-      this.app = app;
-      this.play = $('#playBtn');
-      this.scrub = $('#scrub');
-      this.time = $('#timecode');
-      this.play.addEventListener('click', () => this.toggle());
-      this.scrub.addEventListener('input', () => {
-        store.setUI({ playing: false, time: (+this.scrub.value / 1000) * store.scene.duration });
-        app.stage.dirty = true;
-      });
-      $('#stepBack').addEventListener('click', () => this.step(-1));
-      $('#stepFwd').addEventListener('click', () => this.step(1));
-      store.on('ui', () => this.sync());
-      this.sync();
-    }
-
-    toggle() {
-      this.store.setUI({ playing: !this.store.ui.playing });
-    }
-
-    step(n) {
-      const s = this.store.scene;
-      const frame = Math.round(this.store.ui.time * s.fps) + n;
-      this.store.setUI({ playing: false, time: TM.math.mod(frame / s.fps, s.duration) });
-      this.app.stage.dirty = true;
-    }
-
-    sync() {
-      const playing = this.store.ui.playing;
-      this.play.classList.toggle('playing', playing);
-      this.play.setAttribute('aria-label', playing ? 'Pause' : 'Play');
-      this.play.title = (playing ? 'Pause' : 'Play') + ' (Space)';
-    }
-
-    tick() {
-      // Throttled DOM writes: the timecode only needs ~15 updates a second.
-      const now = performance.now();
-      if (now - (this._last || 0) < 66) return;
-      this._last = now;
-      const s = this.store.scene, t = TM.math.mod(this.store.ui.time, s.duration);
-      if (document.activeElement !== this.scrub) this.scrub.value = String(Math.round((t / s.duration) * 1000));
-      this.scrub.style.setProperty('--pct', ((t / s.duration) * 100).toFixed(2) + '%');
-      const frame = Math.floor(t * s.fps);
-      const txt = `${t.toFixed(2)}s · f${String(frame).padStart(3, '0')} / ${Math.round(s.duration * s.fps)}`;
-      if (txt !== this._txt) { this.time.textContent = txt; this._txt = txt; }
-    }
-  }
-
   // ───────────────────────────── remix ─────────────────────────────
   const REMIX_FONTS = ['Anton', 'Bebas Neue', 'Unbounded', 'Syne', 'Dela Gothic One', 'Rubik Mono One', 'Big Shoulders Display', 'Bricolage Grotesque', 'Fraunces', 'Instrument Serif', 'Archivo Black', 'Climate Crisis', 'Tilt Warp', 'Space Grotesk', 'Inter Tight', 'Bodoni Moda', 'Monoton', 'Six Caps', 'Righteous', 'Major Mono Display'];
+  function remixLocks() {
+    const l = UI.storage.get(REMIX_KEY, null) || {};
+    return { look: !!l.look, font: !!l.font, colors: !!l.colors };
+  }
   function remix(store) {
+    const locks = remixLocks();
     const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-    const presetId = pick(TM.presetOrder.filter((id) => id !== store.layer.preset));
-    store.setPreset(presetId);
+    const others = TM.presetOrder.filter((id) => id !== store.layer.preset);
+    const presetId = locks.look || !others.length ? store.layer.preset : pick(others);
+    const changesPreset = presetId !== store.layer.preset;
+    if (changesPreset) store.setPreset(presetId);
     const [, , bg, ...cols] = pick(TM.PALETTES);
-    const family = pick(REMIX_FONTS);
+    const family = locks.font ? store.layer.font.family : pick(REMIX_FONTS.filter((f) => TM.fonts.has(f)));
     TM.fonts.ensure(family, 700);
     store.update((s, l) => {
-      s.bg.type = 'solid';
-      s.bg.color = bg;
       s.seed = Math.floor(Math.random() * 9999);
-      l.fill.type = Math.random() < 0.25 ? 'palette' : 'solid';
-      l.fill.color = cols[0];
-      l.fill.color2 = cols[1] || cols[0];
-      l.fill.palette = cols.slice();
-      l.font.family = family;
-      const f = TM.fonts.get(family);
-      l.font.weight = f && f.max > f.min ? Math.round(f.min + (f.max - f.min) * (0.55 + Math.random() * 0.45)) : 400;
+      if (!locks.colors) {
+        s.bg.type = 'solid';
+        s.bg.color = bg;
+        l.fill.type = Math.random() < 0.25 ? 'palette' : 'solid';
+        l.fill.color = cols[0];
+        l.fill.color2 = cols[1] || cols[0];
+        l.fill.palette = cols.slice();
+        l.fx.extrude.color = TM.color.mix(bg, '#000000', 0.3);
+      }
+      if (!locks.font) {
+        l.font.family = family;
+        const f = TM.fonts.get(family);
+        l.font.weight = f && f.max > f.min ? Math.round(f.min + (f.max - f.min) * (0.55 + Math.random() * 0.45)) : 400;
+      }
       l.stroke.mode = Math.random() < 0.12 ? 'outline' : 'none';
       l.fx.echo.count = Math.random() < 0.25 ? 3 + Math.floor(Math.random() * 5) : 0;
       l.fx.echo.palette = Math.random() < 0.5;
       l.fx.glow.amount = Math.random() < 0.15 ? 0.4 : 0;
       l.fx.extrude.depth = Math.random() < 0.15 ? 0.3 + Math.random() * 0.4 : 0;
-      l.fx.extrude.color = TM.color.mix(bg, '#000000', 0.3);
       l.fx.blur = Math.random() < 0.2 ? 0.4 : 0;
       s.post.grain = Math.random() < 0.3 ? 0.3 : 0;
-    }, { reason: 'remix' });
-    toast('Remixed → ' + TM.presets[presetId].name + ' · ' + family);
+    }, { reason: 'remix', label: 'Remix' });
+    const kept = Object.entries(locks).filter(([, v]) => v).map(([k]) => ({ look: 'look', font: 'font', colors: 'colours' })[k]);
+    toast('Remixed: ' + TM.presets[presetId].name + ' · ' + store.layer.font.family + (kept.length ? ' (kept ' + kept.join(', ') + ')' : ''), 'info', 3200, { label: 'Undo', run: () => { store.undo(); if (changesPreset) store.undo(); } });
+    const btn = $('#remixBtn');
+    if (btn && !UI.reducedMotion()) { btn.classList.remove('spin'); void btn.offsetWidth; btn.classList.add('spin'); }
   }
+
+  // ───────────────────────────── project files ─────────────────────────────
+  function download(blob, name) {
+    const a = h('a', { href: URL.createObjectURL(blob), download: name });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+  const fileName = (s, ext) => ((s.name || 'typoman').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'typoman') + ext;
 
   // ───────────────────────────── app ─────────────────────────────
   class App {
     constructor(store) {
       this.store = store;
-      this.stage = new Stage(store);
+      Studio.app = this;
+      this.stage = new Studio.Stage(store);
       Studio.inspector = this.inspector = new Studio.Inspector(store, $('#inspector'));
-      this.gallery = new Gallery(store, $('#gallery'));
-      this.transport = new Transport(store, this);
+      this.gallery = new Studio.Gallery(store, $('#gallery'));
+      this.layers = new Studio.LayersPanel(store, $('#layersPanel'));
+      this.transport = new Studio.Transport(store, this);
       if (Studio.PathEditor) {
         try { this.pathEditor = new Studio.PathEditor(store, this.stage.overlay, () => this.stage.view); } catch (e) { console.error('[studio] path editor', e); }
       }
       this.wireTopbar();
+      this.wireStagebar();
       this.wireKeys();
       this.wireTabs();
+      this.wireDrop();
       store.on('ui', (patch) => {
         if ('editPath' in patch) document.body.classList.toggle('editing-path', !!store.ui.editPath);
         if ('guides' in patch) document.body.classList.toggle('show-guides', !!store.ui.guides);
+        if ('clean' in patch) this.onClean();
+        if ('editPath' in patch || 'guides' in patch) this.syncStagebar();
+        if ('playing' in patch && store.ui.playing) this.stage.dirty = true;
       });
+      store.on('change', () => this.syncStagebar());
+      store.on('select', () => this.syncStagebar());
       store.on('history', () => this.syncHistory());
+      store.on('save', (s) => this.syncSave(s));
       this.syncHistory();
+      this.syncStagebar();
+      this.syncSave(store.saveState);
+
+      // Fonts: hold the canvas until the scene's fonts are ready (or 3 s), then fade it in.
+      this.stage.setLoading(true);
+      this.setHint('Loading fonts…', 'loading');
+      withTimeout(TM.prepare(store.scene), 3000).then(() => { this.stage.setLoading(false); this.setHint(''); this.stage.dirty = true; });
+      TM.fonts.onChange(() => { this.stage.dirty = true; this.gallery.scheduleThumbs(200); this.stage.refreshSelection(); });
+      this.warnedFonts = new Set();
+      store.on('change', (d) => { if (d && (d.reason === 'font' || d.reason === 'replace' || d.reason === 'remix' || d.reason === 'brand')) this.checkFonts(); });
+
+      // Render loop; paused while the tab is hidden.
       this.last = performance.now();
-      requestAnimationFrame((t) => this.frame(t));
-      // Re-render once fonts arrive.
-      TM.fonts.onChange(() => { this.stage.dirty = true; this.gallery.scheduleThumbs(200); });
-      TM.prepare(store.scene);
+      this.raf = requestAnimationFrame((t) => this.frame(t));
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) { cancelAnimationFrame(this.raf); this.raf = 0; store.save(); }
+        else if (!this.raf) { this.last = performance.now(); this.raf = requestAnimationFrame((t) => this.frame(t)); }
+      });
+      window.addEventListener('pagehide', () => store.save());
+      if (Studio.onboarding) Studio.onboarding.maybeStart();
     }
 
     frame(now) {
@@ -307,26 +180,169 @@
       }
       this.transport.tick();
       this.gallery.tick(now);
-      requestAnimationFrame((t) => this.frame(t));
+      this.raf = requestAnimationFrame((t) => this.frame(t));
     }
 
+    checkFonts() {
+      this.store.scene.layers.forEach((l) => {
+        const fam = l.font.family;
+        const f = TM.fonts.get(fam);
+        if (!f || f.custom || this.warnedFonts.has(fam)) return;
+        TM.fonts.ensure(fam, l.font.weight).then((ok) => {
+          if (ok || this.warnedFonts.has(fam)) return;
+          this.warnedFonts.add(fam);
+          toast('Couldn’t load ' + fam + '. Check your connection; a fallback font is showing for now.', 'error', 6000);
+        });
+      });
+    }
+
+    // ── helpers other modules call ──
+    showTab(tab) {
+      if (!UI.isPhone()) return;
+      document.body.dataset.tab = tab;
+      document.querySelectorAll('.tabs [data-tab]').forEach((x) => {
+        const on = x.dataset.tab === tab;
+        x.classList.toggle('on', on);
+        x.setAttribute('aria-selected', on ? 'true' : 'false');
+        x.tabIndex = on ? 0 : -1;
+      });
+      if (Studio.onboarding && Studio.onboarding.active) requestAnimationFrame(() => Studio.onboarding.reposition());
+    }
+
+    focusText(selectAll) {
+      this.showTab('edit');
+      const ta = this.inspector.reveal('text', 'textarea');
+      if (ta && selectAll) ta.select();
+    }
+
+    focusPresets() {
+      this.showTab('presets');
+      this.gallery.focusSearch();
+    }
+
+    setHint(text, kind) {
+      const el = $('#stageHint');
+      if (!el) return;
+      el.textContent = text || '';
+      el.className = 'stage-hint' + (kind ? ' ' + kind : '');
+      el.hidden = !text;
+    }
+
+    // ── top bar ──
     syncHistory() {
-      $('#undoBtn').disabled = !this.store.canUndo;
-      $('#redoBtn').disabled = !this.store.canRedo;
+      const s = this.store;
+      const undo = $('#undoBtn'), redo = $('#redoBtn');
+      undo.disabled = !s.canUndo;
+      redo.disabled = !s.canRedo;
+      undo.setAttribute('data-tip', s.canUndo ? 'Undo ' + s.undoLabel : 'Nothing to undo');
+      redo.setAttribute('data-tip', s.canRedo ? 'Redo ' + s.redoLabel : 'Nothing to redo');
+      undo.setAttribute('aria-label', s.canUndo ? 'Undo ' + s.undoLabel : 'Undo');
+      redo.setAttribute('aria-label', s.canRedo ? 'Redo ' + s.redoLabel : 'Redo');
+    }
+
+    syncSave(state) {
+      const el = $('#saveState');
+      if (!el || !state) return;
+      const label = el.querySelector('span');
+      el.dataset.status = state.status;
+      if (state.status === 'pending') { label.textContent = 'Saving…'; el.removeAttribute('data-tip'); }
+      else if (state.status === 'error') { label.textContent = 'Not saved'; el.setAttribute('data-tip', 'This browser is blocking storage. Save a project file to keep your work.'); }
+      else { label.textContent = 'Autosaved'; el.setAttribute('data-tip', 'Saved in this browser · ' + new Date(state.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })); }
     }
 
     wireTopbar() {
       const store = this.store;
       const name = $('#sceneName');
       name.value = store.scene.name;
-      name.addEventListener('change', () => store.update((s) => { s.name = name.value; }));
+      name.addEventListener('change', () => store.update((s) => { s.name = name.value.trim() || 'Untitled'; }, { reason: 'name', label: 'Rename project' }));
+      name.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === 'Escape') { if (e.key === 'Escape') name.value = store.scene.name; name.blur(); } });
       store.on('change', () => { if (document.activeElement !== name) name.value = store.scene.name; });
       $('#undoBtn').addEventListener('click', () => store.undo());
       $('#redoBtn').addEventListener('click', () => store.redo());
+      $('#undoBtn').setAttribute('data-kbd', UI.keys('Mod+Z'));
+      $('#redoBtn').setAttribute('data-kbd', UI.keys('Mod+Shift+Z'));
+      $('#exportBtn').setAttribute('data-kbd', UI.keys('Mod+E'));
       $('#remixBtn').addEventListener('click', () => remix(store));
-      $('#guidesBtn').addEventListener('click', () => store.setUI({ guides: !store.ui.guides }));
+      $('#remixMenuBtn').addEventListener('click', (e) => this.remixMenu(e.currentTarget));
+      $('#helpBtn').addEventListener('click', () => Studio.showShortcuts());
       $('#exportBtn').addEventListener('click', () => this.openExport());
       $('#shareBtn').addEventListener('click', () => this.openShare());
+      $('#projectBtn').addEventListener('click', (e) => this.projectMenu(e.currentTarget));
+      const more = $('#moreBtn');
+      if (more) more.addEventListener('click', (e) => this.moreMenu(e.currentTarget));
+      this.fileInput = h('input', { type: 'file', accept: '.json,application/json', class: 'sr-only', tabindex: '-1', 'aria-hidden': 'true' });
+      this.fileInput.addEventListener('change', () => { const f = this.fileInput.files[0]; this.fileInput.value = ''; if (f) this.openFile(f); });
+      document.body.append(this.fileInput);
+    }
+
+    remixMenu(anchor) {
+      const locks = remixLocks();
+      const save = () => UI.storage.set(REMIX_KEY, locks);
+      UI.menu(anchor, [
+        { heading: 'Remix keeps…' },
+        { label: 'Current preset', checked: locks.look, run: (v) => { locks.look = v; save(); } },
+        { label: 'Font', checked: locks.font, run: (v) => { locks.font = v; save(); } },
+        { label: 'Colours', hint: 'Keep your brand palette', checked: locks.colors, run: (v) => { locks.colors = v; save(); } },
+        '-',
+        { label: 'Remix now', icon: 'dice', kbd: 'R', run: () => remix(this.store) },
+      ], { label: 'Remix options', width: 248 });
+    }
+
+    projectMenu(anchor) {
+      UI.menu(anchor, [
+        { label: 'New project', icon: 'file', run: () => { this.store.replace(starterScene(), { label: 'New project' }); toast('Started a new project', 'info', 4000, { label: 'Undo', run: () => this.store.undo() }); } },
+        { label: 'Open project file…', icon: 'folder', run: () => this.fileInput.click() },
+        { label: 'Save project file', icon: 'download', hint: 'JSON, includes custom fonts', run: () => this.saveFile() },
+        '-',
+        { label: 'Copy remix link', icon: 'link', run: () => this.copyLink() },
+        { label: 'Keyboard shortcuts', icon: 'keyboard', kbd: '?', run: () => Studio.showShortcuts() },
+        { label: 'Replay the tour', icon: 'sparkle', run: () => Studio.onboarding && Studio.onboarding.start() },
+      ], { label: 'Project', width: 260 });
+    }
+
+    moreMenu(anchor) {
+      const ui = this.store.ui;
+      UI.menu(anchor, [
+        { label: 'Embed or share', icon: 'code', run: () => this.openShare() },
+        { label: 'Clean preview', icon: 'preview', kbd: 'F', run: () => this.store.setUI({ clean: true }) },
+        { label: 'Safe-area guides', checked: !!ui.guides, run: (v) => this.store.setUI({ guides: v }) },
+        '-',
+        { label: 'Keyboard shortcuts', icon: 'keyboard', run: () => Studio.showShortcuts() },
+      ], { label: 'More', width: 240 });
+    }
+
+    saveFile() {
+      const s = this.store.scene;
+      const payload = { typoman: 1, scene: TM.Scene.minify(s), fonts: Studio.customFonts ? Studio.customFonts.forScene(s) : [] };
+      download(new Blob([JSON.stringify(payload)], { type: 'application/json' }), fileName(s, '.typoman.json'));
+      toast('Saved ' + fileName(s, '.typoman.json'), 'ok');
+    }
+
+    async openFile(file) {
+      try {
+        if (file.size > 25 * 1024 * 1024) throw new Error('That file is too large');
+        const data = JSON.parse(await file.text());
+        const scene = data && data.scene ? data.scene : data;
+        if (!scene || !Array.isArray(scene.layers)) throw new Error('That isn’t a TYPOMAN project file');
+        if (Array.isArray(data.fonts) && Studio.customFonts) await Studio.customFonts.register(data.fonts);
+        this.store.replace(scene, { label: 'Open project' });
+        await TM.prepare(this.store.scene);
+        toast('Opened “' + this.store.scene.name + '”', 'ok', 4000, { label: 'Undo', run: () => this.store.undo() });
+      } catch (e) {
+        toast(e instanceof SyntaxError ? 'That file isn’t valid JSON' : e.message || 'Could not open that file', 'error');
+      }
+    }
+
+    copyLink() {
+      const s = this.store.scene;
+      TM.Scene.encode(s).then((code) => {
+        const url = location.href.split('#')[0] + '#c=' + code;
+        const custom = Studio.customFonts && Studio.customFonts.usesCustom(s);
+        const note = custom ? ' Custom fonts can’t travel in links, so viewers see Anton.' : '';
+        const done = () => toast('Remix link copied.' + note, custom ? 'error' : 'ok', custom ? 6500 : 3200);
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, () => toast(url, 'info', 8000));
+        else toast(url, 'info', 8000);
+      }, (e) => toast('Could not make a link: ' + e.message, 'error'));
     }
 
     openExport() {
@@ -337,70 +353,237 @@
       const r = new TM.Renderer(c);
       r.setScene(s);
       r.resize(s.size.w, s.size.h);
+      const done = toast('Rendering a ' + s.size.w + '×' + s.size.h + ' PNG…', 'info', 20000);
       TM.prepare(s).then(() => {
         r.render(this.store.ui.time);
         c.toBlob((b) => {
-          const a = h('a', { href: URL.createObjectURL(b), download: (s.name || 'typoman') + '.png' });
-          a.click();
-          setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+          done();
+          if (!b) return toast('Could not render the frame', 'error');
+          download(b, fileName(s, '.png'));
+          toast('Saved a PNG of the current frame', 'ok');
         });
-      });
+      }, () => { done(); toast('Could not render the frame', 'error'); });
     }
 
     openShare() {
       if (Studio.openShare) return Studio.openShare(this.store);
-      TM.Scene.encode(this.store.scene).then((code) => {
-        const url = location.href.split('#')[0] + '#c=' + code;
-        navigator.clipboard && navigator.clipboard.writeText(url).then(() => toast('Remix link copied'), () => toast(url));
-      });
+      this.copyLink();
     }
 
+    // ── stage bar ──
+    wireStagebar() {
+      const store = this.store;
+      $('#formatBtn').addEventListener('click', (e) => this.formatMenu(e.currentTarget));
+      $('#zoomBtn').addEventListener('click', (e) => this.zoomMenu(e.currentTarget));
+      $('#guidesBtn').addEventListener('click', () => store.setUI({ guides: !store.ui.guides }));
+      $('#cleanBtn').addEventListener('click', () => store.setUI({ clean: true }));
+      $('#pathBtn').addEventListener('click', () => store.setUI({ editPath: !store.ui.editPath }));
+      $('#exitClean').addEventListener('click', () => store.setUI({ clean: false }));
+      this.stage.onZoom = () => { $('#zoomLabel').textContent = this.stage.zoomLabel(); };
+      $('#zoomLabel').textContent = this.stage.zoomLabel();
+    }
+
+    syncStagebar() {
+      const store = this.store, s = store.scene;
+      const hit = TM.Scene.ASPECTS.find((a) => Math.abs(a[2] / a[3] - s.size.w / s.size.h) < 0.01);
+      $('#formatLabel').textContent = hit ? hit[0] : 'Custom';
+      $('#formatDims').textContent = s.size.w + '×' + s.size.h;
+      const fmtIcon = $('#formatBtn .fmt-glyph');
+      if (fmtIcon) {
+        const k = Math.min(16 / s.size.w, 12 / s.size.h);
+        fmtIcon.style.width = Math.max(4, s.size.w * k) + 'px';
+        fmtIcon.style.height = Math.max(4, s.size.h * k) + 'px';
+      }
+      const usesPath = !!(store.preset && store.preset.usesPath);
+      const pathBtn = $('#pathBtn');
+      pathBtn.hidden = !usesPath;
+      pathBtn.classList.toggle('on', !!store.ui.editPath);
+      pathBtn.setAttribute('aria-pressed', store.ui.editPath ? 'true' : 'false');
+      pathBtn.querySelector('span').textContent = store.ui.editPath ? 'Done' : 'Edit path';
+      const g = $('#guidesBtn');
+      g.classList.toggle('on', !!store.ui.guides);
+      g.setAttribute('aria-pressed', store.ui.guides ? 'true' : 'false');
+      if (store.ui.editPath) this.setHint('Editing path · drag points · double-click to add · Del removes · Esc to finish', 'editing');
+      else if (!this.stage.board.classList.contains('loading')) this.setHint('');
+    }
+
+    formatMenu(anchor) {
+      const s = this.store.scene;
+      UI.menu(anchor, TM.Scene.ASPECTS.map(([id, label, w, hh]) => ({
+        label: label.replace(/ \d+:\d+$/, ''),
+        hint: w + ' × ' + hh,
+        kbd: id,
+        checked: Math.abs(w / hh - s.size.w / s.size.h) < 0.01,
+        run: () => { this.store.setSize(w, hh); UI.closePopover(); toast('Format: ' + label + ' · ' + w + '×' + hh); },
+      })).concat(['-', { label: 'Custom size…', icon: 'frame', run: () => { this.showTab('edit'); this.inspector.reveal('canvas', '.ctl-size input'); } }]), { label: 'Artboard format', width: 270 });
+    }
+
+    zoomMenu(anchor) {
+      const st = this.stage;
+      UI.menu(anchor, [
+        { label: 'Zoom to fit', kbd: UI.keys('Shift+1'), checked: this.store.ui.zoom === 'fit', run: () => { st.setZoom('fit'); UI.closePopover(); } },
+        { label: 'Zoom in', icon: 'plus', kbd: '+', run: () => st.zoomStep(1) },
+        { label: 'Zoom out', icon: 'minus', kbd: '−', run: () => st.zoomStep(-1) },
+        '-',
+        ...[0.25, 0.5, 1, 2].map((z) => ({ label: z * 100 + '%', kbd: z === 1 ? UI.keys('Shift+0') : null, run: () => st.setZoom(z) })),
+      ], { label: 'Zoom', width: 220 });
+    }
+
+    onClean() {
+      const on = !!this.store.ui.clean;
+      document.body.classList.toggle('clean', on);
+      if (on) {
+        if (this.store.ui.editPath) this.store.setUI({ editPath: false });
+        UI.closePopover();
+        const hint = $('#cleanHint');
+        hint.classList.add('show');
+        clearTimeout(this._cleanTimer);
+        this._cleanTimer = setTimeout(() => hint.classList.remove('show'), 2600);
+        $('#exitClean').focus({ preventScroll: true });
+      } else {
+        $('#cleanBtn').focus({ preventScroll: true });
+      }
+      requestAnimationFrame(() => this.stage.layout(true));
+    }
+
+    // ── keyboard ──
     wireKeys() {
       const store = this.store;
+      const CONTROL = 'button, a[href], select, [role="button"], [role="option"], [role="tab"], [role="radio"], [role="switch"], [role="menuitem"], [role="menuitemcheckbox"], [role="slider"]:not(#scrub), input[type="range"], .pop, .coach';
       document.addEventListener('keydown', (e) => {
-        const tag = (e.target && e.target.tagName) || '';
-        const typing = /INPUT|TEXTAREA|SELECT/.test(tag) || (e.target && e.target.isContentEditable);
+        if (e.defaultPrevented || document.body.classList.contains('has-modal')) return;
+        const t = e.target || document.body;
+        const tag = t.tagName || '';
+        const typing = /INPUT|TEXTAREA|SELECT/.test(tag) || t.isContentEditable;
         const mod = e.metaKey || e.ctrlKey;
-        if (mod && e.key.toLowerCase() === 'z') {
-          if (typing && tag === 'TEXTAREA') return; // let the textarea undo its own typing
+        const key = (e.key || '').toLowerCase();
+        if (mod && key === 'z') {
+          if (typing && (tag === 'TEXTAREA' || (tag === 'INPUT' && /text|search/.test(t.type)))) return; // native text undo
           e.preventDefault();
           e.shiftKey ? store.redo() : store.undo();
           return;
         }
-        if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); store.redo(); return; }
-        if (mod && e.key.toLowerCase() === 'e') { e.preventDefault(); this.openExport(); return; }
+        if (mod && key === 'y') { if (typing) return; e.preventDefault(); store.redo(); return; }
+        if (mod && key === 'e') { e.preventDefault(); this.openExport(); return; }
+        if (mod && key === 's') { e.preventDefault(); store.save(); toast(store.saveState.status === 'error' ? 'This browser blocks storage. Use Project → Save project file.' : 'Autosaved in this browser. Use Project → Save project file for a copy.', store.saveState.status === 'error' ? 'error' : 'ok'); return; }
+        if (mod && key === 'd' && !typing) { e.preventDefault(); this.layers.duplicate(); return; }
         if (typing || mod || e.altKey) return;
+        const onControl = t.closest && t.closest(CONTROL);
+        if (e.shiftKey && (e.code === 'Digit1' || e.code === 'Digit0')) { e.preventDefault(); this.stage.setZoom(e.code === 'Digit1' ? 'fit' : 1); return; }
         switch (e.key) {
-          case ' ': e.preventDefault(); this.transport.toggle(); break;
-          case 'ArrowLeft': e.preventDefault(); this.transport.step(e.shiftKey ? -10 : -1); break;
-          case 'ArrowRight': e.preventDefault(); this.transport.step(e.shiftKey ? 10 : 1); break;
-          case 'Home': store.setUI({ time: 0 }); this.stage.dirty = true; break;
-          case 'p': case 'P': if (store.preset && store.preset.usesPath) store.setUI({ editPath: !store.ui.editPath }); break;
+          case ' ':
+            if (onControl) return;
+            e.preventDefault();
+            this.transport.toggle();
+            break;
+          case 'ArrowLeft':
+          case 'ArrowRight':
+            if (onControl) return;
+            e.preventDefault();
+            this.transport.step((e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 1));
+            break;
+          case 'Home':
+          case 'End':
+            if (onControl) return;
+            e.preventDefault();
+            this.transport.setFrame(e.key === 'Home' ? 0 : this.transport.frames - 1);
+            break;
+          case 'p': case 'P':
+            if (store.preset && store.preset.usesPath) store.setUI({ editPath: !store.ui.editPath });
+            else toast('This preset doesn’t follow a path. Try Path Flow.', 'info');
+            break;
           case 'g': case 'G': store.setUI({ guides: !store.ui.guides }); break;
+          case 'f': case 'F': store.setUI({ clean: !store.ui.clean }); break;
           case 'r': case 'R': remix(store); break;
-          case 'Escape': if (store.ui.editPath) store.setUI({ editPath: false }); break;
-          case '?': toast('Space play · ←/→ frame · P edit path · G guides · R remix · ⌘Z undo · ⌘E export', 'info', 6000); break;
+          case 'n': case 'N': this.layers.add(); break;
+          case '[': store.select(store.selected - 1); UI.announce('Selected ' + Studio.layerName(store.layer)); break;
+          case ']': store.select(store.selected + 1); UI.announce('Selected ' + Studio.layerName(store.layer)); break;
+          case '/': e.preventDefault(); this.focusPresets(); break;
+          case '?': e.preventDefault(); Studio.showShortcuts(); break;
+          case '+': case '=': e.preventDefault(); this.stage.zoomStep(1); break;
+          case '-': case '_': e.preventDefault(); this.stage.zoomStep(-1); break;
+          case 'Escape':
+            if (store.ui.clean) store.setUI({ clean: false });
+            else if (store.ui.editPath) store.setUI({ editPath: false });
+            else if (t !== document.body && t.blur && !onControl) t.blur();
+            break;
+          default: break;
         }
       });
     }
 
+    // ── mobile tabs + sheet ──
     wireTabs() {
-      // Mobile: one panel at a time.
-      document.querySelectorAll('[data-tab]').forEach((b) => {
+      const tabs = [...document.querySelectorAll('.tabs [data-tab]')];
+      tabs.forEach((b) => {
         b.addEventListener('click', () => {
-          document.body.dataset.tab = b.dataset.tab;
-          document.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('on', x === b));
+          if (document.body.dataset.tab === b.dataset.tab && UI.isPhone()) document.body.classList.toggle('sheet-full');
+          this.showTab(b.dataset.tab);
+          requestAnimationFrame(() => this.stage.layout());
         });
+        b.addEventListener('keydown', (e) => {
+          if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+          e.preventDefault();
+          e.stopPropagation();
+          const i = tabs.indexOf(b);
+          const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+          next.focus();
+          next.click();
+        });
+      });
+      const handle = $('#sheetHandle');
+      if (handle) handle.addEventListener('click', () => {
+        const full = document.body.classList.toggle('sheet-full');
+        handle.setAttribute('aria-expanded', full ? 'true' : 'false');
+        requestAnimationFrame(() => this.stage.layout());
+      });
+      this.showTab(document.body.dataset.tab || 'presets');
+      UI.onPhoneChange(() => requestAnimationFrame(() => this.stage.layout(true)));
+    }
+
+    // ── drag & drop: fonts and project files ──
+    wireDrop() {
+      const overlay = $('#dropOverlay');
+      let depth = 0;
+      const hasFiles = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files');
+      window.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; depth++; overlay.hidden = false; });
+      window.addEventListener('dragleave', () => { depth = Math.max(0, depth - 1); if (!depth) overlay.hidden = true; });
+      window.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
+      window.addEventListener('drop', async (e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        depth = 0;
+        overlay.hidden = true;
+        const file = e.dataTransfer.files && e.dataTransfer.files[0];
+        if (!file) return;
+        if (Studio.customFonts && Studio.customFonts.isFontFile(file)) {
+          try {
+            const entry = await Studio.customFonts.addFile(file);
+            TM.fonts.ensure(entry.family, 400);
+            this.store.updateLayer((l) => { l.font.family = entry.family; l.font.weight = 400; }, { reason: 'font', label: 'Font: ' + entry.family });
+            toast('Using “' + entry.family.replace(/ \(custom\)$/, '') + '” on this layer. Share links can’t carry custom fonts.', 'ok', 5200);
+          } catch (err) { toast(err.message, 'error'); }
+        } else if (/\.json$/i.test(file.name)) this.openFile(file);
+        else toast('Drop a font (.ttf, .otf, .woff, .woff2) or a .typoman.json project', 'error');
       });
     }
   }
 
+  function bootError(err) {
+    console.error('[TYPOMAN] studio failed to start:', err);
+    document.body.classList.remove('booting');
+    document.body.classList.add('boot-failed');
+  }
+
   TM_READY.then(async () => {
-    const scene = await initialScene();
-    const store = new Studio.Store(scene);
-    Studio.store = store;
-    Studio.app = new App(store);
-    document.body.classList.add('ready');
-    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
-  });
+    try {
+      const scene = await initialScene();
+      const store = new Studio.Store(scene);
+      Studio.store = store;
+      new App(store);
+      document.body.classList.remove('booting');
+      document.body.classList.add('ready');
+      if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+    } catch (e) { bootError(e); }
+  }, bootError);
 })(window.TM);

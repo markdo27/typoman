@@ -143,7 +143,7 @@
           body.append(h('div', { class: 'preset-line' },
             h('span', { class: 'preset-name' }, preset.name),
             h('span', { class: 'tag-chip' }, preset.category),
-            preset.usesPath ? h('span', { class: 'tag-chip' }, 'Path') : null,
+            preset.usesPath && preset.category !== 'Path' ? h('span', { class: 'tag-chip' }, 'Follows path') : null,
             browse));
           if (preset.description) body.append(h('p', { class: 'hint' }, preset.description));
         }
@@ -171,6 +171,7 @@
           });
         });
         const durCtl = C.range({ label: 'Loop length', min: 0.5, max: 20, step: 0.1, unit: 's', default: 4, hint: 'Seconds per seamless loop', ...sceneBinding(store, 'duration') });
+        durCtl.el.classList.add('ctl-duration');
         body.append(h('div', { class: 'sub' }, 'Clip'), durCtl.el);
         ctl.push(durCtl);
         const update = () => {
