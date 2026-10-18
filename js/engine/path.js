@@ -1055,12 +1055,14 @@
       return fromPoints([map(-hx * 0.86, 0), map(hx * 0.86, 0)]);
     }],
     ['arc', 'Arc', (a) => {
-      const { hx } = halfExtent(a), map = unitToFrame(a), w = Math.min(hx * 0.84, 0.75);
-      return fromPoints([map(-w, 0.2), map(0, -0.16), map(w, 0.2)], false, 1.15);
+      // Tall frames get a flatter arch, so text on it does not pile up at the crown.
+      const { hx } = halfExtent(a), map = unitToFrame(a), w = Math.min(hx * 0.84, 0.75), k = a < 0.8 ? 0.7 : 1;
+      return fromPoints([map(-w, 0.2 * k), map(0, -0.16 * k), map(w, 0.2 * k)], false, 1.15);
     }],
     ['wave', 'Wave', (a) => {
-      const { hx } = halfExtent(a), map = unitToFrame(a), w = hx * 0.9, amp = 0.14;
-      return fromPoints([0, 1, 2, 3, 4].map((i) => map(-w + (i / 4) * 2 * w, i % 2 ? amp : -amp)), false, 1.1);
+      // One full wave on tall frames, two on wide ones.
+      const { hx } = halfExtent(a), map = unitToFrame(a), w = hx * 0.9, amp = 0.14, n = a < 0.8 ? 3 : 5;
+      return fromPoints(Array.from({ length: n }, (_, i) => map(-w + (i / (n - 1)) * 2 * w, i % 2 ? amp : -amp)), false, 1.1);
     }],
     ['scurve', 'S-curve', (a) => {
       const { hx, hy } = halfExtent(a), map = unitToFrame(a);
@@ -1083,7 +1085,7 @@
       // A dropped ball: parabolic arcs (exact as cubics) losing height at each contact.
       const { hx, hy } = halfExtent(a);
       const w = hx * 0.86, h0 = Math.min(0.44, hy * 0.8), e = 0.45;
-      const heights = [h0, h0 * e, h0 * e * e, h0 * e * e * e];
+      const heights = (a < 0.8 ? [1, e, e * e] : [1, e, e * e, e * e * e]).map((k) => h0 * k);
       const spans = heights.map((h, i) => (i === 0 ? 1 : 2) * Math.sqrt(h));
       const k = (2 * w) / spans.reduce((s, v) => s + v, 0);
       const floor = h0 / 2;
@@ -1100,8 +1102,8 @@
       return unitNodes(a, list, false);
     }],
     ['zigzag', 'Zigzag', (a) => {
-      const { hx } = halfExtent(a), map = unitToFrame(a), w = hx * 0.88;
-      return fromPolyline([0, 1, 2, 3, 4, 5, 6].map((i) => map(-w + (i / 6) * 2 * w, i % 2 ? 0.16 : -0.16)));
+      const { hx } = halfExtent(a), map = unitToFrame(a), w = hx * 0.88, n = a < 0.8 ? 5 : 7;
+      return fromPolyline(Array.from({ length: n }, (_, i) => map(-w + (i / (n - 1)) * 2 * w, i % 2 ? 0.16 : -0.16)));
     }],
     ['ribbon', 'Ribbon', (a) => {
       const { hx } = halfExtent(a), w = hx * 0.95;
@@ -1177,7 +1179,7 @@
     }],
     ['lissajous', 'Lissajous', (a) => {
       // The 3 : 2 Lissajous knot: one closed line that crosses itself seven times.
-      const { hx, hy } = halfExtent(a), w = Math.min(hx * 0.8, 0.62), v = Math.min(0.34, hy * 0.7);
+      const { hx, hy } = halfExtent(a), w = Math.min(hx * 0.8, 0.62), v = Math.min(a < 0.8 ? 0.46 : 0.34, hy * 0.7);
       return fitCurve((u) => {
         const t = u * TAU;
         return [-w * Math.cos(3 * t), -v * Math.sin(2 * t)];
