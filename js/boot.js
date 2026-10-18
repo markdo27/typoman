@@ -41,6 +41,7 @@
     'js/presets/assemble.js',
     'js/presets/pop.js',
     'js/presets/glitch.js',
+    'js/presets/cylinder.js',
   ];
 
   // ── Export & embed runtime (owner: export team) ──
