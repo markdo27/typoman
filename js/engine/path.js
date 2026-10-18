@@ -846,21 +846,30 @@
     });
   }
 
-  /** Indices where the stroke turns sharply within `win` of arc length (one per corner). */
+  /**
+   * Indices where the stroke turns sharply (one per corner). A corner turns by more than the
+   * limit within `win` of arc length, and keeps most of that turn within win / 2; a tight arc
+   * turns half as much over half the distance, so it is not mistaken for a corner.
+   */
   function findCorners(pts, closed, win, cosLimit) {
     const n = pts.length;
     if (cosLimit <= -1 || n < 5) return [];
     const total = polyLength(pts, closed);
     const score = new Float64Array(n);
+    const turn = (p, a, b) => {
+      const din = unit(p.x - a.x, p.y - a.y), dout = unit(b.x - p.x, b.y - p.y);
+      return din && dout ? Math.acos(clamp(din.x * dout.x + din.y * dout.y, -1, 1)) : 0;
+    };
+    const limit = Math.acos(clamp(cosLimit, -1, 1));
     let s = 0;
     for (let i = 0; i < n; i++) {
       if (i > 0) s += hyp(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
       if (!closed && (s < win || total - s < win)) continue;
-      const a = walk(pts, i, win, -1, closed), b = walk(pts, i, win, 1, closed), p = pts[i];
-      const din = unit(p.x - a.x, p.y - a.y), dout = unit(b.x - p.x, b.y - p.y);
-      if (!din || !dout) continue;
-      const c = din.x * dout.x + din.y * dout.y;
-      if (c < cosLimit) score[i] = 1 - c;
+      const p = pts[i];
+      const t1 = turn(p, walk(pts, i, win, -1, closed), walk(pts, i, win, 1, closed));
+      if (t1 <= limit) continue;
+      const t2 = turn(p, walk(pts, i, win / 2, -1, closed), walk(pts, i, win / 2, 1, closed));
+      if (t2 > 0.7 * t1) score[i] = t1;
     }
     // One corner per cluster of sharp samples: its sharpest one.
     const out = [];
@@ -883,8 +892,8 @@
    * Fit smooth cubic béziers to a polyline, e.g. a freehand stroke.
    *   points     [{ x, y }] in any isotropic units (pixels)
    *   tolerance  maximum deviation from the input, same units
-   *   opts       { closed, corner: turn in degrees that makes a corner (default 70, 180 = never),
-   *                smooth: pre-smoothing passes (default 0), W, H: divide the output by these
+   *   opts       { closed, corner: turn in degrees that makes a corner (default 60, 180 = never),
+   *                smooth: smoothing passes between corners (default 0), W, H: divide the output by these
    *                to get a normalised definition }
    * Returns a path definition, or null for fewer than two distinct points.
    */
@@ -900,10 +909,9 @@
     if (closed) while (pts.length > 3 && hyp(pts[0].x - pts[pts.length - 1].x, pts[0].y - pts[pts.length - 1].y) <= tol * 0.02) pts.pop();
     if (pts.length < 2) return null;
     if (pts.length < 4) closed = false;
-    for (let k = 0; k < (opts.smooth | 0); k++) pts = smoothPolyline(pts, closed);
     const W = opts.W || 1, H = opts.H || 1;
     const win = opts.window || tol * 4;
-    const cosLimit = Math.cos((clamp(opts.corner != null ? opts.corner : 70, 1, 180) * Math.PI) / 180);
+    const cosLimit = Math.cos((clamp(opts.corner != null ? opts.corner : 60, 1, 180) * Math.PI) / 180);
     let corners = findCorners(pts, closed, win, cosLimit);
 
     // Split the stroke into runs that start and end on nodes.
@@ -926,7 +934,13 @@
 
     const beziers = []; // { bez, corner }: corner = the bézier starts on a corner node
     for (const run of runs) {
-      let rp = simplify(run.pts, tol * 0.3);
+      // Smooth pointer jitter between corners only, so corners stay sharp.
+      let src = run.pts;
+      for (let k = 0; k < (opts.smooth | 0); k++) {
+        src = run.ring ? smoothPolyline(src.slice(0, -1), true) : smoothPolyline(src, false);
+        if (run.ring) src.push(src[0]);
+      }
+      let rp = simplify(src, tol * 0.3);
       if (rp.length < 2) continue;
       const last = rp.length - 1;
       let t1, t2;

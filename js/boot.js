@@ -52,6 +52,7 @@
   // ── Studio: path editor (owner: path team) ──
   var STUDIO_PATH = [
     'js/studio/path-editor.js',
+    'js/studio/path-panel.js',
   ];
 
   // ── Studio: export, embed & share dialogs (owner: export team) ──

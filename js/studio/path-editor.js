@@ -623,6 +623,7 @@
       if (!g || e.pointerId !== g.id) return;
       this.g = null;
       this.guides = null;
+      if (g.moved) this.tap = null; // a drag is not the first half of a double-click
       try { if (this.svg.hasPointerCapture(e.pointerId)) this.svg.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
       if (g.kind === 'draw') { this._finishDraw(g); return; }
       if (!g.moved) {
