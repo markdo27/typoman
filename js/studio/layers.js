@@ -110,7 +110,7 @@
       },
       h('span', { class: 'grip', 'aria-hidden': 'true' }, UI.icon('grip')),
       chip,
-      h('span', { class: 'layer-text' }, nameEl, h('span', { class: 'layer-meta' }, (preset ? preset.name : layer.preset) + ' · ' + layer.font.family)),
+      h('span', { class: 'layer-text' }, nameEl, h('span', { class: 'layer-meta' }, (preset ? preset.name : layer.preset) + ' · ' + Studio.fontLabel(layer.font.family))),
       eye);
       row.addEventListener('pointerdown', (e) => this.onPointerDown(e, row, i));
       row.addEventListener('dblclick', (e) => { if (!e.target.closest('.eye')) this.rename(i); });

@@ -231,7 +231,7 @@
               'aria-selected': f.family === current ? 'true' : 'false',
               'aria-label': f.family + (f.variable ? ', variable ' + f.min + ' to ' + f.max : '') + (f.custom ? ', custom font' : ''),
             },
-            h('span', { class: 'fp-name', style: { fontFamily: TM.fonts.cssFamily(f.family), fontWeight: String(TM.fonts.clampWeight(f.family, 500)) } }, f.family),
+            h('span', { class: 'fp-name', style: { fontFamily: TM.fonts.cssFamily(f.family), fontWeight: String(TM.fonts.clampWeight(f.family, 500)) } }, Studio.fontLabel ? Studio.fontLabel(f.family) : f.family),
             metaFor(f),
             f.family === current ? UI.icon('check', 'fp-check') : null);
             opt.addEventListener('pointermove', () => { if (active !== i) setActive(i, false); });

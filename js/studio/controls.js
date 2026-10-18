@@ -312,6 +312,9 @@
   }
 
   // ───────────────────────────── font ─────────────────────────────
+  /** Display name: uploaded fonts drop the internal " (custom)" suffix (the UI badges them instead). */
+  const fontLabel = (family) => String(family || '').replace(/ \(custom\)$/, '');
+
   function fontMeta(f) {
     if (!f) return '';
     if (f.custom) return 'Custom';
@@ -335,10 +338,10 @@
     function update() {
       const fam = o.get();
       const f = TM.fonts.get(fam);
-      nameEl.textContent = fam;
+      nameEl.textContent = fontLabel(fam);
       nameEl.style.fontFamily = TM.fonts.cssFamily(fam);
       meta.textContent = fontMeta(f);
-      btn.setAttribute('aria-label', (o.label || 'Font') + ': ' + fam + '. Open font picker');
+      btn.setAttribute('aria-label', (o.label || 'Font') + ': ' + fontLabel(fam) + (f && f.custom ? ' (custom)' : '') + '. Open font picker');
     }
     update();
     return { el, update };
@@ -369,5 +372,6 @@
   Studio.easeLabel = easeLabel;
   Studio.drawEaseCurve = drawEaseCurve;
   Studio.fontMeta = fontMeta;
+  Studio.fontLabel = fontLabel;
   Studio.controls = { range, select, segmented, toggle, color, textarea, ease, font, section, button };
 })(window.TM);
