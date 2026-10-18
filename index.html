@@ -5,67 +5,126 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>TYPOMAN — Kinetic Type Studio</title>
 <meta name="description" content="Make animated typography for your projects. Shape the motion path, then embed it on the web or download MP4.">
-<meta name="theme-color" content="#0b0b0e">
+<meta name="theme-color" content="#0a0a0c">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230015ff'/%3E%3Cpath d='M9 9h14v4h-5v12h-4V13H9z' fill='%23fff'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Anton&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Anton&display=swap">
 <link rel="stylesheet" href="css/studio.css">
 </head>
-<body data-tab="presets">
+<body class="booting" data-tab="presets">
   <a class="skip" href="#inspector">Skip to controls</a>
 
   <header class="topbar">
-    <div class="brand" aria-label="TYPOMAN">
-      <span class="logo" aria-hidden="true"></span>
+    <div class="brand" aria-label="TYPOMAN Studio">
+      <span class="logo" aria-hidden="true"><b>T</b><b>T</b></span>
       <span class="wordmark">TYPOMAN</span>
-      <span class="tag">Studio</span>
     </div>
-    <input id="sceneName" class="scene-name" aria-label="Project name" maxlength="60" spellcheck="false">
+    <span class="crumb" aria-hidden="true">/</span>
+    <div class="project">
+      <input id="sceneName" class="scene-name" aria-label="Project name" maxlength="60" spellcheck="false" autocomplete="off">
+      <button id="projectBtn" class="icon-btn sm" type="button" aria-label="Project menu" aria-haspopup="menu" data-tip="Project: new, open, save file"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/></svg></button>
+      <span id="saveState" class="save-state" data-status="saved" role="status"><i aria-hidden="true"></i><span>Autosaved</span></span>
+    </div>
     <div class="tools" role="toolbar" aria-label="Project tools">
-      <button id="undoBtn" class="icon-btn" type="button" title="Undo (⌘Z)" aria-label="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
-      <button id="redoBtn" class="icon-btn" type="button" title="Redo (⇧⌘Z)" aria-label="Redo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+      <button id="undoBtn" class="icon-btn" type="button" aria-label="Undo" data-tip="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+      <button id="redoBtn" class="icon-btn" type="button" aria-label="Redo" data-tip="Redo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
       <span class="sep" aria-hidden="true"></span>
-      <button id="remixBtn" class="btn ghost" type="button" title="Remix: random preset, font and palette (R)"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2"/><circle cx="15.5" cy="15.5" r="1.2"/><circle cx="15.5" cy="8.5" r="1.2"/><circle cx="8.5" cy="15.5" r="1.2"/></svg><span>Remix</span></button>
-      <button id="guidesBtn" class="icon-btn" type="button" title="Safe-area guides (G)" aria-label="Toggle safe-area guides"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="6.5" y="8" width="11" height="8" rx="1" stroke-dasharray="2 2"/></svg></button>
-      <span class="sep" aria-hidden="true"></span>
-      <button id="shareBtn" class="btn" type="button" title="Embed on the web or share a remix link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 7-5 5 5 5"/><path d="m16 7 5 5-5 5"/></svg><span>Embed</span></button>
-      <button id="exportBtn" class="btn primary" type="button" title="Download MP4 / WebM / GIF / PNG (⌘E)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg><span>Export</span></button>
+      <div class="split">
+        <button id="remixBtn" class="btn ghost remix" type="button" data-tip="Remix: a random preset, font and palette" data-kbd="R"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4.5"/><circle cx="8.6" cy="8.6" r="1.35" fill="currentColor" stroke="none"/><circle cx="15.4" cy="15.4" r="1.35" fill="currentColor" stroke="none"/><circle cx="15.4" cy="8.6" r="1.35" fill="currentColor" stroke="none"/><circle cx="8.6" cy="15.4" r="1.35" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.35" fill="currentColor" stroke="none"/></svg><span>Remix</span></button>
+        <button id="remixMenuBtn" class="btn ghost caret" type="button" aria-label="Remix options" aria-haspopup="menu" data-tip="What Remix keeps"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/></svg></button>
+      </div>
+      <button id="helpBtn" class="icon-btn hide-phone" type="button" aria-label="Keyboard shortcuts" data-tip="Keyboard shortcuts" data-kbd="?"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.2"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M7.5 14h9"/></svg></button>
+      <span class="sep hide-phone" aria-hidden="true"></span>
+      <button id="shareBtn" class="btn hide-phone" type="button" data-tip="Embed on the web or share a remix link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8.5 7-5 5 5 5"/><path d="m15.5 7 5 5-5 5"/></svg><span>Embed</span></button>
+      <button id="moreBtn" class="icon-btn show-phone" type="button" aria-label="More" aria-haspopup="menu"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg></button>
+      <button id="exportBtn" class="btn primary" type="button" data-tip="Download MP4, WebM, GIF or PNG"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg><span>Export</span></button>
     </div>
   </header>
 
-  <nav class="tabs" aria-label="Panels">
-    <button type="button" data-tab="presets" class="on">Presets</button>
-    <button type="button" data-tab="edit">Edit</button>
-  </nav>
-
-  <aside class="panel left" aria-label="Motion presets">
-    <div class="panel-head"><h2>Motion</h2><span class="hint-inline">Hover to preview</span></div>
-    <div id="gallery" class="gallery"></div>
+  <aside class="panel left" aria-label="Layers and presets">
+    <section id="layersPanel" class="layers-sec" aria-labelledby="layersTitle"></section>
+    <section class="presets-sec" aria-labelledby="presetsTitle">
+      <div class="panel-head"><h2 id="presetsTitle">Presets</h2><span class="count" id="presetCount"></span><span class="grow"></span><span class="hint-inline">Hover to preview</span></div>
+      <div id="gallery" class="gallery"></div>
+    </section>
   </aside>
 
-  <main class="center">
+  <main class="center" aria-label="Stage">
+    <div class="stagebar" role="toolbar" aria-label="Artboard">
+      <button id="formatBtn" class="btn ghost sm format-btn" type="button" aria-haspopup="menu" aria-label="Artboard format" data-tip="Artboard format"><i class="fmt-glyph" aria-hidden="true"></i><span id="formatLabel">16:9</span><small id="formatDims">1920×1080</small><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/></svg></button>
+      <span id="stageHint" class="stage-hint" role="status" hidden></span>
+      <span class="grow"></span>
+      <button id="pathBtn" class="btn ghost sm" type="button" aria-pressed="false" data-tip="Edit the motion path on the artboard" data-kbd="P" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 18c3.5 0 4.5-10 8.5-10s5 10 8.5 10"/><path d="M7.5 8h9"/><circle cx="12" cy="8" r="2"/></svg><span>Edit path</span></button>
+      <button id="guidesBtn" class="icon-btn sm" type="button" aria-pressed="false" aria-label="Safe-area guides" data-tip="Safe-area guides" data-kbd="G"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="6.5" y="8.2" width="11" height="7.6" rx="1" stroke-dasharray="2 2.2"/></svg></button>
+      <button id="cleanBtn" class="icon-btn sm" type="button" aria-label="Clean preview" data-tip="Clean preview" data-kbd="F"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/></svg></button>
+      <button id="zoomBtn" class="btn ghost sm zoom-btn" type="button" aria-haspopup="menu" aria-label="Zoom" data-tip="Zoom · Ctrl or ⌘ + scroll"><span id="zoomLabel">Fit</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/></svg></button>
+    </div>
     <div id="stage" class="stage">
-      <div id="artboard" class="artboard">
-        <canvas id="stageCanvas" aria-label="Animation preview"></canvas>
-        <svg id="pathOverlay" class="path-overlay" aria-label="Path editor"></svg>
-        <div class="guides" aria-hidden="true"><i class="title-safe"></i><i class="action-safe"></i><i class="cross"></i></div>
-        <div class="edit-badge" aria-hidden="true">Editing path. Drag points · double-click to add · Del to remove · Esc to finish</div>
+      <div class="stage-inner">
+        <div id="frame" class="frame">
+          <div class="frame-label" aria-hidden="true"><span id="frameName">Untitled</span><span id="frameDims"></span></div>
+          <div id="artboard" class="artboard" tabindex="0" role="group" aria-roledescription="artboard" aria-label="Artboard. Click text to select it, drag to move. With the artboard focused, arrow keys nudge the selected text.">
+            <canvas id="stageCanvas" role="img" aria-label="Animation preview"></canvas>
+            <div id="hoverBox" class="hover-box" hidden></div>
+            <div id="selBox" class="sel-box" hidden><i></i><i></i><i></i><i></i></div>
+            <div id="snapV" class="snap v" hidden></div>
+            <div id="snapH" class="snap h" hidden></div>
+            <svg id="pathOverlay" class="path-overlay" aria-label="Path editor"></svg>
+            <div class="guides" aria-hidden="true"><i class="action-safe"><b>Action safe</b></i><i class="title-safe"><b>Title safe</b></i><i class="cross"></i><i class="story-top"><b>App UI</b></i><i class="story-bottom"><b>App UI</b></i></div>
+            <div id="artEmpty" class="art-empty" hidden><div class="art-empty-card"><p class="art-empty-msg"></p><button type="button" class="btn sm primary">Type text</button></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="boot-state" aria-live="polite">
+        <div class="boot-loading"><span class="logo lg" aria-hidden="true"><b>T</b><b>T</b></span><p>Loading the studio…</p></div>
+        <div class="boot-error"><p><strong>TYPOMAN couldn’t start.</strong> A file didn’t load. Check your connection and try again.</p><button type="button" class="btn primary" onclick="location.reload()">Reload</button></div>
       </div>
     </div>
-    <div class="transport" role="group" aria-label="Playback">
-      <button id="stepBack" class="icon-btn" type="button" title="Previous frame (←)" aria-label="Previous frame"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5v14"/><path d="m18 6-8 6 8 6z"/></svg></button>
-      <button id="playBtn" class="play" type="button" aria-label="Pause"><svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg><svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h3.5v16H7zM13.5 4H17v16h-3.5z"/></svg></button>
-      <button id="stepFwd" class="icon-btn" type="button" title="Next frame (→)" aria-label="Next frame"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 5v14"/><path d="m6 6 8 6-8 6z"/></svg></button>
-      <input id="scrub" class="scrub-bar" type="range" min="0" max="1000" step="1" value="0" aria-label="Timeline">
-      <output id="timecode" class="timecode">0.00s</output>
+    <div class="timeline" role="group" aria-label="Timeline">
+      <div class="tl-buttons">
+        <button id="stepBack" class="icon-btn" type="button" aria-label="Previous frame" data-tip="Previous frame" data-kbd="←"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5.5v13"/><path fill="currentColor" stroke="none" d="M18.5 6.6v10.8a.8.8 0 0 1-1.25.66L9.6 12.66a.8.8 0 0 1 0-1.32l7.65-5.4a.8.8 0 0 1 1.25.66z"/></svg></button>
+        <button id="playBtn" class="play playing" type="button" aria-label="Pause" data-tip="Pause" data-kbd="Space"><svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l10.7-6.8a1 1 0 0 0 0-1.7L9.53 4.35A1 1 0 0 0 8 5.2z"/></svg><svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4.5" width="4.2" height="15" rx="1.2"/><rect x="13.8" y="4.5" width="4.2" height="15" rx="1.2"/></svg></button>
+        <button id="stepFwd" class="icon-btn" type="button" aria-label="Next frame" data-tip="Next frame" data-kbd="→"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 5.5v13"/><path fill="currentColor" stroke="none" d="M5.5 6.6v10.8a.8.8 0 0 0 1.25.66l7.65-5.4a.8.8 0 0 0 0-1.32L6.75 5.94a.8.8 0 0 0-1.25.66z"/></svg></button>
+      </div>
+      <div class="tl-clock" aria-hidden="true"><output id="timecode" class="timecode">00:00</output><span id="frameNo" class="frame-no">f 000 / 240</span></div>
+      <div id="scrub" class="tl-track" role="slider" tabindex="0" aria-label="Timeline" aria-valuemin="0" aria-valuemax="239" aria-valuenow="0">
+        <canvas class="tl-ruler" aria-hidden="true"></canvas>
+        <div id="tlBands" class="tl-bands" aria-hidden="false"></div>
+        <div class="tl-played" aria-hidden="true"></div>
+        <div class="tl-playhead" aria-hidden="true"><i></i></div>
+      </div>
+      <button id="loopBtn" class="tl-loop" type="button" aria-label="Loop length: edit" data-tip="Seamless loop · click to change its length"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.5v4h4"/></svg><span id="loopLabel">4s</span><small id="fpsLabel">60 fps</small></button>
     </div>
   </main>
 
   <aside class="panel right" aria-label="Inspector">
     <div id="inspector" class="inspector" tabindex="-1"></div>
   </aside>
+  <button id="sheetHandle" class="sheet-handle" type="button" aria-label="Expand panel" aria-expanded="false"><i aria-hidden="true"></i></button>
 
+  <nav class="tabs" role="tablist" aria-label="Panels">
+    <button type="button" role="tab" data-tab="presets" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.6"/></svg><span>Presets</span></button>
+    <button type="button" role="tab" data-tab="edit" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9.5M18.5 7H20M4 17h3.5M12.5 17H20"/><circle cx="16" cy="7" r="2.3"/><circle cx="10" cy="17" r="2.3"/></svg><span>Edit</span></button>
+    <button type="button" role="tab" data-tab="layers" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.5 8.5 4.75L12 13 3.5 8.25 12 3.5z"/><path d="m3.5 12.5 8.5 4.75 8.5-4.75"/></svg><span>Layers</span></button>
+  </nav>
+
+  <div id="cleanHint" class="clean-hint"><span>Preview</span><button id="exitClean" type="button" class="btn sm">Exit <kbd>F</kbd></button></div>
+  <div id="dropOverlay" class="drop-overlay" hidden><div><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V5"/><path d="m7 10 5-5 5 5"/><path d="M5 20h14"/></svg><p>Drop a font to use it on this layer</p><small>.ttf · .otf · .woff · .woff2 — or a .typoman.json project</small></div></div>
+  <div id="toasts" aria-live="polite"></div>
+  <div id="srLive" class="sr-only" aria-live="polite"></div>
   <noscript><div class="noscript">TYPOMAN needs JavaScript to animate type.</div></noscript>
   <script src="js/boot.js" data-groups="engine,presets,studio"></script>
+  <script>
+    // Boot watchdog: a missing script leaves a clear error instead of a dead UI.
+    (function () {
+      var slow = setTimeout(function () { document.body.classList.add('slow-boot'); }, 9000);
+      if (window.TM_READY) window.TM_READY.then(function () { clearTimeout(slow); }, function () {
+        clearTimeout(slow);
+        document.body.classList.remove('booting');
+        document.body.classList.add('boot-failed');
+      });
+    })();
+  </script>
 </body>
 </html>

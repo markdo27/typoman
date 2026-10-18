@@ -66,8 +66,17 @@
   // ── Studio shell (owner: UI team) ──
   var STUDIO_UI = [
     'js/studio/store.js',
+    'js/studio/ui.js',
     'js/studio/controls.js',
+    'js/studio/font-picker.js',
+    'js/studio/curve-editor.js',
+    'js/studio/color-picker.js',
     'js/studio/inspector.js',
+    'js/studio/gallery.js',
+    'js/studio/layers.js',
+    'js/studio/stage.js',
+    'js/studio/timeline.js',
+    'js/studio/onboarding.js',
     'js/studio/app.js',
   ];
 
