@@ -606,7 +606,8 @@ input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(
 .boot-failed .boot-loading { display: none; }
 .boot-failed .boot-error { display: flex; }
 .slow-boot .boot-loading p::after { content: " This is taking longer than usual."; }
-.booting .panel > *, .booting .timeline > *, .booting .stagebar > * { visibility: hidden; }
+.booting .panel > *, .booting .timeline > *, .booting .stagebar > *,
+.boot-failed .panel > *, .boot-failed .timeline > *, .boot-failed .stagebar > *, .boot-failed .project, .boot-failed .tools { visibility: hidden; }
 .booting .panel { background-image: linear-gradient(var(--panel-2), var(--panel-2)), linear-gradient(var(--panel-2), var(--panel-2)), linear-gradient(var(--panel-2), var(--panel-2)); background-repeat: no-repeat; background-size: calc(100% - 32px) 34px, calc(100% - 32px) 120px, calc(100% - 32px) 120px; background-position: 16px 56px, 16px 104px, 16px 236px; }
 .clean-hint { display: none; }
 .drop-overlay { position: fixed; inset: 10px; z-index: 95; display: grid; place-items: center; border: 2px dashed var(--accent-fg); border-radius: 16px; background: rgba(10, 10, 14, 0.82); backdrop-filter: blur(4px); text-align: center; pointer-events: none; }
