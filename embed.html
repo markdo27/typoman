@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="normal">
+<title>TYPOMAN player</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!--
+  Chromeless TYPOMAN player for iframes.
+  embed.html#c=<TM.Scene.encode(scene)>&autoplay=0|1&loop=0|1&controls=0|1&bg=transparent|RRGGBB&fit=contain|cover&start=<s>
+  Defaults: autoplay=1, loop=1, controls=0, fit=contain. The scene is validated by TM.Scene.normalize().
+  postMessage API (from the embedding page): { typoman: 'play' | 'pause' | 'toggle' | 'seek', time }.
+  Events posted to the parent: { typoman: 'ready' | 'play' | 'pause' | 'ended' | 'error', duration }.
+-->
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+  typoman-player { position: fixed; inset: 0; width: 100%; height: 100%; aspect-ratio: auto; }
+  noscript { position: fixed; inset: 0; display: grid; place-items: center; font: 14px system-ui, sans-serif; color: #a6a6b2; background: #111115; }
+</style>
+</head>
+<body>
+<typoman-player id="player"></typoman-player>
+<noscript>This animation needs JavaScript.</noscript>
+<script src="js/boot.js" data-groups="engine,presets"></script>
+<script src="player.js"></script>
+<script>
+(function () {
+  'use strict';
+  var player = document.getElementById('player');
+  var current = null;
+
+  function params() {
+    var out = {};
+    (location.search.slice(1) + '&' + location.hash.slice(1)).split('&').forEach(function (kv) {
+      if (!kv) return;
+      var i = kv.indexOf('=');
+      var k = i < 0 ? kv : kv.slice(0, i), v = i < 0 ? '' : kv.slice(i + 1);
+      try { v = decodeURIComponent(v); } catch (e) { /* keep raw */ }
+      out[k] = v;
+    });
+    return out;
+  }
+  function flag(v, d) { return v == null || v === '' ? d : !/^(0|false|no|off)$/i.test(v); }
+  function attr(name, value) {
+    if (value === null || value === false) player.removeAttribute(name);
+    else player.setAttribute(name, value === true ? '' : value);
+  }
+
+  function apply() {
+    var p = params();
+    var bg = (p.bg || '').replace(/^#/, '');
+    attr('autoplay', flag(p.autoplay, true));
+    attr('loop', flag(p.loop, true));
+    attr('controls', flag(p.controls, false));
+    attr('fit', p.fit === 'cover' ? 'cover' : 'contain');
+    attr('bg', bg === 'transparent' ? 'transparent' : /^[0-9a-f]{6}$/i.test(bg) ? '#' + bg : null);
+    attr('start', p.start && isFinite(+p.start) ? String(Math.max(0, +p.start)) : null);
+    var scene = p.c || p.s || '';
+    if (scene !== current) {
+      current = scene;
+      if (scene) player.setAttribute('scene', scene);
+      else player.showError('No animation here yet', 'This player needs a scene: copy an embed code from TYPOMAN.');
+    }
+  }
+
+  function post(type) {
+    if (window.parent === window) return;
+    try { window.parent.postMessage({ typoman: type, duration: player.duration, time: player.currentTime }, '*'); } catch (e) { /* detached */ }
+  }
+  ['ready', 'play', 'pause', 'ended', 'error'].forEach(function (type) { player.addEventListener(type, function () { post(type); }); });
+
+  window.addEventListener('message', function (e) {
+    var d = e.data;
+    if (!d || typeof d !== 'object' || typeof d.typoman !== 'string') return;
+    if (d.typoman === 'play') player.play();
+    else if (d.typoman === 'pause') player.pause();
+    else if (d.typoman === 'toggle') player.toggle();
+    else if (d.typoman === 'seek' && isFinite(+d.time)) player.currentTime = +d.time;
+  });
+
+  window.addEventListener('hashchange', apply);
+  apply();
+})();
+</script>
+</body>
+</html>

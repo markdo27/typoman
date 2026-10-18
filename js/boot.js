@@ -50,6 +50,17 @@
 
   // ── Export & embed runtime (owner: export team) ──
   var EXPORT = [
+    'js/export/core.js',
+    'js/export/codecs.js',
+    'js/export/frames.js',
+    'js/export/webm-alpha.js',
+    'js/export/video.js',
+    'js/export/recorder.js',
+    'js/export/gif.js',
+    'js/export/zip.js',
+    'js/export/png.js',
+    'js/export/standalone.js',
+    'js/export/run.js',
   ];
 
   // ── Studio shell (owner: UI team) ──
@@ -66,6 +77,8 @@
 
   // ── Studio: export, embed & share dialogs (owner: export team) ──
   var STUDIO_EXPORT = [
+    'js/studio/export-dialog.js',
+    'js/studio/share-dialog.js',
   ];
 
   var GROUPS = {
