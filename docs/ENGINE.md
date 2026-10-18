@@ -105,6 +105,9 @@ the block centre. `L.lines[j] = { text, width, x, y, glyphs:[indices] }`, plus `
 - `f.identity()` resets the transform to frame px, for drawing your own shapes. Use
   `f.colorOf({vi:0})` as their colour.
 - `f.rand`, `f.srand`, `f.noise` and `f.loopNoise(salt, freq)`.
+- `f.buffer(id)` returns a cleared, frame-sized scratch `{ canvas, ctx }`, pooled per id.
+  `f.drawInto(ctx, fn)` points `f.ctx` (and so `drawGlyph`) at another context while
+  `fn` runs; this is how Glitch composes its channel and slice passes.
 
 **Paths.** `path.length` and `path.closed`. `path.at(s)` returns
 `{ x, y, angle, tx, ty, nx, ny, inside }` (it wraps when closed and extrapolates past the

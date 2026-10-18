@@ -223,6 +223,26 @@
       this.ctx.setTransform(1, 0, 0, 1, 0, 0);
       this.ctx.globalAlpha = this.alpha;
     }
+
+    /** A cleared frame-sized scratch buffer { canvas, ctx } (pooled by id; valid until the next call with that id). */
+    buffer(id = 0) {
+      return this.renderer._scratch(id, this.W, this.H);
+    }
+
+    /** Run fn with f.ctx temporarily pointing at another context (e.g. a buffer), so drawGlyph targets it. */
+    drawInto(ctx, fn) {
+      const prev = this.ctx, prevFont = this._font;
+      this.ctx = ctx;
+      this._font = null;
+      ctx.lineJoin = 'round';
+      ctx.miterLimit = 2;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      try { fn(ctx); } finally {
+        this.ctx = prev;
+        this._font = prevFont;
+      }
+    }
   }
 
   // ───────────────────────────── renderer ─────────────────────────────
@@ -302,9 +322,24 @@
       return a;
     }
 
+    _scratch(id, W, H) {
+      if (!this._scratchPool) this._scratchPool = new Map();
+      let b = this._scratchPool.get(id);
+      if (!b || b.canvas.width !== W || b.canvas.height !== H) {
+        const canvas = makeCanvas(W, H);
+        b = { canvas, ctx: canvas.getContext('2d') };
+        this._scratchPool.set(id, b);
+      }
+      b.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      b.ctx.globalAlpha = 1;
+      b.ctx.globalCompositeOperation = 'source-over';
+      b.ctx.clearRect(0, 0, W, H);
+      return b;
+    }
+
     _setupFor(layer, preset, f) {
       if (!preset.setup) return null;
-      const key = JSON.stringify([layer.text, layer.font, layer.type, layer.params, layer.path, f.W, f.H, f.seed, TM.fonts.version()]);
+      const key = JSON.stringify([layer.text, layer.font, layer.type, layer.params, layer.path, layer.stroke, layer.fx, f.W, f.H, f.seed, TM.fonts.version()]);
       const hit = this._setup.get(layer.id);
       if (hit && hit.key === key && hit.preset === preset.id) return hit.value;
       const value = preset.setup(f);
