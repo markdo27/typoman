@@ -477,31 +477,48 @@
       }
 
       const unit = Math.min(W, H);
-      const off = W + H + 4000; // draw the image off-canvas so only its shadow lands
       const fx = layer.fx;
       if (fx.shadow.amount > 0) {
         const a = fx.shadow.angle * DEG, dist = fx.shadow.distance * unit;
-        ctx.shadowColor = TM.color.rgba(fx.shadow.color, 0.25 + 0.75 * fx.shadow.amount);
-        ctx.shadowBlur = fx.shadow.amount * unit * 0.035;
-        ctx.shadowOffsetX = off + Math.cos(a) * dist;
-        ctx.shadowOffsetY = Math.sin(a) * dist;
-        ctx.drawImage(this._layer, -off, 0);
+        this._softPass(ctx, TM.color.rgba(fx.shadow.color, 0.25 + 0.75 * fx.shadow.amount), Math.max(1, fx.shadow.amount * unit * 0.035), Math.cos(a) * dist, Math.sin(a) * dist);
       }
       if (fx.glow.amount > 0) {
-        ctx.shadowColor = fx.glow.color;
-        ctx.shadowOffsetX = off;
-        ctx.shadowOffsetY = 0;
         const passes = fx.glow.amount > 0.5 ? 2 : 1;
-        for (let k = 0; k < passes; k++) {
-          ctx.shadowBlur = unit * (0.012 + fx.glow.amount * 0.05) * (k + 1);
-          ctx.drawImage(this._layer, -off, 0);
-        }
+        for (let k = 0; k < passes; k++) this._softPass(ctx, fx.glow.color, unit * (0.012 + fx.glow.amount * 0.05) * (k + 1), 0, 0);
       }
-      ctx.shadowColor = 'rgba(0,0,0,0)';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
       ctx.drawImage(this._layer, 0, 0);
+    }
+
+    /**
+     * Draw a blurred, tinted copy of the layer buffer (drop shadow / glow). The blur runs on a
+     * downscaled copy, which is far cheaper than a full-resolution shadowBlur and softer too.
+     */
+    _softPass(ctx, color, blur, dx, dy) {
+      const W = this._layer.width, H = this._layer.height;
+      const k = blur > 32 ? 4 : blur > 10 ? 2 : 1;
+      const sw = Math.ceil(W / k), sh = Math.ceil(H / k);
+      if (!this._small || this._small.width !== sw || this._small.height !== sh) {
+        this._small = makeCanvas(sw, sh);
+        this._sctx = this._small.getContext('2d');
+        this._small2 = makeCanvas(sw, sh);
+        this._s2ctx = this._small2.getContext('2d');
+      }
+      const s = this._sctx, s2 = this._s2ctx;
+      s.setTransform(1, 0, 0, 1, 0, 0);
+      s.clearRect(0, 0, sw, sh);
+      s.drawImage(this._layer, 0, 0, sw, sh);
+      s2.setTransform(1, 0, 0, 1, 0, 0);
+      s2.clearRect(0, 0, sw, sh);
+      const off = sw + sh + 1000; // draw off-canvas so only the shadow lands
+      s2.shadowColor = color;
+      s2.shadowBlur = blur / k;
+      s2.shadowOffsetX = off;
+      s2.shadowOffsetY = 0;
+      s2.drawImage(this._small, -off, 0);
+      s2.shadowColor = 'rgba(0,0,0,0)';
+      s2.shadowBlur = 0;
+      s2.shadowOffsetX = 0;
+      ctx.drawImage(this._small2, dx, dy, W, H);
     }
 
     _post(ctx, scene, t, W, H) {
@@ -514,13 +531,16 @@
         ctx.fillRect(0, 0, W, H);
       }
       if (post.grain > 0 && scene.bg.type !== 'transparent') {
-        if (!this._grain) this._grain = this._makeGrain(scene.seed);
+        if (!this._grain || this._grainSeed !== scene.seed) {
+          this._grain = this._makeGrain(scene.seed);
+          this._grainSeed = scene.seed;
+        }
+        // The tile shifts by a seeded offset every frame, so grain dances deterministically.
         const frame = Math.round(mod(t, scene.duration) * scene.fps);
         const scale = Math.max(1, Math.min(W, H) / 720);
         const ox = Math.floor(TM.rand(scene.seed, frame, 1) * 256), oy = Math.floor(TM.rand(scene.seed, frame, 2) * 256);
         ctx.save();
-        ctx.globalAlpha = post.grain * 0.5;
-        ctx.globalCompositeOperation = 'overlay';
+        ctx.globalAlpha = Math.min(1, post.grain * 0.9);
         const pat = ctx.createPattern(this._grain, 'repeat');
         ctx.setTransform(scale, 0, 0, scale, -ox * scale, -oy * scale);
         ctx.fillStyle = pat;
@@ -529,14 +549,16 @@
       }
     }
 
+    /** Signed grain as light/dark speckles with alpha: plain source-over, cheap everywhere. */
     _makeGrain(seed) {
       const c = makeCanvas(256, 256);
       const g = c.getContext('2d');
       const img = g.createImageData(256, 256);
       for (let i = 0; i < 256 * 256; i++) {
-        const v = 128 + TM.srand(seed, i, 5) * 110;
+        const n = TM.srand(seed, i, 5);
+        const v = n > 0 ? 255 : 0;
         img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v;
-        img.data[i * 4 + 3] = 255;
+        img.data[i * 4 + 3] = Math.round(Math.abs(n) * Math.abs(n) * 120);
       }
       g.putImageData(img, 0, 0);
       return c;

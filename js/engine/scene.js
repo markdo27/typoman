@@ -41,8 +41,8 @@
         echo: { count: 0, spacing: 0.035, fade: 0.55, palette: false },
         blur: 0,
         glow: { amount: 0, color: '#ffffff' },
-        shadow: { amount: 0, angle: 135, distance: 0.02, color: '#000000' },
-        extrude: { depth: 0, angle: 135, color: '#000000' },
+        shadow: { amount: 0, angle: 45, distance: 0.02, color: '#000000' },
+        extrude: { depth: 0, angle: 45, color: '#000000' },
       },
       anchor: { x: 0.5, y: 0.5 },
     };
