@@ -66,6 +66,8 @@
 
   // ── Studio: export, embed & share dialogs (owner: export team) ──
   var STUDIO_EXPORT = [
+    'js/studio/export-dialog.js',
+    'js/studio/share-dialog.js',
   ];
 
   var GROUPS = {
