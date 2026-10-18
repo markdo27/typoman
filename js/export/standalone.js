@@ -13,7 +13,7 @@
   /** Make JS source safe inside <script>…</script>. */
   const escScript = (src) => String(src).replace(/<\/(script)/gi, '<\\/$1');
   /** JSON safe inside <script type="application/json">. */
-  const escJSON = (obj) => JSON.stringify(obj).replace(/</g, '\\u003c').replace(/ /g, '\\u2028').replace(/ /g, '\\u2029');
+  const escJSON = (obj) => JSON.stringify(obj).replace(/</g, '\\u003c');
 
   async function fetchText(file) {
     const res = await fetch(X.base() + file, { cache: 'no-cache' });

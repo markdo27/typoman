@@ -73,10 +73,35 @@
       },
       finish() {
         muxer.finalize();
-        return { blob: new Blob([muxer.target.buffer], { type: 'video/webm' }), frames, decoderConfig };
+        const buf = muxer.target.buffer;
+        fixWebMDuration(buf, (plan.frames * 1000) / plan.fps);
+        return { blob: new Blob([buf], { type: 'video/webm' }), frames, decoderConfig };
       },
     };
   }
+
+  /**
+   * webm-muxer sets Segment/Info/Duration to the last frame's timestamp, one frame short of the
+   * clip (a 2 s loop reads as 1.966 s). Overwrite the float64 Duration (ID 0x4489, size 8) inside
+   * the Info element with frames / fps in milliseconds.
+   */
+  function fixWebMDuration(buffer, ms) {
+    const b = new Uint8Array(buffer);
+    const end = Math.min(b.length - 11, 4096);
+    for (let i = 0; i < end; i++) {
+      if (b[i] === 0x15 && b[i + 1] === 0x49 && b[i + 2] === 0xa9 && b[i + 3] === 0x66) { // Info
+        for (let j = i + 4; j < Math.min(i + 256, end); j++) {
+          if (b[j] === 0x44 && b[j + 1] === 0x89 && b[j + 2] === 0x88) {
+            new DataView(buffer, j + 3, 8).setFloat64(0, ms);
+            return true;
+          }
+        }
+        return false;
+      }
+    }
+    return false;
+  }
+  X._fixWebMDuration = fixWebMDuration;
 
   /** Transparent WebM: pairs colour + alpha chunks by timestamp and writes them in order. */
   function alphaSink(choice, plan) {
