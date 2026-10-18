@@ -34,6 +34,7 @@
     'js/presets/path-kit.js',
     'js/presets/wave.js',
     'js/presets/path-land.js',
+    'js/presets/path-draw.js',
   ];
 
   // ── Presets: reveal, glitch & dimensional family (owner: preset team B) ──
