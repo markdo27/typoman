@@ -121,7 +121,13 @@
     }
 
     _setFont(f) {
-      if (this._font !== f) { this.ctx.font = f; this._font = f; }
+      // A preset's ctx.save()/restore() silently resets ctx.font, so trust the cache only if
+      // the context still reports the font we last set (reading ctx.font is cheap).
+      const ctx = this.ctx;
+      if (this._font === f && ctx.font === this._fontSeen) return;
+      ctx.font = f;
+      this._font = f;
+      this._fontSeen = ctx.font;
     }
 
     /**

@@ -83,7 +83,7 @@
   function drawRow(f, L, line, x, y, sx, sy, skew, i) {
     const ctx = f.ctx;
     ctx.font = L.font;
-    f._font = L.font;
+    f._font = null; // drew with its own layout font; make drawGlyph re-apply its own
     if ('letterSpacing' in ctx) ctx.letterSpacing = L.tracking.toFixed(2) + 'px';
     const tk = -Math.tan(skew + f.slant);
     ctx.setTransform(sx, 0, tk * sy, sy, x, y);
