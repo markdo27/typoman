@@ -46,7 +46,8 @@ vendor/*          pinned third-party code (MIT), served locally
     fill:{ type:'solid'|'gradient'|'palette', color, color2, angle, palette:[hex…] },
     stroke:{ mode:'none'|'outline'|'both', width /*em*/, color },
     path:{ closed, preset?, nodes:[{x,y,ix,iy,ox,oy,k}] } | null,   // normalised 0..1, handles relative
-    pathMorph:{ enabled, target: path|null, ease },                  // path A→B→A over the loop
+    pathMorph:{ enabled, keys:[path…] /*≤ 4*/, eases:[ease…], ease, mode:'pingpong'|'cycle',
+                target /*= keys[0]*/ },                             // path keyframes over the loop
     fx:{ echo:{count,spacing,fade,palette}, blur 0..1, glow:{amount,color},
          shadow:{amount,angle,distance,color}, extrude:{depth,angle,color} },
     anchor:{ x, y },
@@ -125,6 +126,15 @@ shaped run, so Arabic keeps its joined forms. They are placed right to left and 
 `{ x, y, angle, tx, ty, nx, ny, inside }` (it wraps when closed and extrapolates past the
 ends of open paths). Also `path.atU(u)`, `path.resample(n)`, `path.trace(ctx, s0, s1)` and
 `TM.Path.preset(id, aspect)`, `fromPoints`, `fromPolyline`, `morph`, `toSVG`, `sample`.
+
+**Path keyframes.** `layer.pathMorph.keys` holds up to 4 morph targets (B, C, …) that the
+main path A visits each loop. `ease` eases A → B, and `eases[i]` eases the step out of
+`keys[i]`. In `'pingpong'` (the default) the path plays A → … → last and back; with one key
+that is the classic A → B → A. In `'cycle'` it plays A → … → last → A, and every step takes
+an equal share of the loop. `target` mirrors `keys[0]`, so old scenes and links keep working.
+Code that edits `keys` must also set `target = keys[0]`. The renderer calls
+`TM.Path.sequence([A, …keys], pathMorph, p)`, and `TM.Path.keyTime(i, n, mode)` gives the
+loop progress at which shape i is reached.
 
 **Collision-free text on paths.**
 - `path.offset(d)` gives the parallel curve d px to the normal side (negative = left of
