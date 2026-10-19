@@ -194,7 +194,7 @@
         weight: TM.fonts.clampWeight(family, num(s.font && s.font.weight, 400, 1, 1000)),
         // Kept as asked (within any family's range) so switching fonts and back keeps the intent;
         // each family clamps it to its own axis when drawing.
-        width: Math.round(num(s.font && s.font.width, 100, 25, 200) * 2) / 2,
+        width: Math.round(num(s.font && s.font.width, 100, 25, 200)),
         opsz: opszOf(s.font && s.font.opsz),
       },
       type: {

@@ -112,7 +112,7 @@
           if (!ax) return;
           if (ax.wdth) {
             axesCtl.push(C.range({
-              label: 'Width', min: ax.wdth[0], max: ax.wdth[1], step: 0.5, decimals: 1, unit: '%',
+              label: 'Width', min: ax.wdth[0], max: ax.wdth[1], step: 1, decimals: 0, unit: '%',
               default: TM.math.clamp(100, ax.wdth[0], ax.wdth[1]),
               hint: 'Variable width axis: the typeface’s own condensed to expanded designs, never a stretch',
               get: () => TM.fonts.widthFor(axesFam, store.layer.font.width),

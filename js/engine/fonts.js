@@ -182,7 +182,8 @@
     const ax = f && f.axes && f.axes.wdth;
     if (!ax) return null;
     const w = Number.isFinite(+width) ? +width : 100;
-    return Math.round(TM.math.clamp(w, ax[0], ax[1]) * 2) / 2;
+    // Whole percents: a full-range slider drag creates at most ~130 instances (~145 KB each).
+    return Math.round(TM.math.clamp(w, ax[0], ax[1]));
   }
 
   /** Pinned optical size: a number, or 'auto' = the text's size in scene px (snapped). */
