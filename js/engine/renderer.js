@@ -376,7 +376,7 @@
       ctx.shadowBlur = 0;
       this._background(ctx, scene.bg, W, H);
       scene.layers.forEach((layer, i) => {
-        if (layer.visible !== false) this._renderLayer(layer, i, t, W, H);
+        if (layer.visible !== false) this._renderLayer(typeset(layer, scene), i, t, W, H);
       });
       this._post(ctx, scene, t, W, H);
       this.stats.renders++;
@@ -623,11 +623,40 @@
     }
   }
 
+  /**
+   * The family a layer is drawn with: its variable-axis instance (width, optical size) for the
+   * text's size at the scene's own resolution, so every render size draws the same letterforms.
+   */
+  function familyFor(layer, scene) {
+    const side = scene && scene.size ? Math.min(scene.size.w, scene.size.h) : 1080;
+    return TM.fonts.resolve(layer.font, layer.type.size * side);
+  }
+
+  /** The layer as presets see it: font.family already names the instance to draw with. */
+  function typeset(layer, scene) {
+    const family = familyFor(layer, scene);
+    return family === layer.font.family ? layer : Object.assign({}, layer, { font: Object.assign({}, layer.font, { family }) });
+  }
+
   TM.Renderer = Renderer;
   TM.Frame = Frame;
+  Renderer.familyFor = familyFor;
+  Renderer.typeset = typeset;
 
-  /** Resolve once every font a scene uses is ready (never rejects). */
+  /**
+   * Resolve once every font a scene uses is ready (never rejects): each layer's instance, the
+   * subsets its text needs, and any extra instances its preset draws with (preset.fonts).
+   */
   TM.prepare = function (scene) {
-    return Promise.all((scene.layers || []).map((l) => TM.fonts.ensure(l.font.family, l.font.weight))).then(() => scene);
+    const jobs = [];
+    (scene.layers || []).forEach((l) => {
+      const families = [familyFor(l, scene)];
+      const preset = TM.getPreset(l.preset);
+      if (preset && typeof preset.fonts === 'function') {
+        try { families.push(...(preset.fonts(l, scene) || [])); } catch (e) { console.warn('[TM] preset.fonts failed:', e); }
+      }
+      new Set(families).forEach((fam) => jobs.push(TM.fonts.ensure(fam, l.font.weight, l.text)));
+    });
+    return Promise.all(jobs).then(() => scene);
   };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -141,6 +141,40 @@ const results = await page.evaluate(async () => {
     };
   })();
 
+  // Variable axes: width swaps in the typeface's own narrow/wide designs, optical size is pinned
+  // so every render size draws the same letterforms, and Stack's rows stay inside the margins.
+  const axes = await (async () => {
+    const inkW = (scene, Wd, Hd, t) => {
+      const c = document.createElement('canvas');
+      const r = new TM.Renderer(c, { quality: 'full' });
+      r.setScene(scene);
+      r.resize(Wd, Hd);
+      r.render(t);
+      const d = c.getContext('2d').getImageData(0, 0, Wd, Hd).data;
+      let x0 = Wd, x1 = -1;
+      for (let y = 0; y < Hd; y++) for (let x = 0; x < Wd; x++) { const i = (y * Wd + x) * 4; if (d[i] > 200 && d[i + 1] > 200) { if (x < x0) x0 = x; if (x > x1) x1 = x; } }
+      return x1 < 0 ? 0 : x1 - x0 + 1;
+    };
+    const rise = (font) => sceneFor('rise', (l) => { l.text = 'Hamburg'; l.font = font; l.fill = { type: 'solid', color: '#ffffff' }; });
+    const narrow = rise({ family: 'Roboto Flex', weight: 700, width: 40 });
+    const wide = rise({ family: 'Roboto Flex', weight: 700, width: 140 });
+    const serif = rise({ family: 'Fraunces', weight: 400 });
+    const stack = sceneFor('stack', (l) => { l.font = { family: 'Science Gothic', weight: 700 }; l.fill = { type: 'solid', color: '#ffffff' }; });
+    await Promise.all([narrow, wide, serif, stack].map((sc) => TM.prepare(sc)));
+    const t = narrow.duration * 0.5;
+    const wN = inkW(narrow, 960, 540, t), wW = inkW(wide, 960, 540, t);
+    // The family the renderer draws Fraunces (opsz axis) with must keep the same width per px at
+    // any device size; the browser's auto opsz shifts it by ~5% between 81 and 162 px.
+    const fam = TM.Renderer.familyFor(serif.layers[0], serif);
+    const mctx = document.createElement('canvas').getContext('2d');
+    const perPx = [40, 81, 162, 324].map((px) => { mctx.font = TM.fonts.fontString(fam, 400, px); return mctx.measureText('Hamburg').width / px; });
+    const opszRatio = fam !== 'Fraunces' && document.fonts.check(TM.fonts.fontString(fam, 400, 64)) ? Math.max(...perPx) / Math.min(...perPx) : 0;
+    const availW = 960 - 2 * stack.layers[0].params.margin * 540;
+    let widest = 0;
+    for (const u of [0.1, 0.35, 0.6, 0.85]) widest = Math.max(widest, inkW(stack, 960, 540, stack.duration * u));
+    return { widthOk: wN > 0 && wW > wN * 1.5, opszRatio, stackInside: widest > 0 && widest <= availW + 2, widest, availW };
+  })();
+
   // Sanitiser fuzz: garbage must normalise to a valid scene without throwing.
   const garbage = [null, 42, 'x', [], { layers: 'nope' }, { size: { w: -5, h: 1e9 }, fps: 7, duration: 'abc' },
     { layers: [{ text: 5, preset: '<script>', font: { family: 'Comic Sans' }, fill: { color: 'red' }, path: { nodes: [{ x: 'a' }] } }] },
@@ -159,7 +193,7 @@ const results = await page.evaluate(async () => {
   const close = (a, b) => (typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) < 1e-3
     : a && typeof a === 'object' ? b && typeof b === 'object' && Object.keys({ ...a, ...b }).every((k) => close(a[k], b[k])) : a === b);
   const roundTrip = close(s0, s1);
-  return { presets: out, fuzzOk, roundTrip, lineBands, timing };
+  return { presets: out, fuzzOk, roundTrip, lineBands, timing, axes };
 });
 
 await browser.close();
@@ -185,6 +219,12 @@ const tmg = results.timing;
 console.log(`layer timing: delay ${tmg.delayShifts ? 'ok' : 'FAIL'} · once/hold ${tmg.onceHolds && tmg.onceWaits ? 'ok' : 'FAIL'} · looks ${tmg.lookApplies ? 'ok' : 'FAIL'}`);
 if (!tmg.delayShifts || !tmg.onceHolds || !tmg.onceWaits) fails.push('layer timing semantics broken');
 if (!tmg.lookApplies) fails.push('applyLook failed');
+const ax = results.axes;
+const opszOk = ax.opszRatio > 0 && ax.opszRatio - 1 < 0.002;
+console.log(`variable axes: width ${ax.widthOk ? 'ok' : 'FAIL'} · optical size pinned ${opszOk ? 'ok' : 'FAIL'} (width/px spread ${((ax.opszRatio - 1) * 100).toFixed(3)}% over 40–324 px) · stack inside margins ${ax.stackInside ? 'ok' : 'FAIL'} (${ax.widest} / ${Math.round(ax.availW)} px)`);
+if (!ax.widthOk) fails.push('width axis does not change the letterforms');
+if (!opszOk) fails.push('optical size depends on render resolution');
+if (!ax.stackInside) fails.push('stack rows overflow the frame margins');
 if (!results.roundTrip) fails.push('encode/decode round trip failed');
 const errs = consoleErrors.filter((e) => !/favicon/.test(e));
 if (errs.length) { console.log('\nconsole errors:\n  ' + errs.join('\n  ')); fails.push(`${errs.length} console error(s)`); }

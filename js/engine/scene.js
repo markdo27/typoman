@@ -32,7 +32,8 @@
       text: 'TYPE IN\nMOTION',
       preset: 'path-flow',
       params: {},
-      font: { family: 'Anton', weight: 400 },
+      // width: wdth % and opsz: 'auto' | number apply to families with those variable axes.
+      font: { family: 'Anton', weight: 400, width: 100, opsz: 'auto' },
       type: { size: 0.16, tracking: 0, leading: 0.95, align: 'center', case: 'upper', slant: 0 },
       fill: { type: 'solid', color: '#ffffff', color2: '#00e5ff', angle: 90, palette: ['#ffffff', '#a3a2ff', '#00e5ff'] },
       stroke: { mode: 'none', width: 0.035, color: '#000000' },
@@ -81,6 +82,8 @@
     return Number.isFinite(n) ? clamp(n, lo, hi) : d;
   };
   const int = (v, d, lo, hi) => Math.round(num(v, d, lo, hi));
+  /** Optical size: a pinned number, or 'auto' (follow the text size) for anything else. */
+  const opszOf = (v) => ((typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && /^\s*\d+(\.\d+)?\s*$/.test(v)) ? int(v, 14, 1, 1000) : 'auto');
   const bool = (v, d) => (typeof v === 'boolean' ? v : d);
   const color = (v, d) => (TM.color.isHex(v) ? v.toLowerCase() : d);
   const pick = (v, list, d) => (list.includes(v) ? v : d);
@@ -186,7 +189,14 @@
       text: cleanText(s.text, d.text),
       preset: presetId,
       params: cleanParams(presetId, s.params),
-      font: { family, weight: TM.fonts.clampWeight(family, num(s.font && s.font.weight, 400, 1, 1000)) },
+      font: {
+        family,
+        weight: TM.fonts.clampWeight(family, num(s.font && s.font.weight, 400, 1, 1000)),
+        // Kept as asked (within any family's range) so switching fonts and back keeps the intent;
+        // each family clamps it to its own axis when drawing.
+        width: Math.round(num(s.font && s.font.width, 100, 25, 200) * 2) / 2,
+        opsz: opszOf(s.font && s.font.opsz),
+      },
       type: {
         size: num(ty.size, d.type.size, 0.01, 1.5),
         tracking: num(ty.tracking, d.type.tracking, -0.3, 2),

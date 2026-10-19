@@ -134,11 +134,26 @@
   // ───────────────────────────── picker ─────────────────────────────
   let catalogueRequested = false;
 
+  /** Width / optical-size axes as one small tag, e.g. "wdth·opsz" (null when none). */
+  function axisTag(f) {
+    const ax = f.axes;
+    if (!ax) return null;
+    const tags = [ax.wdth ? 'wdth' : null, ax.opsz ? 'opsz' : null].filter(Boolean);
+    const tip = [ax.wdth ? 'Width ' + ax.wdth[0] + '–' + ax.wdth[1] + '%' : null, ax.opsz ? 'Optical size ' + ax.opsz[0] + '–' + ax.opsz[1] : null].filter(Boolean).join(' · ');
+    return h('span', { class: 'fp-badge axis', title: tip }, tags.join('·'));
+  }
+
   function metaFor(f) {
     if (f.custom) return h('span', { class: 'fp-badge local' }, 'Local');
-    if (f.variable) return h('span', { class: 'fp-meta' }, h('span', { class: 'fp-badge' }, 'Var'), f.min + '–' + f.max);
+    if (f.variable) return h('span', { class: 'fp-meta' }, h('span', { class: 'fp-badge' }, 'Var'), axisTag(f), f.min + '–' + f.max);
     if (f.weights) return h('span', { class: 'fp-meta' }, f.weights.join(' · '));
-    return h('span', { class: 'fp-meta' }, String(f.min));
+    return h('span', { class: 'fp-meta' }, axisTag(f), String(f.min));
+  }
+
+  /** Search words for a family's variable axes. */
+  function axisWords(f) {
+    const ax = f.axes || {};
+    return (ax.wdth ? ' width wdth' : '') + (ax.opsz ? ' optical opsz' : '');
   }
 
   Studio.openFontPicker = function (anchor, o) {
@@ -198,7 +213,7 @@
           if (cat !== 'All' && f.cat !== cat) return false;
           if (!query) return true;
           const q = query.toLowerCase();
-          return f.family.toLowerCase().includes(q) || f.cat.toLowerCase().includes(q) || (f.variable && 'variable'.startsWith(q));
+          return f.family.toLowerCase().includes(q) || f.cat.toLowerCase().includes(q) || (f.variable && 'variable'.startsWith(q)) || axisWords(f).includes(' ' + q);
         }
 
         function setActive(i, scroll = true, doPreview = true) {
@@ -229,7 +244,7 @@
               role: 'option',
               id: listId + '-' + i,
               'aria-selected': f.family === current ? 'true' : 'false',
-              'aria-label': f.family + (f.variable ? ', variable ' + f.min + ' to ' + f.max : '') + (f.custom ? ', custom font' : ''),
+              'aria-label': f.family + (f.variable ? ', variable ' + f.min + ' to ' + f.max : '') + (f.axes && f.axes.wdth ? ', width axis' : '') + (f.axes && f.axes.opsz ? ', optical size axis' : '') + (f.custom ? ', custom font' : ''),
             },
             h('span', { class: 'fp-name', style: { fontFamily: TM.fonts.cssFamily(f.family), fontWeight: String(TM.fonts.clampWeight(f.family, 500)) } }, Studio.fontLabel ? Studio.fontLabel(f.family) : f.family),
             metaFor(f),

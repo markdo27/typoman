@@ -14,7 +14,7 @@ No install, no account, no build step. It's static files on GitHub Pages.
   dimensional and generative: from Path Flow, Ribbon and Orbit to Split Flap, Focus Pull,
   Kaleido and Melt. Every preset staggers by letter, word or line, with easing curves you
   can edit (signature curves, springs, or your own cubic-bézier).
-- **Start from a look.** 78 curated looks (colour, font, motion and timing, designed per
+- **Start from a look.** 82 curated looks (colour, font, motion and timing, designed per
   preset) are one click away in the **Inspiration** view. Applying a look never touches
   your text, and **Remix** mixes curated looks with fresh rolls.
 - **Shape the motion path.** Pick one of 22 shapes (wave, arc, circle, spiral, infinity,
@@ -24,10 +24,14 @@ No install, no account, no build step. It's static files on GitHub Pages.
   shapes, A → B → C → D → E, in a cycle or ping-pong, with an ease per step.
 - **Time each layer.** Up to six text layers, each with its own motion, on timeline lanes.
   Drag a lane to delay it, play it up to 8× per loop, or play it once and hold.
-- **Use real typography.** There are 50 curated Google Fonts (including variable fonts
-  whose weight animates smoothly), and you can upload your own. Kerning is preserved,
-  emoji are safe, and Arabic and Hebrew text runs right to left. You get multi-line,
-  tracking, leading, case, slant, outline, and gradient or palette fills.
+- **Use real typography.** There are 54 curated Google Fonts, and you can upload your own.
+  Variable fonts animate their weight smoothly, and fonts with **width** and **optical
+  size** axes (Roboto Flex, Science Gothic, Fraunces, …) expose them as controls. Optical
+  size follows the text's size in the scene, so previews and exports draw identical
+  letterforms. **Stack** fills the frame through the width axis, condensing tall rows and
+  expanding short ones instead of stretching letters. Kerning is preserved, emoji are
+  safe, and Arabic and Hebrew text runs right to left. You get multi-line, tracking,
+  leading, case, slant, outline, and gradient or palette fills.
 - **Layer effects:** echo trails, motion blur, glow, drop shadow, 3D extrude, film grain
   and vignette.
 - **Export:** frame-accurate MP4 (H.264, with AV1/VP9 fallbacks), WebM (with
@@ -115,7 +119,7 @@ across eight criteria, scored by a three-judge jury each round. See
 |---|---|
 | 0: original V3 demo | 3.5 |
 | 1: rebuilt studio | 7.0 |
-| 2: more presets, looks, pen tool, path keyframes, layer timing | jury pending |
+| 2: more presets, looks, pen tool, path keyframes, layer timing, width & optical size | jury pending |
 
 ## License
 

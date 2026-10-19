@@ -42,7 +42,8 @@ vendor/*          pinned third-party code (MIT), served locally
   bg:{ type:'solid'|'linear'|'radial'|'transparent', color, color2, angle },
   post:{ grain 0..1, vignette 0..1 },
   layers:[{ id, name, visible, text /*\n = new line*/, preset, params:{…per preset schema…},
-    font:{ family, weight }, type:{ size /*× unit*/, tracking /*em*/, leading, align, case, slant /*deg*/ },
+    font:{ family, weight, width /*wdth %, default 100*/, opsz /*'auto' | number*/ },
+    type:{ size /*× unit*/, tracking /*em*/, leading, align, case, slant /*deg*/ },
     fill:{ type:'solid'|'gradient'|'palette', color, color2, angle, palette:[hex…] },
     stroke:{ mode:'none'|'outline'|'both', width /*em*/, color },
     path:{ closed, preset?, nodes:[{x,y,ix,iy,ox,oy,k}] } | null,   // normalised 0..1, handles relative
@@ -58,6 +59,36 @@ vendor/*          pinned third-party code (MIT), served locally
 it** when the user edits the path, which marks it as custom so it survives preset and
 aspect switches.
 
+### Variable fonts: width and optical size
+
+Canvas text can only set weight, so `font.width` (the `wdth` axis) and `font.opsz` are
+drawn through **instances**. These are aliases such as `"Roboto Flex ~w75o144"` whose faces
+reuse the family's Google font files with a fixed `stretch` and `"opsz"` variation. Faces
+that share a URL share one decoded font, so an instance costs about a font-family lookup.
+Families declare their axes in the catalogue (`TM.fonts.axes(family)` →
+`{ wdth?: [min, max], opsz?: [min, max] }`). Each family clamps `width` to its own range
+when drawing, and the scene keeps the value as asked, so switching fonts and back keeps the
+user's intent.
+
+- **Presets see none of this.** The renderer hands `render(f)` the layer with
+  `f.layer.font.family` already set to the instance. `drawGlyph`, `TM.text.layout(…)` and
+  `TM.text.advance(…)` called with that family all draw the right letterforms.
+- **`opsz: 'auto'`** is the text's size at the **scene's** resolution
+  (`type.size × min(size.w, size.h)`), snapped to a few stops. The browser's own auto
+  optical sizing follows *device* pixels instead, so a preview and an export would draw
+  different letterforms and widths. Pinning makes every render size match.
+- **`TM.fonts.resolve(font, designPx)`** returns the family to draw a `{ family, weight,
+  width, opsz }` with, and creates and loads the instance on first use. It draws in the base
+  family until then. `TM.fonts.ladder(family, 'wdth')` gives up to 49 evenly spaced widths
+  for presets that sweep the axis, and `TM.fonts.baseOf(instance)` the catalogue family
+  behind an instance.
+- **`preset.fonts(layer, scene)`** (optional) lists the extra instance families a preset
+  draws with. `TM.prepare` loads them before frame 0, so exports never catch an instance
+  mid-load. Stack returns its width ladder this way.
+- Without the `FontFace` `variationSettings` descriptor, a family is requested without its
+  `opsz` axis. Google then serves it pinned at the default, so it is still stable, just not
+  size-aware.
+
 ## Preset contract
 
 ```js
@@ -70,6 +101,7 @@ TM.registerPreset({
   params: [ TM.P.range('amp', 'Amplitude', 0, 1, 0.01, 0.5, { group: 'Motion' }), … ],
   setup(f) { return cache },  // optional; re-run only when text/font/type/params/path/size change
   render(f) { … },
+  fonts(layer, scene) { return [family, …] },  // optional: extra font instances render() draws with
   looks: [                    // optional, up to 8 curated starting points shown in the gallery
     { name: 'Neon Night', bg: { type: 'solid', color: '#07000f' },
       layer: { font: { family: 'Monoton' }, fill: { type: 'palette', palette: ['#ff00e5', '#00f0ff'] },

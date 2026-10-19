@@ -65,7 +65,7 @@
         const restore = () => {
           if (!original) return;
           const o = original;
-          store.updateLayer((l) => { l.font = { family: o.family, weight: o.weight }; }, { history: false, reason: 'font-preview' });
+          store.updateLayer((l) => { l.font = Object.assign({}, o); }, { history: false, reason: 'font-preview' });
         };
         const fontCtl = C.font({
           label: 'Font',
@@ -100,6 +100,42 @@
         };
         buildWeight();
 
+        // Width and optical size, for families with those variable axes (see TM.fonts.resolve).
+        const axesSlot = h('div', { class: 'slot' });
+        let axesCtl = [], axesFam = null;
+        const designPx = () => store.layer.type.size * Math.min(store.scene.size.w, store.scene.size.h);
+        const buildAxes = () => {
+          axesFam = store.layer.font.family;
+          axesCtl = [];
+          axesSlot.replaceChildren();
+          const ax = TM.fonts.axes(axesFam);
+          if (!ax) return;
+          if (ax.wdth) {
+            axesCtl.push(C.range({
+              label: 'Width', min: ax.wdth[0], max: ax.wdth[1], step: 0.5, decimals: 1, unit: '%',
+              default: TM.math.clamp(100, ax.wdth[0], ax.wdth[1]),
+              hint: 'Variable width axis: the typeface’s own condensed to expanded designs, never a stretch',
+              get: () => TM.fonts.widthFor(axesFam, store.layer.font.width),
+              set: layerBinding(store, 'font.width').set,
+            }));
+          }
+          if (ax.opsz) {
+            axesCtl.push(C.segmented({
+              label: 'Optical size',
+              options: [['auto', 'Auto', 'Follow the text size'], ['fixed', 'Fixed', 'Pin one optical size']],
+              get: () => (store.layer.font.opsz === 'auto' ? 'auto' : 'fixed'),
+              set: (v) => store.updateLayer((l) => { l.font.opsz = v === 'auto' ? 'auto' : TM.fonts.opszFor(axesFam, 'auto', designPx()); }, { reason: 'font.opsz', label: 'Optical size' }),
+            }), C.range({
+              label: 'Opsz', min: ax.opsz[0], max: ax.opsz[1], step: 1, decimals: 0,
+              hint: 'Optical size: low values draw sturdier, looser letters for small text; high values finer, tighter ones for display. Dragging pins it',
+              get: () => TM.fonts.opszFor(axesFam, store.layer.font.opsz, designPx()),
+              set: layerBinding(store, 'font.opsz').set,
+            }));
+          }
+          axesCtl.forEach((c) => axesSlot.append(c.el));
+        };
+        buildAxes();
+
         const size = C.range({ label: 'Size', min: 0.02, max: 0.8, step: 0.005, decimals: 3, default: DEF.type.size, hint: 'Relative to the shorter side of the frame', ...layerBinding(store, 'type.size') });
         const tracking = C.range({ label: 'Tracking', min: -0.2, max: 1, step: 0.005, decimals: 3, default: 0, hint: 'Letter spacing in em', ...layerBinding(store, 'type.tracking') });
         const leading = C.range({ label: 'Leading', min: 0.6, max: 2.5, step: 0.01, default: DEF.type.leading, hint: 'Line height', ...layerBinding(store, 'type.leading') });
@@ -120,11 +156,13 @@
         const posWrap = h('div', { class: 'slot' }, posHead, px.el, py.el, h('div', { class: 'row-end' }, center));
         ctl.push(px, py);
 
-        body.append(ta.el, fontCtl.el, weightSlot, size.el, tracking.el, leading.el, slant.el, align.el, textCase.el, posWrap);
+        body.append(ta.el, fontCtl.el, weightSlot, axesSlot, size.el, tracking.el, leading.el, slant.el, align.el, textCase.el, posWrap);
         const update = () => {
           if (store.layer.font.family !== weightFam) buildWeight();
+          if (store.layer.font.family !== axesFam) buildAxes();
           ctl.forEach((c) => c.update());
           if (weightCtl) weightCtl.update();
+          axesCtl.forEach((c) => c.update());
           posWrap.hidden = !!(store.preset && store.preset.usesPath);
         };
         update();

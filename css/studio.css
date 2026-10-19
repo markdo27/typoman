@@ -254,7 +254,7 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .looks-head svg { width: 15px; height: 15px; color: var(--accent-fg); }
 .looks-head strong { color: var(--text); font-weight: 650; }
 .looks-head .count { margin-left: auto; }
-.looks-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.looks-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .look-card { position: relative; display: flex; flex-direction: column; cursor: pointer; text-align: left; outline-offset: 2px; }
 .look-card.mini { border-radius: 8px; padding: 3px 3px 6px; background: var(--panel-2); border: 1px solid var(--line); transition: border-color 0.16s, transform 0.2s var(--ease-out), background 0.16s; }
 .look-card.mini:hover { border-color: var(--line-3); background: var(--panel-3); transform: translateY(-1px); }
@@ -549,6 +549,7 @@ input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(
 .fp-meta { display: inline-flex; align-items: center; gap: 5px; font: 500 10.5px/1 var(--mono); color: var(--text-3); white-space: nowrap; }
 .fp-badge { font: 650 9.5px/1 var(--ui); letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 5px; border-radius: 4px; color: var(--accent-fg); background: var(--accent-soft); }
 .fp-badge.local { color: var(--warn); background: rgba(255, 181, 71, 0.12); }
+.fp-badge.axis { font: 600 9.5px/1 var(--mono); letter-spacing: 0.02em; text-transform: none; color: var(--text-2); background: var(--panel-3); }
 .fp-check { width: 16px; height: 16px; color: var(--accent-fg); stroke-width: 2.2; }
 .fp-empty { color: var(--text-2); font-size: 12.5px; text-align: center; margin: 14px 0; }
 .fp-foot { margin: 0 -12px; padding: 10px 12px 12px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
