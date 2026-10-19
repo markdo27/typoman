@@ -23,7 +23,7 @@
     path: 'circle',
     params: [
       TM.P.range('speed', 'Rings per loop', -6, 6, 1, 2, { group: 'Zoom', hint: 'Positive flies in, negative pulls out. Whole steps keep the loop seamless' }),
-      TM.P.range('ratio', 'Ring step', 1.2, 2.2, 0.01, 1.7, { group: 'Zoom', hint: 'Scale between neighbouring rings' }),
+      TM.P.range('ratio', 'Ring step', 1.2, 2.2, 0.01, 1.8, { group: 'Zoom', hint: 'Scale between neighbouring rings' }),
       TM.P.select('rhythm', 'Rhythm', [['glide', 'Glide'], ['pulse', 'Pulse']], 'glide', { group: 'Zoom' }),
       TM.P.ease('pulseEase', 'Pulse ease', 'snap', { group: 'Zoom', showIf: { rhythm: 'pulse' } }),
       TM.P.range('twist', 'Twist per ring (°)', -90, 90, 0.5, 40, { group: 'Zoom' }),

@@ -36,7 +36,7 @@
       TM.P.toggle('rays', 'Radar rays', false, { group: 'Lens' }),
       TM.P.range('laps', 'Laps per loop', 1, 4, 1, 1, { group: 'Motion', hint: 'Open paths go there and back' }),
       TM.P.ease('travel', 'Travel ease', 'inOutSine', { group: 'Motion' }),
-      TM.P.range('density', 'Rows', 8, 36, 1, 17, { group: 'Field', hint: 'Rows of text across the frame’s short side' }),
+      TM.P.range('density', 'Rows', 8, 36, 1, 15, { group: 'Field', hint: 'Rows of text across the frame’s short side' }),
       TM.P.range('spacing', 'Letter spacing (em)', 0, 2, 0.01, 0.5, { group: 'Field' }),
       TM.P.range('dim', 'Field brightness', 0.04, 0.8, 0.01, 0.26, { group: 'Field' }),
     ],
