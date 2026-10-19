@@ -93,7 +93,10 @@ Any param may take `group: 'Name'` (inspector sub-heading), `hint` and
 **Layout.** `L.glyphs[i] = { ch, i, vi /*visible index, -1 for spaces*/, line, li, word,
 isSpace, x /*left*/, w /*advance*/, y /*baseline*/, cx, cy /*centre*/ }`, all relative to
 the block centre. `L.lines[j] = { text, width, x, y, glyphs:[indices] }`, plus `L.capH`,
-`L.lineGap`, `L.count` (visible glyphs), `L.words` and `L.font`.
+`L.lineGap`, `L.count` (visible glyphs), `L.words` and `L.font`. Lines that are mostly
+right-to-left script (Arabic, Hebrew, …) lay out as **word clusters**: each word is one
+shaped run, so Arabic keeps its joined forms. They are placed right to left and marked
+`line.rtl`, and presets animate them word by word.
 
 **Helpers.**
 - `f.drawGlyph(g, { x, y, rot, sx, sy, scale, skew, alpha, color, weight, ch, anchor:'center'|'baseline', size })`

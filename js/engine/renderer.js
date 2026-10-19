@@ -121,7 +121,13 @@
     }
 
     _setFont(f) {
-      if (this._font !== f) { this.ctx.font = f; this._font = f; }
+      // A preset's ctx.save()/restore() silently resets ctx.font, so trust the cache only if
+      // the context still reports the font we last set (reading ctx.font is cheap).
+      const ctx = this.ctx;
+      if (this._font === f && ctx.font === this._fontSeen) return;
+      ctx.font = f;
+      this._font = f;
+      this._fontSeen = ctx.font;
     }
 
     /**
@@ -445,7 +451,8 @@
       if (!ex || ex.depth <= 0) return null;
       const length = ex.depth * size * 0.42;
       const px = Math.max(1, Math.min(W, H) / 900);
-      const steps = clamp(Math.ceil(length / px), 2, this.quality === 'preview' ? 28 : 64);
+      const cap = this.quality === 'preview' ? clamp(Math.floor(28 / Math.sqrt(this._passes || 1)), 6, 28) : 64;
+      const steps = clamp(Math.ceil(length / px), 2, cap);
       const a = ex.angle * DEG;
       const key = ex.color + steps;
       if (!this._exColors || this._exColors.key !== key) {
@@ -477,7 +484,10 @@
       lctx.clearRect(0, 0, W, H);
 
       const blur = layer.fx.blur;
-      const samples = blur > 0 ? (this.quality === 'preview' ? 4 : Math.round(4 + blur * 12)) : 1;
+      // Preview keeps blur × echo passes bounded; exports always render at full quality.
+      const echoN = (layer.fx.echo.count | 0) + 1;
+      const samples = blur > 0 ? (this.quality === 'preview' ? clamp(Math.floor(16 / echoN), 2, 4) : Math.round(4 + blur * 12)) : 1;
+      this._passes = samples * echoN;
       if (samples > 1) {
         // Trailing motion blur: average `samples` sub-frames across the shutter interval.
         const shutter = (blur * 4) / this.scene.fps;

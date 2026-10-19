@@ -14,6 +14,20 @@
   const segmenter = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
   const graphemes = (s) => (segmenter ? Array.from(segmenter.segment(s), (x) => x.segment) : Array.from(s));
 
+  // Right-to-left scripts (Hebrew, Arabic, Syriac, Thaana, N'Ko and presentation forms).
+  const RTL_CHAR = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/u;
+  const RTL_ALL = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/gu;
+  const LTR_ALL = /[A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF]/gu;
+  /**
+   * Split a line into the clusters presets animate. Lines containing RTL script use whole
+   * words (shaped runs, so Arabic keeps its joined forms); everything else uses graphemes.
+   */
+  function clustersFor(line) {
+    if (!RTL_CHAR.test(line)) return { parts: graphemes(line), rtl: false };
+    const rtl = (line.match(RTL_ALL) || []).length >= (line.match(LTR_ALL) || []).length;
+    return { parts: line.match(/\s+|\S+/gu) || [], rtl };
+  }
+
   function applyCase(text, mode) {
     switch (mode) {
       case 'upper': return text.toUpperCase();
@@ -64,7 +78,7 @@
     let maxW = 0, wordIndex = 0, visible = 0;
 
     lineTexts.forEach((lineText, li) => {
-      const parts = graphemes(lineText);
+      const { parts, rtl } = clustersFor(lineText);
       const prefix = new Float64Array(parts.length + 1);
       let acc = '';
       for (let k = 0; k < parts.length; k++) {
@@ -73,7 +87,7 @@
       }
       const lineW = prefix[parts.length] + Math.max(0, parts.length - 1) * track;
       maxW = Math.max(maxW, lineW);
-      const line = { index: li, text: lineText, width: lineW, x: 0, y: 0, glyphs: [] };
+      const line = { index: li, text: lineText, width: lineW, x: 0, y: 0, glyphs: [], rtl };
       let inWord = false;
       parts.forEach((ch, k) => {
         const isSpace = /^\s+$/u.test(ch);
@@ -86,7 +100,8 @@
           li: k,
           word: wordIndex,
           isSpace,
-          x: prefix[k] + k * track,
+          // RTL lines read right to left: mirror each cluster's slot within the line.
+          x: rtl ? lineW - (prefix[k + 1] + k * track) : prefix[k] + k * track,
           w: prefix[k + 1] - prefix[k],
           y: 0,
           cx: 0,

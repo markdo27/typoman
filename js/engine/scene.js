@@ -119,7 +119,17 @@
     for (const p of def.params) {
       const v = src[p.key];
       switch (p.type) {
-        case 'range': out[p.key] = num(v, p.default, p.min, p.max); break;
+        case 'range': {
+          // Snap to the declared step: e.g. whole "cycles" keep loops seamless even for URL input.
+          let x = num(v, p.default, p.min, p.max);
+          if (p.step > 0 && x !== p.default) {
+            const dp = String(p.step).includes('.') ? String(p.step).split('.')[1].length : 0;
+            x = +(Math.round((x - p.min) / p.step) * p.step + p.min).toFixed(dp);
+            x = clamp(x, p.min, p.max);
+          }
+          out[p.key] = x;
+          break;
+        }
         case 'select': out[p.key] = pick(v, p.options.map((o) => o[0]), p.default); break;
         case 'toggle': out[p.key] = bool(v, p.default); break;
         case 'color': out[p.key] = color(v, p.default); break;
@@ -289,9 +299,25 @@
     },
   };
 
-  async function pipe(bytes, stream) {
-    const res = new Response(new Blob([bytes]).stream().pipeThrough(stream));
-    return new Uint8Array(await res.arrayBuffer());
+  /** Run bytes through a (de)compression stream, aborting once the output passes `limit` bytes. */
+  async function pipe(bytes, stream, limit = Infinity) {
+    const reader = new Blob([bytes]).stream().pipeThrough(stream).getReader();
+    const chunks = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > limit) {
+        reader.cancel().catch(() => {});
+        throw new Error('Scene too large');
+      }
+      chunks.push(value);
+    }
+    const out = new Uint8Array(total);
+    let o = 0;
+    for (const c of chunks) { out.set(c, o); o += c.length; }
+    return out;
   }
 
   /** Encode a scene into a URL-safe string: 'z' + deflate-raw base64url, or 'j' + JSON base64url. */
@@ -304,6 +330,7 @@
   }
 
   const MAX_ENCODED = 200000;
+  const MAX_DECODED = 1e6;
   /** Decode a string from encode(). Rejects malformed input; result is normalised. */
   async function decode(str) {
     if (typeof str !== 'string' || str.length < 2 || str.length > MAX_ENCODED) throw new Error('Invalid scene data');
@@ -311,10 +338,11 @@
     let bytes;
     if (kind === 'z') {
       if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot read compressed scenes');
-      bytes = await pipe(body, new DecompressionStream('deflate-raw'));
+      // Stream-decompress with a hard cap so a tiny link can't inflate into a memory bomb.
+      bytes = await pipe(body, new DecompressionStream('deflate-raw'), MAX_DECODED);
     } else if (kind === 'j') bytes = body;
     else throw new Error('Unknown scene encoding');
-    if (bytes.length > 1e6) throw new Error('Scene too large');
+    if (bytes.length > MAX_DECODED) throw new Error('Scene too large');
     return normalize(JSON.parse(new TextDecoder().decode(bytes)));
   }
 

@@ -105,6 +105,27 @@ const results = await page.evaluate(async () => {
     out.push({ id, deterministic, seamRatio: +(seam / typical).toFixed(2), seam: +seam.toFixed(3), ms1080: +ms.toFixed(2), warned: a.warned, edgeFailures });
   }
 
+  // Regression: multi-line text keeps its font when a preset save()/restore()s the context
+  // (Rise masks each line). Both lines' ink bands must be about the same height.
+  const lineBands = (() => {
+    const s = sceneFor('rise', (l) => { l.text = 'ONE\nTWO'; });
+    const c = document.createElement('canvas');
+    const r = new TM.Renderer(c);
+    r.setScene(s);
+    r.resize(960, 540);
+    r.render(s.duration * 0.55);
+    const d = c.getContext('2d').getImageData(0, 0, 960, 540).data;
+    const bands = [];
+    let start = -1;
+    for (let y = 0; y <= 540; y++) {
+      let on = false;
+      if (y < 540) for (let x = 0; x < 960 && !on; x += 2) { const i = (y * 960 + x) * 4; on = d[i] > 200 && d[i + 1] > 200; }
+      if (on && start < 0) start = y;
+      if (!on && start >= 0) { bands.push(y - start); start = -1; }
+    }
+    return bands;
+  })();
+
   // Sanitiser fuzz: garbage must normalise to a valid scene without throwing.
   const garbage = [null, 42, 'x', [], { layers: 'nope' }, { size: { w: -5, h: 1e9 }, fps: 7, duration: 'abc' },
     { layers: [{ text: 5, preset: '<script>', font: { family: 'Comic Sans' }, fill: { color: 'red' }, path: { nodes: [{ x: 'a' }] } }] },
@@ -123,7 +144,7 @@ const results = await page.evaluate(async () => {
   const close = (a, b) => (typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) < 1e-3
     : a && typeof a === 'object' ? b && typeof b === 'object' && Object.keys({ ...a, ...b }).every((k) => close(a[k], b[k])) : a === b);
   const roundTrip = close(s0, s1);
-  return { presets: out, fuzzOk, roundTrip };
+  return { presets: out, fuzzOk, roundTrip, lineBands };
 });
 
 await browser.close();
@@ -141,6 +162,10 @@ for (const p of results.presets) {
 }
 console.log(`\nsanitiser fuzz: ${results.fuzzOk ? 'ok' : 'FAIL'} · encode/decode round trip: ${results.roundTrip ? 'ok' : 'FAIL'}`);
 if (!results.fuzzOk) fails.push('sanitiser fuzz failed');
+const lb = results.lineBands;
+const linesOk = lb.length >= 2 && Math.min(lb[0], lb[1]) / Math.max(lb[0], lb[1]) > 0.6;
+console.log(`multi-line font integrity: ${linesOk ? 'ok' : 'FAIL'} (line ink heights ${lb.slice(0, 2).join(' / ')} px)`);
+if (!linesOk) fails.push('second line lost its font (font cache vs save/restore)');
 if (!results.roundTrip) fails.push('encode/decode round trip failed');
 const errs = consoleErrors.filter((e) => !/favicon/.test(e));
 if (errs.length) { console.log('\nconsole errors:\n  ' + errs.join('\n  ')); fails.push(`${errs.length} console error(s)`); }
