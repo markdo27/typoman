@@ -56,6 +56,7 @@
     'js/presets/outline-draw.js',
     'js/presets/focus-pull.js',
     'js/presets/shutter.js',
+    'js/presets/zoom-through.js',
   ];
 
   // ── Export & embed runtime (owner: export team) ──
