@@ -118,7 +118,8 @@ shaped run, so Arabic keeps its joined forms. They are placed right to left and 
 - `f.identity()` resets the transform to frame px, for drawing your own shapes. Use
   `f.colorOf({vi:0})` as their colour.
 - `f.rand`, `f.srand`, `f.noise` and `f.loopNoise(salt, freq)`.
-- `f.buffer(id)` returns a cleared, frame-sized scratch `{ canvas, ctx }`, pooled per id.
+- `f.buffer(id, w?, h?)` returns a cleared scratch `{ canvas, ctx }`, pooled per id. It is
+  frame-sized by default; pass a small size for blur pyramids or glyph stamps.
   `f.drawInto(ctx, fn)` points `f.ctx` (and so `drawGlyph`) at another context while
   `fn` runs; this is how Glitch composes its channel and slice passes.
 

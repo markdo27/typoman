@@ -230,9 +230,13 @@
       this.ctx.globalAlpha = this.alpha;
     }
 
-    /** A cleared frame-sized scratch buffer { canvas, ctx } (pooled by id; valid until the next call with that id). */
-    buffer(id = 0) {
-      return this.renderer._scratch(id, this.W, this.H);
+    /**
+     * A cleared scratch buffer { canvas, ctx }, pooled by id and valid until the next call with
+     * that id. Frame-sized by default; pass w, h for a small one (cheap blur pyramids, glyph
+     * stamps). Copying a full frame per glyph is what makes blur effects slow.
+     */
+    buffer(id = 0, w = this.W, h = this.H) {
+      return this.renderer._scratch(id, Math.max(1, Math.round(w)), Math.max(1, Math.round(h)));
     }
 
     /** Run fn with f.ctx temporarily pointing at another context (e.g. a buffer), so drawGlyph targets it. */
@@ -331,10 +335,14 @@
     _scratch(id, W, H) {
       if (!this._scratchPool) this._scratchPool = new Map();
       let b = this._scratchPool.get(id);
-      if (!b || b.canvas.width !== W || b.canvas.height !== H) {
+      if (!b) {
         const canvas = makeCanvas(W, H);
         b = { canvas, ctx: canvas.getContext('2d') };
         this._scratchPool.set(id, b);
+      } else if (b.canvas.width !== W || b.canvas.height !== H) {
+        // Resize in place: no new canvas per size change, and the context state resets below anyway.
+        b.canvas.width = W;
+        b.canvas.height = H;
       }
       b.ctx.setTransform(1, 0, 0, 1, 0, 0);
       b.ctx.globalAlpha = 1;
