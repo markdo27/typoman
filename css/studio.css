@@ -218,7 +218,8 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .chip:hover { color: var(--text); border-color: var(--line-3); background: var(--panel-2); }
 .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .chip-n { font: 500 10px/1 var(--mono); opacity: 0.72; }
-.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.cards > * { min-width: 0; }
 .card {
   position: relative; display: flex; flex-direction: column; align-items: stretch; text-align: left; cursor: pointer;
   border: 1px solid var(--line); background: var(--panel-2); border-radius: var(--radius); padding: 5px 5px 9px; outline-offset: 2px;
@@ -690,7 +691,7 @@ body.clean .clean-hint.show, body.clean .clean-hint:hover, body.clean .clean-hin
 }
 @media (max-width: 1100px) {
   :root { --left-w: 228px; --right-w: 288px; }
-  .cards { grid-template-columns: 1fr; }
+  .cards { grid-template-columns: minmax(0, 1fr); }
   .btn.remix span, #shareBtn span { display: none; }
   .btn.remix { padding: 0 9px; }
   #shareBtn { width: 32px; padding: 0; }
@@ -749,7 +750,7 @@ body.clean .clean-hint.show, body.clean .clean-hint:hover, body.clean .clean-hin
   .tabs button svg { width: 20px; height: 20px; }
   .tabs button[aria-selected="true"] { color: var(--text); }
   .tabs button[aria-selected="true"]::before { content: ""; position: absolute; top: -1px; left: 30%; right: 30%; height: 2px; border-radius: 0 0 2px 2px; background: var(--accent-hi); }
-  .cards { grid-template-columns: 1fr 1fr; }
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ctl { grid-template-columns: 96px minmax(0, 1fr); min-height: 34px; }
   .ctl-range { grid-template-columns: 96px minmax(0, 1fr) 58px; }
   .num { width: 58px; height: 30px; }
