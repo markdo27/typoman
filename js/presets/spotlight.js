@@ -35,7 +35,7 @@
     path: 'line',
     fit: true,
     params: [
-      TM.P.range('radius', 'Light radius', 0.05, 0.6, 0.005, 0.23, { group: 'Light', hint: '× the frame’s short side' }),
+      TM.P.range('radius', 'Light radius', 0.05, 0.6, 0.005, 0.21, { group: 'Light', hint: '× the frame’s short side' }),
       TM.P.range('falloff', 'Falloff', 0.05, 1, 0.01, 0.65, { group: 'Light', hint: 'How soft the edge of the pool is' }),
       TM.P.toggle('hard', 'Hard edge', false, { group: 'Light', hint: 'A crisp theatre spot with a rim' }),
       TM.P.range('glow', 'Glow', 0, 1, 0.01, 0.45, { group: 'Light' }),
@@ -65,14 +65,14 @@
       // Haze under the type.
       if (P.glow > 0 && f.echo === 0) {
         f.identity();
-        const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, R * 1.4);
+        const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, R * 1.25);
         const col = f.colorOf({ vi: 0 });
         g.addColorStop(0, TM.color.rgba(col, 0.22 * P.glow * I));
         g.addColorStop(0.55, TM.color.rgba(col, 0.07 * P.glow * I));
         g.addColorStop(1, TM.color.rgba(col, 0));
         ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.arc(c.x, c.y, R * 1.4, 0, TAU);
+        ctx.arc(c.x, c.y, R * 1.25, 0, TAU);
         ctx.fill();
       }
 
@@ -126,7 +126,7 @@
     looks: [
       { name: 'Noir', bg: { type: 'solid', color: '#0b0b0c' }, post: { grain: 0.35, vignette: 0.5 }, layer: { font: { family: 'Playfair Display', weight: 900 }, fill: { type: 'solid', color: '#f4f1ea' }, params: { hard: true, radius: 0.24, dark: 0.04, flicker: 0.3 }, path: 'line' } },
       { name: 'Torch', bg: { type: 'solid', color: '#120403' }, layer: { font: { family: 'Roboto Flex', weight: 300 }, fill: { type: 'solid', color: '#ffa600' }, fx: { glow: { amount: 0.4, color: '#ff4d00' } }, params: { radius: 0.18, glow: 0.8, weight: 1 }, path: 'infinity' } },
-      { name: 'Blueprint', bg: { type: 'solid', color: '#03132e' }, layer: { font: { family: 'JetBrains Mono', weight: 700 }, fill: { type: 'solid', color: '#4cc9f0' }, params: { dark: 0.16, falloff: 0.9, radius: 0.28 }, path: 'circle' } },
+      { name: 'Blueprint', bg: { type: 'solid', color: '#03132e' }, layer: { font: { family: 'JetBrains Mono', weight: 700 }, fill: { type: 'solid', color: '#4cc9f0' }, params: { dark: 0.16, falloff: 0.9, radius: 0.28 }, path: 'scurve' } },
     ],
   });
 })(window.TM);

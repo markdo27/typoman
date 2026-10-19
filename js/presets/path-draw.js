@@ -219,6 +219,12 @@
         }
       });
     },
+
+    looks: [
+      { name: 'Signature', bg: { type: 'solid', color: '#f4f1ea' }, layer: { font: { family: 'Caveat', weight: 700 }, fill: { type: 'solid', color: '#141414' }, type: { case: 'none' }, params: { width: 0.02, tilt: 8 } } },
+      { name: 'Blueprint', bg: { type: 'solid', color: '#03132e' }, layer: { font: { family: 'JetBrains Mono', weight: 600 }, fill: { type: 'solid', color: '#4cc9f0' }, params: { stroke: 'dashed', side: 'below' }, path: 'circle' } },
+      { name: 'Marker', bg: { type: 'solid', color: '#ffd6e0' }, layer: { font: { family: 'Permanent Marker', weight: 400 }, fill: { type: 'solid', color: '#2b0a3d' }, params: { stroke: 'dots', width: 0.05, popEase: 'springSnappy' }, path: 'arc' } },
+    ],
   });
 
   function drawStroke(f, path, s0, s1, P) {

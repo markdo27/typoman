@@ -139,6 +139,12 @@
         f.layout = L0;
       }
     },
+
+    looks: [
+      { name: 'Radar', bg: { type: 'solid', color: '#062925' }, layer: { font: { family: 'JetBrains Mono', weight: 700 }, fill: { type: 'solid', color: '#5cffc8' }, params: { rays: true, dim: 0.22 }, path: 'circle' } },
+      { name: 'Loupe', bg: { type: 'solid', color: '#f4f1ea' }, layer: { font: { family: 'Playfair Display', weight: 700 }, fill: { type: 'solid', color: '#141414' }, params: { ring: 'ring', mag: 3, spacing: 0.3, dim: 0.2 } } },
+      { name: 'Flex lens', bg: { type: 'solid', color: '#0b0b0c' }, layer: { font: { family: 'Roboto Flex', weight: 200 }, fill: { type: 'solid', color: '#d4ff3a' }, params: { weight: 1, mag: 2.8 }, path: 'infinity' } },
+    ],
   });
 
   /** Text of glyphs a..b of the run (graphemes joined back), for drawing a partial row. */

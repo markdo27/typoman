@@ -114,5 +114,11 @@
         }
       }
     },
+
+    looks: [
+      { name: 'Heart tunnel', bg: { type: 'solid', color: '#1b0a2e' }, layer: { font: { family: 'Shrikhand', weight: 400 }, fill: { type: 'palette', palette: ['#ff5e5b', '#ffb547', '#ffe3a3', '#ff2e88'] }, params: { ringColor: true }, path: 'heart' } },
+      { name: 'Hypno pulse', bg: { type: 'solid', color: '#000000' }, layer: { font: { family: 'Archivo Black', weight: 400 }, fill: { type: 'palette', palette: ['#ffffff', '#4a4a4a'] }, params: { ringColor: true, rhythm: 'pulse', twist: 0 } } },
+      { name: 'Square warp', bg: { type: 'solid', color: '#03132e' }, layer: { font: { family: 'Orbitron', weight: 800 }, fill: { type: 'solid', color: '#4cc9f0' }, fx: { glow: { amount: 0.3, color: '#4cc9f0' } }, params: { speed: 3, twist: 12, textScale: 0.9 }, path: 'square' } },
+    ],
   });
 })(window.TM);
