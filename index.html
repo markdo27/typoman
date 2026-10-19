@@ -82,19 +82,21 @@
       </div>
     </div>
     <div class="timeline" role="group" aria-label="Timeline">
+      <div class="tl-left">
       <div class="tl-buttons">
         <button id="stepBack" class="icon-btn" type="button" aria-label="Previous frame" data-tip="Previous frame" data-kbd="←"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5.5v13"/><path fill="currentColor" stroke="none" d="M18.5 6.6v10.8a.8.8 0 0 1-1.25.66L9.6 12.66a.8.8 0 0 1 0-1.32l7.65-5.4a.8.8 0 0 1 1.25.66z"/></svg></button>
         <button id="playBtn" class="play playing" type="button" aria-label="Pause" data-tip="Pause" data-kbd="Space"><svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l10.7-6.8a1 1 0 0 0 0-1.7L9.53 4.35A1 1 0 0 0 8 5.2z"/></svg><svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4.5" width="4.2" height="15" rx="1.2"/><rect x="13.8" y="4.5" width="4.2" height="15" rx="1.2"/></svg></button>
         <button id="stepFwd" class="icon-btn" type="button" aria-label="Next frame" data-tip="Next frame" data-kbd="→"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 5.5v13"/><path fill="currentColor" stroke="none" d="M5.5 6.6v10.8a.8.8 0 0 0 1.25.66l7.65-5.4a.8.8 0 0 0 0-1.32L6.75 5.94a.8.8 0 0 0-1.25.66z"/></svg></button>
       </div>
       <div class="tl-clock" aria-hidden="true"><output id="timecode" class="timecode">00:00</output><span id="frameNo" class="frame-no">f 000 / 240</span></div>
+      </div>
       <div id="scrub" class="tl-track" role="slider" tabindex="0" aria-label="Timeline" aria-valuemin="0" aria-valuemax="239" aria-valuenow="0">
         <canvas class="tl-ruler" aria-hidden="true"></canvas>
-        <div id="tlBands" class="tl-bands" aria-hidden="false"></div>
         <div class="tl-played" aria-hidden="true"></div>
         <div class="tl-playhead" aria-hidden="true"><i></i></div>
       </div>
       <button id="loopBtn" class="tl-loop" type="button" aria-label="Loop length: edit" data-tip="Seamless loop · click to change its length"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.5v4h4"/></svg><span id="loopLabel">4s</span><small id="fpsLabel">60 fps</small></button>
+      <div id="tlLanes" class="tl-lanes" role="group" aria-label="Layer timing: when each layer plays"></div>
     </div>
   </main>
 

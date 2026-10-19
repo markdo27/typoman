@@ -89,6 +89,8 @@
     type: '<path d="M5 6.5V5h14v1.5M12 5v14M9 19h6"/>',
     font: '<path d="M3.5 18.5 8.6 5.5h.8l5.1 13M5.4 14h7.2"/><path d="M20.5 18.5V12a2.6 2.6 0 0 0-5 0"/><path d="M20.5 15.5c-2.8-.6-5 .1-5 1.6 0 1.8 3.4 1.9 5-.4"/>',
     curve: '<path d="M4 19.5C9 19.5 9.5 4.5 20 4.5"/><circle cx="4" cy="19.5" r="1.4"/><circle cx="20" cy="4.5" r="1.4"/>',
+    holdOnce: '<path d="M3.5 12h11"/><path d="m11 8 4 4-4 4"/><path d="M19.5 6v12"/>',
+    looks: '<rect x="3.5" y="5" width="7.5" height="6" rx="1.5"/><rect x="13" y="5" width="7.5" height="6" rx="1.5"/><rect x="3.5" y="13" width="7.5" height="6" rx="1.5"/><path d="M16.75 13.2v5.6M13.95 16h5.6"/>',
   };
   function icon(name, cls) {
     const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');

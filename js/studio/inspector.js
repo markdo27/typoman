@@ -170,11 +170,29 @@
             body.append(c.el);
           });
         });
-        const durCtl = C.range({ label: 'Loop length', min: 0.5, max: 20, step: 0.1, unit: 's', default: 4, hint: 'Seconds per seamless loop', ...sceneBinding(store, 'duration') });
+        // Per-layer timing (layer.time): start later, run whole cycles faster, or play once and hold.
+        const timeBind = (key, label) => ({
+          get: () => store.layer.time[key],
+          set: (v) => store.updateLayer((l) => { l.time[key] = v; }, { coalesce: 'L:time.' + key, reason: 'time.' + key, label }),
+        });
+        const delaySlot = h('div', { class: 'slot' });
+        let delayCtl = null, delayFor = null;
+        const buildDelay = () => {
+          const s = store.scene;
+          delayFor = s.duration + '|' + s.fps;
+          delayCtl = C.range({ label: 'Starts at', min: 0, max: +(s.duration - 1 / s.fps).toFixed(3), step: +(1 / s.fps).toFixed(5), decimals: 2, unit: 's', default: 0, hint: 'Delay this layer, e.g. a subtitle after the title. Or drag its lane in the timeline', ...timeBind('delay', 'Layer start') });
+          delaySlot.replaceChildren(delayCtl.el);
+        };
+        buildDelay();
+        const cyclesCtl = C.range({ label: 'Cycles', min: 1, max: 8, step: 1, default: 1, hint: 'Whole passes per scene loop, so the loop stays seamless', ...timeBind('cycles', 'Cycles') });
+        const modeCtl = C.segmented({ label: 'Plays', options: [['loop', 'Loop', 'Repeat for the whole scene'], ['once', 'Once & hold', 'Play one pass, then hold the last frame until the scene loops']], ...timeBind('mode', 'Play mode') });
+        const durCtl = C.range({ label: 'Loop length', min: 0.5, max: 20, step: 0.1, unit: 's', default: 4, hint: 'Seconds per seamless loop (whole scene)', ...sceneBinding(store, 'duration') });
         durCtl.el.classList.add('ctl-duration');
-        body.append(h('div', { class: 'sub' }, 'Clip'), durCtl.el);
-        ctl.push(durCtl);
+        body.append(h('div', { class: 'sub' }, 'Layer timing'), delaySlot, cyclesCtl.el, modeCtl.el, h('div', { class: 'sub' }, 'Scene'), durCtl.el);
+        ctl.push(cyclesCtl, modeCtl, durCtl);
         const update = () => {
+          if (store.scene.duration + '|' + store.scene.fps !== delayFor) buildDelay();
+          if (delayCtl) delayCtl.update();
           ctl.forEach((c) => c.update());
           visibleIf.forEach(([c, cond]) => {
             const ok = Object.entries(cond).every(([k, v]) => (Array.isArray(v) ? v.includes(store.layer.params[k]) : store.layer.params[k] === v));
