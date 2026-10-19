@@ -15,17 +15,24 @@
   const DEG = Math.PI / 180;
   const FALL = 0.34; // share of the in-window spent falling
 
-  /** Numerical derivative of an easing. */
-  function slope(fn, x) {
-    const h = 0.004, a = Math.max(0, x - h), b = Math.min(1, x + h);
-    return b > a ? (fn(b) - fn(a)) / (b - a) : 0;
-  }
+  const slope = TM.MotionKit.slope;
 
   TM.registerPreset({
     id: 'pop',
     name: 'Pop',
     category: 'Reveal',
     description: 'Letters drop in with squash and stretch, bounce and settle, then crouch and spring away.',
+    looks: [
+      { name: 'Cartoon', bg: { type: 'solid', color: '#f6bf26' },
+        layer: { font: { family: 'Bowlby One', weight: 400 }, fill: { type: 'solid', color: '#ffffff' }, stroke: { mode: 'both', width: 0.05, color: '#111111' },
+          fx: { shadow: { amount: 1, angle: 60, distance: 0.012, color: '#111111' } }, params: { squash: 0.8, bounce: 0.75 } } },
+      { name: 'Candy', bg: { type: 'solid', color: '#ffd6e0' },
+        layer: { font: { family: 'Titan One', weight: 400 }, fill: { type: 'palette', palette: ['#ff3e6c', '#2b0a3d', '#ff9f1c', '#00b38f'] },
+          params: { exit: 'pop', wobble: 12 } } },
+      { name: 'Ink Drop', bg: { type: 'solid', color: '#f4f1ea' },
+        layer: { font: { family: 'Shrikhand', weight: 400 }, type: { case: 'none' }, fill: { type: 'solid', color: '#141414' },
+          params: { height: 3, squash: 0.45, bounce: 0.35 } } },
+    ],
     params: [
       ...TM.P.sequence({ inDur: 0.5, outDur: 0.26, stagger: 0.55, easeIn: 'inQuad', easeOut: 'inCubic' }),
       TM.P.range('height', 'Drop height (em)', 0.3, 6, 0.05, 2, { group: 'Bounce' }),
@@ -64,18 +71,23 @@
             rot = side * P.wobble * DEG * (1 - 0.5 * w);
             alpha = smoothstep(0, 0.16, w);
           } else {
-            // Landed: squash spring from each impact, a rebound hop in between.
+            // Landed: a squash spring from each impact, with a rebound hop in between. The second
+            // impact's spring ramps in over a couple of frames and adds to what is left of the
+            // first, so the shape never steps.
             const w = (u - FALL) / (1 - FALL);
             const settle = 1 - smoothstep(0.72, 1, w);
-            let since = w, amp = sq * 0.42;
-            if (P.bounce > 0 && w < hopShare) {
-              const q = w / hopShare;
-              y = -hopH * 4 * q * (1 - q);
-            } else if (P.bounce > 0) {
-              since = w - hopShare;
-              amp *= 0.42 * P.bounce;
+            const amp = sq * 0.42;
+            let squash = amp * Math.exp(-w * 7) * Math.cos(w * 26);
+            if (P.bounce > 0) {
+              if (w < hopShare) {
+                const q = w / hopShare;
+                y = -hopH * 4 * q * (1 - q);
+              } else {
+                const since = w - hopShare;
+                squash += amp * 0.42 * P.bounce * smoothstep(0, 0.06, since) * Math.exp(-since * 7) * Math.cos(since * 26);
+              }
             }
-            sy = 1 - amp * Math.exp(-since * 7) * Math.cos(since * 26) * settle;
+            sy = 1 - squash * settle;
             rot = side * P.wobble * DEG * 0.5 * Math.exp(-w * 6) * Math.cos(w * 17) * settle;
           }
         } else {

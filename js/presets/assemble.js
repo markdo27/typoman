@@ -18,6 +18,17 @@
     name: 'Assemble',
     category: 'Reveal',
     description: 'Scattered letters fly in through depth and snap together on a spring, then gather and explode.',
+    looks: [
+      { name: 'Bauhaus', bg: { type: 'solid', color: '#f1ede4' },
+        layer: { font: { family: 'Archivo Black', weight: 400 }, fill: { type: 'palette', palette: ['#e63326', '#1d3fbb', '#f6bf26', '#111111'] },
+          params: { spin: 360, swirl: 0.6, depth: 0.5 } } },
+      { name: 'Deep Space', bg: { type: 'radial', color: '#0b1d4a', color2: '#01040f' }, post: { grain: 0.12 },
+        layer: { font: { family: 'Syne', weight: 800 }, fill: { type: 'solid', color: '#e0fbfc' },
+          fx: { echo: { count: 3, spacing: 0.018, fade: 0.5, palette: false }, glow: { amount: 0.2, color: '#4cc9f0' } }, params: { depth: 1, scatter: 0.9 } } },
+      { name: 'Hot Chrome', bg: { type: 'solid', color: '#120403' },
+        layer: { font: { family: 'Unbounded', weight: 800 }, fill: { type: 'gradient', color: '#fff1d6', color2: '#ff4d00', angle: 180 },
+          fx: { extrude: { depth: 0.35, angle: 120, color: '#3a0f05' } }, params: { blast: 1.6, anticipation: 0.9 } } },
+    ],
     params: [
       ...TM.P.sequence({ inDur: 0.5, outDur: 0.27, stagger: 0.45, order: 'random', easeIn: 'springSnappy', easeOut: 'outQuart' }),
       TM.P.range('scatter', 'Scatter radius', 0.1, 1.5, 0.01, 0.62, { group: 'Scatter', hint: 'How far letters start from home, in frame heights' }),
@@ -61,9 +72,7 @@
       const eIn = TM.ease(P.easeIn, 'springSnappy');
       const eOut = TM.ease(P.easeOut, 'outQuart');
       const glide = f.E.glide;
-      let inDur = P.inDur, outDur = P.timing === 'in' ? 0 : P.outDur;
-      const sum = inDur + outDur;
-      if (sum > 1) { inDur /= sum; outDur /= sum; }
+      const { outDur } = TM.MotionKit.windows(P);
       const pOut = outDur > 0 ? clamp((f.p - (1 - outDur)) / outDur) : 0;
       const R = P.scatter * f.unit;
       const ant = P.anticipation;
