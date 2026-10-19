@@ -29,11 +29,32 @@
     return { parts: line.match(/\s+|\S+/gu) || [], rtl };
   }
 
+  // Title case keeps short articles, conjunctions and prepositions lowercase unless they open or
+  // close a line ("Type in Motion", "Made for the Web").
+  const MINOR = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'en', 'for', 'if', 'in', 'nor', 'of', 'on', 'or', 'per', 'so', 'the', 'to', 'up', 'via', 'vs', 'yet']);
+  function titleCase(text) {
+    return text.split('\n').map((line) => {
+      const words = line.toLowerCase().split(/(\s+)/u);
+      const real = words.map((w, i) => (/\S/u.test(w) ? i : -1)).filter((i) => i >= 0);
+      const first = real[0], last = real[real.length - 1];
+      return words.map((w, i) => {
+        if (!/\S/u.test(w)) return w;
+        const bare = w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+        if (i !== first && i !== last && MINOR.has(bare)) return w;
+        // Hyphenated compounds follow the same rule inside: "state-of-the-art" → "State-of-the-Art".
+        return w.split(/([\-‐])/u).map((part, j) => {
+          if (j % 2 || (j > 0 && MINOR.has(part.replace(/[^\p{L}\p{N}]+/gu, '')))) return part;
+          return part.replace(/^([^\p{L}\p{N}]*)(\p{L})/u, (m, p, c) => p + c.toUpperCase());
+        }).join('');
+      }).join('');
+    }).join('\n');
+  }
+
   function applyCase(text, mode) {
     switch (mode) {
       case 'upper': return text.toUpperCase();
       case 'lower': return text.toLowerCase();
-      case 'title': return text.toLowerCase().replace(/(^|[\s\-])(\S)/gu, (m, a, b) => a + b.toUpperCase());
+      case 'title': return titleCase(text);
       default: return text;
     }
   }
