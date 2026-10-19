@@ -110,8 +110,11 @@ TM.registerPreset({
 });
 ```
 
-`TM.Scene.applyLook(scene, layerIndex, look)` merges a look into a layer and normalises the
-result. It never touches the user's text.
+`TM.Scene.applyLook(scene, layerIndex, look)` applies a look as a complete style, so the
+result never depends on what came before. Effects, stroke, motion params and post start from
+their defaults, then take the look's values. Font, type, fill, background, anchor and timing
+change only where the look names them. It never touches the user's text, and never replaces
+a hand-drawn path (one without `path.preset`).
 
 Param builders (`js/engine/core.js`): `TM.P.range | select | toggle | color | ease`,
 `TM.P.stagger()`, `TM.P.order()`, and `TM.P.sequence(opts)`. The last one gives the
@@ -147,6 +150,14 @@ shaped run, so Arabic keeps its joined forms. They are placed right to left and 
 - `f.rank(g, order)` gives 0..1, `f.stagger(p, r, amount)` gives 0..1, and `f.seq(g)`
   gives `{ kin, kout, vin, vout, visible, r }`.
 - `f.colorOf(g)`, `f.font(weight)` and `f.ease(spec)`.
+- **Fills paint glyph ink only.** `drawGlyph` and `drawLine` fill with `f.textPaint(g)`. That
+  is the layer colour, or, for gradient fills, a pattern that keeps the gradient fixed in
+  frame space under any transform. A preset that draws text itself calls `f.textPaint(g)`
+  right after setting its transform (Stack does). Decor (tiles, bands, carets, fringes,
+  guides) keeps whatever colour the preset gives it: pass an explicit `color`, or use
+  `f.colorOf(g)`. That returns a CSS colour string, for gradients the gradient's colour at
+  the glyph, so colour maths on it works. Pass no `color` to get the smooth gradient; a
+  colour computed from `colorOf` is a flat sample.
 - `f.identity()` resets the transform to frame px, for drawing your own shapes. Use
   `f.colorOf({vi:0})` as their colour.
 - `f.rand`, `f.srand`, `f.noise` and `f.loopNoise(salt, freq)`.

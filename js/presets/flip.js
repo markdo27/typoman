@@ -71,11 +71,12 @@
         const kArc = D / (D - P.arc * em * 0.6 * arc);
         const back = ca < 0;
         let color = f.colorOverride || (back ? (P.backSide === 'palette' ? pal[((g.vi < 0 ? 0 : g.vi) + 1) % pal.length] : P.backColor) : f.colorOf(g));
+        let shaded = false;
         if (P.shade > 0 && !f.colorOverride) {
           // Light from above: tipping the face up brightens it, tipping it away darkens it.
           const tipUp = -sa * (back ? -1 : 1);
           const amt = P.shade * Math.min(1, Math.abs(tipUp) * 1.15);
-          if (amt > 0.01) color = TM.color.mix(color, tipUp > 0 ? '#ffffff' : '#000000', amt * (tipUp > 0 ? 0.35 : 0.6));
+          if (amt > 0.01) { color = TM.color.mix(color, tipUp > 0 ? '#ffffff' : '#000000', amt * (tipUp > 0 ? 0.35 : 0.6)); shaded = true; }
         }
         const X = f.cx + g.cx, hingeY = f.cy + g.cy + hingeOff + hopY;
         // Where a point at local height y (from the glyph's centre) lands, and its width there.
@@ -88,7 +89,8 @@
         const flat = Math.abs(sa) < 0.05 || Math.abs(at(-capH * 0.6).k - at(capH * 0.6).k) * g.w < 1.5;
         if (flat) {
           const m = at(0);
-          f.drawGlyph(g, { x: X, y: m.Y, sx: m.k, sy: ca * m.k, color });
+          // An unshaded front face drawn in place takes the layer's own paint (smooth gradients).
+          f.drawGlyph(g, { x: X, y: m.Y, sx: m.k, sy: ca * m.k, color: back || shaded ? color : undefined });
         } else {
           keystone(f, f.cache, g, X, at, color);
         }

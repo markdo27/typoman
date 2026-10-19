@@ -158,7 +158,8 @@
         }
 
         if (real) {
-          const color = accent > 0 && noiseColor !== base ? TM.color.mix(base, noiseColor, accent * 0.85) : base;
+          // Undefined = the layer's own paint, so gradient fills stay smooth once a letter locks.
+          const color = accent > 0 && noiseColor !== base ? TM.color.mix(base, noiseColor, accent * 0.85) : undefined;
           const a = alpha * (1 - (1 - noiseAlpha) * accent);
           f.drawGlyph(g, { y, scale: 1 + P.pop * 0.18 * accent, alpha: a, color });
           continue;

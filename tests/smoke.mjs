@@ -138,6 +138,17 @@ const results = await page.evaluate(async () => {
       onceHolds: hashAt(once, plain.duration * 3) === hashAt(once, plain.duration * 5),
       onceWaits: hashAt(once, 0.2) === hashAt(once, 0.4),
       lookApplies: looked.bg.color === '#111111' && looked.layers[0].font.family === 'Fraunces' && looked.layers[0].params.tilt === 20 && looked.layers[0].text === plain.layers[0].text,
+      // The same look over two different prior states gives the same style (no inherited blur,
+      // glow or extrude), and a hand-drawn path survives it.
+      lookReproducible: (() => {
+        const look = { name: 'x', bg: { color: '#202020' }, layer: { font: { family: 'Fraunces' }, params: { speed: 2 } } };
+        const messy = sceneFor('path-flow', (l) => { l.fx.blur = 0.4; l.fx.glow.amount = 0.4; l.fx.extrude.depth = 0.5; l.stroke.mode = 'outline'; l.params.speed = 3; });
+        const a = TM.Scene.applyLook(sceneFor('path-flow'), 0, look).layers[0], b = TM.Scene.applyLook(messy, 0, look).layers[0];
+        const same = JSON.stringify([a.fx, a.stroke, a.params]) === JSON.stringify([b.fx, b.stroke, b.params]);
+        const drawn = sceneFor('path-flow', (l) => { l.path = TM.Path.fromPoints([{ x: 0.1, y: 0.5 }, { x: 0.4, y: 0.2 }, { x: 0.9, y: 0.6 }], false); });
+        const kept = TM.Scene.applyLook(drawn, 0, Object.assign({}, look, { layer: Object.assign({}, look.layer, { path: 'circle' }) })).layers[0].path;
+        return same && !kept.preset && kept.nodes.length === drawn.layers[0].path.nodes.length;
+      })(),
     };
   })();
 
@@ -250,7 +261,8 @@ const linesOk = lb.length >= 2 && Math.min(lb[0], lb[1]) / Math.max(lb[0], lb[1]
 console.log(`multi-line font integrity: ${linesOk ? 'ok' : 'FAIL'} (line ink heights ${lb.slice(0, 2).join(' / ')} px)`);
 if (!linesOk) fails.push('second line lost its font (font cache vs save/restore)');
 const tmg = results.timing;
-console.log(`layer timing: delay ${tmg.delayShifts ? 'ok' : 'FAIL'} · once/hold ${tmg.onceHolds && tmg.onceWaits ? 'ok' : 'FAIL'} · looks ${tmg.lookApplies ? 'ok' : 'FAIL'}`);
+console.log(`layer timing: delay ${tmg.delayShifts ? 'ok' : 'FAIL'} · once/hold ${tmg.onceHolds && tmg.onceWaits ? 'ok' : 'FAIL'} · looks ${tmg.lookApplies ? 'ok' : 'FAIL'} · looks reproducible + keep drawn paths ${tmg.lookReproducible ? 'ok' : 'FAIL'}`);
+if (!tmg.lookReproducible) fails.push('applyLook depends on prior state or replaced a drawn path');
 if (!tmg.delayShifts || !tmg.onceHolds || !tmg.onceWaits) fails.push('layer timing semantics broken');
 if (!tmg.lookApplies) fails.push('applyLook failed');
 const kern = Object.entries(results.kerning);

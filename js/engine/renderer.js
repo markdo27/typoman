@@ -106,6 +106,11 @@
     }
 
     // ── style ──
+    /**
+     * The fill colour of glyph g as a CSS colour string. For gradient fills it is the gradient's
+     * colour at the glyph (a solid stand-in for decor drawn "in the text colour"); glyph ink
+     * itself gets the smooth gradient through textPaint().
+     */
     colorOf(g) {
       if (this.colorOverride) return this.colorOverride;
       const fill = this.layer.fill;
@@ -113,8 +118,43 @@
         const pal = fill.palette;
         return pal[mod((g.vi < 0 ? 0 : g.vi) + (this.paletteShift | 0), pal.length)];
       }
-      if (fill.type === 'gradient') return '#ffffff';
+      if (fill.type === 'gradient') {
+        const x = this.cx + (g && g.cx != null ? g.cx : 0), y = this.cy + (g && g.cy != null ? g.cy : 0);
+        return this.renderer._gradient(this.layer, this.W, this.H).colorAt(x, y);
+      }
       return fill.color;
+    }
+
+    /**
+     * Paint for glyph ink: the layer's colour, or for gradient fills a pattern that keeps the
+     * gradient fixed in frame space under any transform. Only ink gets the gradient, so a
+     * preset's decor (tiles, bands, pens, carets, fringes) keeps the colours it chose.
+     * drawGlyph and drawLine use it; a preset drawing text itself calls it right after setting
+     * its transform.
+     */
+    textPaint(g) {
+      if (this.colorOverride || this.layer.fill.type !== 'gradient') return this.colorOf(g);
+      const t = this.ctx.getTransform();
+      return this._paint(g, t.a, t.b, t.c, t.d, t.e, t.f);
+    }
+
+    /** textPaint for the transform (a, b, c, d, e, f) about to be used (no getTransform). */
+    _paint(g, a, b, c, d, e, f) {
+      if (this.colorOverride || this.layer.fill.type !== 'gradient') return this.colorOf(g);
+      const G = this.renderer._gradient(this.layer, this.W, this.H);
+      const pat = G.patternFor(this.ctx);
+      const det = a * d - b * c;
+      if (!pat || !det) return this.colorOf(g);
+      // A pattern lives in user space, so anchor it with M⁻¹·G (G maps the strip to frame px).
+      const ia = d / det, ib = -b / det, ic = -c / det, id = a / det;
+      const ie = (c * f - d * e) / det, iff = (b * e - a * f) / det;
+      const m = G.m;
+      pat.setTransform({
+        a: ia * m[0] + ic * m[1], b: ib * m[0] + id * m[1],
+        c: ia * m[2] + ic * m[3], d: ib * m[2] + id * m[3],
+        e: ia * m[4] + ic * m[5] + ie, f: ib * m[4] + id * m[5] + iff,
+      });
+      return pat;
     }
 
     /** Canvas font string for this layer at a weight (variable fonts animate smoothly). */
@@ -180,7 +220,7 @@
       }
 
       ctx.setTransform(a, b, c, d, x, y);
-      const color = o.color || this.colorOf(g);
+      const color = o.color || this._paint(g, a, b, c, d, x, y);
       if (this.strokeMode === 'outline') {
         ctx.strokeStyle = color;
         ctx.lineWidth = this.strokeW;
@@ -210,9 +250,10 @@
       this._setFont(o.weight != null ? this.font(o.weight) : this.layout.font);
       if ('letterSpacing' in ctx) ctx.letterSpacing = this.layout.tracking.toFixed(2) + 'px';
       ctx.globalAlpha = alpha;
-      ctx.setTransform(cos * sx, sin * sx, (cos * tk - sin) * sy, (sin * tk + cos) * sy, x, y);
+      const ma = cos * sx, mb = sin * sx, mc = (cos * tk - sin) * sy, md = (sin * tk + cos) * sy;
+      ctx.setTransform(ma, mb, mc, md, x, y);
       const ox = -line.width / 2, oy = this.layout.capH / 2;
-      const color = o.color || this.colorOf({ vi: line.index });
+      const color = o.color || this._paint({ vi: line.index, cx: x - this.cx, cy: y - this.cy }, ma, mb, mc, md, x, y);
       if (this.strokeMode === 'outline') {
         ctx.strokeStyle = color;
         ctx.lineWidth = this.strokeW;
@@ -336,6 +377,44 @@
       const keys = pm && pm.enabled ? TM.Path.morphKeys(pm) : [];
       if (!keys.length) return a;
       return TM.Path.sequence([a].concat(keys.map((k) => TM.Path.sample(k, W, H))), pm, p);
+    }
+
+    /**
+     * A layer's gradient fill in frame space: `m` maps a small ramp strip to frame px (the ramp
+     * fills its middle half; canvas gradients clamp, so the end colours carry on beyond the
+     * frame), `patternFor(ctx)` gives that context's pattern, `colorAt(x, y)` a solid sample.
+     */
+    _gradient(layer, W, H) {
+      const fill = layer.fill;
+      const key = fill.color + fill.color2 + fill.angle + ':' + W + 'x' + H;
+      if (!this._grads) this._grads = new Map();
+      let G = this._grads.get(key);
+      if (G) return G;
+      const a = fill.angle * DEG, dx = Math.sin(a), dy = -Math.cos(a);
+      const len = Math.max(1, Math.abs(W * dx) + Math.abs(H * dy));
+      const x0 = W / 2 - (dx * len) / 2, y0 = H / 2 - (dy * len) / 2;
+      const S = 512, k = len / (S / 2);
+      const strip = makeCanvas(S, 1);
+      const sg = strip.getContext('2d');
+      const ramp = sg.createLinearGradient(S / 4, 0, (S * 3) / 4, 0);
+      ramp.addColorStop(0, fill.color);
+      ramp.addColorStop(1, fill.color2);
+      sg.fillStyle = ramp;
+      sg.fillRect(0, 0, S, 1);
+      const patterns = new WeakMap();
+      G = {
+        // strip (u, v) → frame: p0 + (u - S/4)·k·axis + v·normal
+        m: [dx * k, dy * k, -dy, dx, x0 - (S / 4) * k * dx, y0 - (S / 4) * k * dy],
+        patternFor(ctx) {
+          let p = patterns.get(ctx);
+          if (p === undefined) { p = ctx.createPattern(strip, 'repeat'); patterns.set(ctx, p); }
+          return p;
+        },
+        colorAt: (x, y) => TM.color.mix(fill.color, fill.color2, clamp(((x - x0) * dx + (y - y0) * dy) / len, 0, 1)),
+      };
+      if (this._grads.size > 8) this._grads.clear();
+      this._grads.set(key, G);
+      return G;
     }
 
     _scratch(id, W, H) {
@@ -527,18 +606,6 @@
         lctx.drawImage(this._accum, 0, 0);
       } else {
         this._drawPasses(lctx, layer, index, preset, t, W, H);
-      }
-
-      if (layer.fill.type === 'gradient') {
-        const a = layer.fill.angle * DEG, dx = Math.sin(a), dy = -Math.cos(a);
-        const len = Math.abs(W * dx) + Math.abs(H * dy);
-        const g = lctx.createLinearGradient(W / 2 - (dx * len) / 2, H / 2 - (dy * len) / 2, W / 2 + (dx * len) / 2, H / 2 + (dy * len) / 2);
-        g.addColorStop(0, layer.fill.color);
-        g.addColorStop(1, layer.fill.color2);
-        lctx.globalCompositeOperation = 'source-in';
-        lctx.fillStyle = g;
-        lctx.fillRect(0, 0, W, H);
-        lctx.globalCompositeOperation = 'source-over';
       }
 
       const unit = Math.min(W, H);

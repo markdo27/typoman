@@ -172,7 +172,7 @@
     const tk = -Math.tan(skew + f.slant);
     ctx.setTransform(sx, 0, tk * sy, sy, x, y);
     ctx.globalAlpha = f.alpha;
-    const color = f.colorOf({ vi: i });
+    const color = f.textPaint({ vi: i, cx: x - f.cx, cy: y - f.cy });
     const ox = -runW / 2, oy = capH / 2;
     if (f.strokeMode === 'outline') {
       ctx.strokeStyle = color;

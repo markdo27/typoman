@@ -392,27 +392,38 @@
    * and layer font / type / fill / stroke / fx / params / anchor / path (a path preset id or
    * definition). The user's text is never changed. The result is normalised.
    */
+  /**
+   * Apply a curated look to layer `index`. A look is a complete style, so the result never
+   * depends on what came before it: effects, stroke, motion params and post (grain, vignette)
+   * start from their defaults, then take the look's values. Font, type, fill, background,
+   * anchor and timing change only where the look names them. Like the text, a hand-drawn path
+   * (one without path.preset) is the user's work and is never replaced.
+   */
   function applyLook(scene, index, look) {
     const s = clone(scene);
     const l = s.layers[Math.max(0, Math.min(s.layers.length - 1, index | 0))];
     if (!l || !isObj(look)) return normalize(s);
+    const d = defaultLayer();
     if (isObj(look.bg)) merge(s.bg, look.bg);
-    if (isObj(look.post)) merge(s.post, look.post);
-    if (typeof look.preset === 'string' && TM.getPreset(look.preset)) {
-      if (l.preset !== look.preset) l.params = TM.presetDefaults(look.preset);
-      l.preset = look.preset;
-    }
+    s.post = merge(clone(defaults().post), isObj(look.post) ? clone(look.post) : {});
+    if (typeof look.preset === 'string' && TM.getPreset(look.preset)) l.preset = look.preset;
     const L = isObj(look.layer) ? look.layer : {};
+    l.params = TM.presetDefaults(l.preset);
+    l.fx = clone(d.fx);
+    l.stroke = clone(d.stroke);
     for (const k of ['font', 'type', 'fill', 'stroke', 'fx', 'params', 'anchor', 'time']) {
       if (isObj(L[k])) l[k] = merge(isObj(l[k]) ? l[k] : {}, clone(L[k]));
     }
     if (Array.isArray(L.fill && L.fill.palette)) l.fill.palette = L.fill.palette.slice();
     const aspect = s.size.w / s.size.h;
-    if (typeof L.path === 'string') l.path = TM.Path.preset(L.path, aspect);
-    else if (isObj(L.path)) l.path = clone(L.path);
-    if (isObj(L.pathMorph)) {
-      l.pathMorph = merge(isObj(l.pathMorph) ? l.pathMorph : {}, clone(L.pathMorph));
-      if (typeof L.pathMorph.target === 'string') l.pathMorph.target = TM.Path.preset(L.pathMorph.target, aspect);
+    const custom = isObj(l.path) && !l.path.preset;
+    if (!custom) {
+      if (typeof L.path === 'string') l.path = TM.Path.preset(L.path, aspect);
+      else if (isObj(L.path)) l.path = clone(L.path);
+      if (isObj(L.pathMorph)) {
+        l.pathMorph = merge(isObj(l.pathMorph) ? l.pathMorph : {}, clone(L.pathMorph));
+        if (typeof L.pathMorph.target === 'string') l.pathMorph.target = TM.Path.preset(L.pathMorph.target, aspect);
+      }
     }
     return normalize(s);
   }
