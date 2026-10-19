@@ -165,6 +165,14 @@
       pvMeta.textContent = `${s.size.w}×${s.size.h} · ${s.duration} s loop · scene code ${X.formatBytes(code.length)}`;
       const pb = Studio.publicBase();
       baseNote.textContent = pb.differs ? `Codes and links point to ${pb.base}, because this studio is running locally (${new URL(pb.local).host || 'file'}). The preview uses your local copy.` : `Codes and links point to ${pb.base}.`;
+      // Uploaded fonts live only in this browser: embeds and links fall back to the default face.
+      const custom = [...new Set(s.layers.map((l) => l.font.family).filter((f) => (TM.fonts.get(f) || {}).custom))];
+      if (custom.length) {
+        baseNote.textContent += ` ${custom.join(', ')} ${custom.length > 1 ? 'are uploaded fonts' : 'is an uploaded font'} and can't travel in a link or embed code. Viewers will see ${TM.Scene.defaultLayer().font.family} instead. Pick a catalogue font, or export a video.`;
+        baseNote.className = 'tm-note warn';
+      } else {
+        baseNote.className = 'tm-note';
+      }
       linkNote.textContent = code.length > 6000 ? 'This scene makes a long link; some chat apps cut long URLs. The HTML file always works.' : 'Links carry the whole scene, so nothing is uploaded anywhere.';
       linkNote.className = 'tm-note' + (code.length > 6000 ? ' warn' : '');
       const fonts = [...new Set(s.layers.map((l) => l.font.family))].join(', ');

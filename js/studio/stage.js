@@ -88,7 +88,9 @@
       let bw = cssW * dpr, bh = cssH * dpr;
       const px = bw * bh;
       if (px > PREVIEW_MAX_PIXELS) { const s = Math.sqrt(PREVIEW_MAX_PIXELS / px); bw *= s; bh *= s; }
-      this.renderer.resize(bw, bh);
+      // Dynamic resolution: heavy effect stacks lower the preview's backing size (exports are unaffected).
+      const rs = this.resScale || 1;
+      this.renderer.resize(Math.max(2, bw * rs), Math.max(2, bh * rs));
       this.overlay.setAttribute('viewBox', `0 0 ${cssW} ${cssH}`);
       this.overlay.setAttribute('width', cssW);
       this.overlay.setAttribute('height', cssH);
@@ -102,7 +104,25 @@
     }
 
     render(t) {
+      const t0 = performance.now();
       this.renderer.render(t);
+      this._adapt(performance.now() - t0);
+    }
+
+    /** Keep playback responsive: trade preview resolution for frame time, with hysteresis. */
+    _adapt(ms) {
+      this._ema = this._ema == null ? ms : this._ema * 0.85 + ms * 0.15;
+      this._frames = (this._frames || 0) + 1;
+      if (this._frames < 24) return;
+      this._frames = 0;
+      const rs = this.resScale || 1;
+      let next = rs;
+      if (this._ema > 34 && rs > 0.4) next = Math.max(0.4, rs * 0.8);
+      else if (this._ema < 12 && rs < 1) next = Math.min(1, rs / 0.8);
+      if (next !== rs) {
+        this.resScale = next;
+        this.layout(true);
+      }
     }
 
     watchDpr() {
