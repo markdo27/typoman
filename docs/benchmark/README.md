@@ -7,7 +7,7 @@ band is the mean of the medians, rounded to the nearest 0.5.
 | Round | MC | TQ | PC | CR | EE | UX | PR | EQ | Overall |
 |---|---|---|---|---|---|---|---|---|---|
 | 0: baseline (V3 demo) | 4.5 | 3 | 3 | 5 | 1 | 4.5 | 5 | 3.5 | **3.5** |
-| 1: rebuilt studio | – | – | – | – | – | – | – | – | *jury pending* |
+| 1: rebuilt studio | 6.5 | 6.5 | 7.5 | 6.5 | 7.5 | 7 | 6.5 | 7.5 | **7.0** |
 
 MC Motion Craft · TQ Typographic Quality · PC Path Control · CR Creative Range &
 Originality · EE Export & Embed · UX Studio UX & Visual Design · PR Performance &
@@ -39,26 +39,63 @@ Full reports: [art director](round-0/art-director.md) ·
 [motion designer](round-0/motion-designer.md) ·
 [creative technologist](round-0/creative-technologist.md)
 
-## Round 1: rebuilt studio (built and verified; jury pending)
+## Round 1: rebuilt studio (snapshot `3f7aecb`)
 
-The Round 1 jury started on snapshot `3f7aecb` but was cut off by account usage limits
-before any judge filed a report. It will run first thing next round, on the same rubric.
-Until then there are **no Round 1 band scores**. What follows is verification evidence,
-not a jury score.
+| Judge | MC | TQ | PC | CR | EE | UX | PR | EQ |
+|---|---|---|---|---|---|---|---|---|
+| Kinetic Type Art Director | 6.5 | 6.5 | 7.5 | 6.5 | 6.5* | 7 | 6.5 | 7 |
+| Working Motion Designer | 7 | 7.5 | 8 | 7 | 8.5 | 8 | 8 | 7.5 |
+| Creative Technologist | 6.5 | 6 | 7 | 6.5 | 7.5 | 7 | 6.5 | 7.5 |
+| **Median** | **6.5** | **6.5** | **7.5** | **6.5** | **7.5** | **7** | **6.5** | **7.5** |
 
-| Check | Result |
+\* provisional: the Art Director read the encoder code but didn't export files.
+
+The mean of the medians is 6.94, so the overall band is **7.0, up from 3.5**. The biggest
+jumps were Export & Embed (1 → 7.5), Path Control (3 → 7.5) and Engineering
+(3.5 → 7.5).
+
+**What the jury verified**
+- **Exports:** every format had the exact frame count and duration in `ffprobe`. Video
+  matches `render(t)` at 36–41 dB PSNR, GIF at 44 dB, and PNG/ZIP frames are bit-exact.
+  Transparent WebM alpha decodes at 41–49 dB.
+- **Deliverables:** all five motion-designer scenarios produced their deliverable: a
+  YouTube intro MP4, a website hero embed (iframe, web component, HTML file), a 9:16
+  story on a hand-shaped and morphing path, a brand-font transparent export, and a
+  two-layer composite.
+- **Embeds:** robust against hostile input, with no XSS or prototype pollution. Rendering
+  pauses in hidden tabs, and heap stays flat across preset switches and repeated exports.
+
+**Bugs found, all fixed after the round** (in commits `e43e53f`, `ce94bba` and the
+wrap-up commit):
+
+| Bug | Fix |
 |---|---|
-| `npm test`: 17 presets × determinism, loop seam, 1080p cost, 8 edge cases; sanitiser fuzz; link round trip | all pass. 6–13 ms/frame at 1080p in software raster |
-| Path editor browser tests (real mouse, keyboard and touch; 16:9, 9:16, 390 px) | 69 / 69 |
-| Path geometry unit tests | 4,438 / 4,438 |
-| Studio interaction tests (keyboard-only, undo/redo, layers, pickers, autosave) | pass |
-| MP4 / GIF / WebM export, checked with `ffprobe` | exact frame counts (60 @ 30 fps × 2 s), 1280×720 |
-| H.264 path | not encodable in this container; checked with a mock encoder fed real libx264 output |
-| iframe embed + `<typoman-player>` loaded cross-origin | render correctly, no console errors |
+| The second line of Rise, and Split Flap rolls, drew in a 10px default font, in exports too (stale font cache after `ctx.save/restore`) | The cache is checked against the context. A regression test checks two-line ink heights (were 75 / 7 px, now 75 / 75) |
+| Arabic and Hebrew rendered reversed; Arabic lost its joined forms | RTL lines lay out as shaped word clusters placed right to left |
+| A 190 KB link inflated to 140 MB before being rejected | Streamed decompression with a 1 MB cap (a 64 MB bomb is rejected in 55 ms) |
+| A fractional `speed` from a URL broke the loop seam | Range params snap to their declared step |
+| Stacked effects dropped the studio to 6 fps | Preview caps blur × echo passes and extrude steps, and the stage adapts preview resolution |
+| Uploaded fonts silently fell back to Anton in embeds | The share dialog warns |
+| Pressing N typed "n" into the new layer | The keystroke is consumed |
+| The size estimate read like a promise ("≈2.2 MB" for a 162 KB file) | Shown as an upper bound |
 
-The team's own Round 1 reports list these known gaps, to feed into Round 2:
-- the gradient fill recolours Glitch fringes and Split Flap tiles;
-- Draw On text crowds at sharp inner corners;
-- heavy Orbit and Lens settings exceed 10 ms/frame in software raster;
-- uploaded custom fonts support a single weight;
-- real H.264 output still needs confirming in desktop Chrome or Safari.
+**Round 2 priorities (ranked by the jury)**
+1. Letters collide at sharp path corners and mid-morph. Compress spacing on concave
+   stretches, fan it on convex ones, and handle open path ends cleanly.
+2. Per-layer timing: start offsets and durations, and "play once and hold", so a
+   subtitle can follow a title.
+3. Curated looks per preset (font, palette, effects, path), and a Remix that also
+   changes motion settings and paths. Today every preset opens in Anton on Klein blue.
+4. Fly In defaults: the word reads backwards in flight. Pick the order from the path
+   direction and space launches by distance along the path.
+5. Variable fonts beyond weight (width, optical size), and rebuild Stack on width plus
+   tracking instead of stretching letters.
+6. Deliverable presets (YouTube, IG/TikTok story, web hero bundle), file names taken
+   from the text, uploaded fonts named by their family name, and a fallback H.264
+   encoder.
+7. Path editor: grabbable off-frame handles, a click-to-place pen tool, and path
+   keyframes beyond A→B→A.
+
+Full reports: [art director](round-1/art-director.md) ·
+[motion designer](round-1/motion-designer.md) ·
+[creative technologist](round-1/creative-technologist.md)

@@ -345,7 +345,7 @@
           return infoBox('warn', 'No encoder for this size', null, ["This browser can't encode video at this resolution. Pick a lower resolution, or TYPOMAN will fall back to real-time capture."]);
         }
         const d = X.describe(neg.choice);
-        est.textContent = `≈ ${X.formatBytes((neg.choice.config.bitrate * p.duration) / 8)} · ${d.bitrate}`;
+        est.textContent = `up to ${X.formatBytes((neg.choice.config.bitrate * p.duration) / 8)} · ${d.bitrate} max (kinetic type usually compresses far smaller)`;
         infoBox(d.warn ? 'warn' : '', d.title, d.codec, [d.plays]);
       });
     }

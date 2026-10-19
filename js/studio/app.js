@@ -495,7 +495,7 @@
           case 'g': case 'G': store.setUI({ guides: !store.ui.guides }); break;
           case 'f': case 'F': store.setUI({ clean: !store.ui.clean }); break;
           case 'r': case 'R': remix(store); break;
-          case 'n': case 'N': this.layers.add(); break;
+          case 'n': case 'N': e.preventDefault(); this.layers.add(); break; // don't type the 'n' into the new layer's text
           case '[': store.select(store.selected - 1); UI.announce('Selected ' + Studio.layerName(store.layer)); break;
           case ']': store.select(store.selected + 1); UI.announce('Selected ' + Studio.layerName(store.layer)); break;
           case '/': e.preventDefault(); this.focusPresets(); break;

@@ -101,6 +101,11 @@ The project is benchmarked with the **TYPOMAN Band Score**, an IELTS-style 0–9
 across eight criteria, scored by a three-judge jury each round. See
 [`docs/BENCHMARK.md`](docs/BENCHMARK.md) and the [round-by-round log](docs/benchmark/).
 
+| Round | Overall band |
+|---|---|
+| 0: original V3 demo | 3.5 |
+| 1: rebuilt studio | **7.0** |
+
 ## License
 
 MIT
