@@ -1,56 +1,105 @@
-# TYPOMAN — Kinetic Type Engine
+# TYPOMAN: Kinetic Type Studio
 
-A browser-based kinetic typography engine for creating animated stacked text compositions. Zero dependencies, single HTML file, no build step required.
+Make animated typography for your projects, right in the browser. Type your words, pick
+a motion, **shape the path the type travels on**, then **embed it on any website** or
+**download an MP4**.
 
-![TYPOMAN Preview](https://img.shields.io/badge/status-live-brightgreen) ![Single File](https://img.shields.io/badge/architecture-single%20file-blue)
+**[Open the studio →](https://markdo27.github.io/typoman/)**
 
-## Features
+No install, no account, no build step. It's static files on GitHub Pages.
 
-- **Stacked Text** — Words auto-fill canvas width, stack vertically with proportional height distribution
-- **6 Motion Presets** — Wave, Accordion, Cascade, Bounce, Spring, Breathe
-- **Audio-Reactive Mode** — Mic input → FFT → row scale mapping via Web Audio API
-- **Webcam Text Mask** — Camera feed revealed through text letter shapes
-- **Per-Word Colors** — Independent color override per word chip
-- **8 Google Fonts** — Anton, Bebas Neue, Oswald, Playfair Display, Righteous, Archivo Black, Russo One, Impact
-- **Effects Engine** — Shadow, Glow, Outline, Double with adjustable strength
-- **Crazy Mode** — Auto-randomize everything (colors, fonts, motion, effects) every 1.5-3s
-- **Color System** — Preset swatches + randomize with WCAG 4.5:1 contrast enforcement + swap
-- **Export** — PNG download + SVG clipboard copy
-- **Keyboard Shortcuts** — `Space` play/stop, `R` random, `M` mic, `C` crazy mode
-- **Responsive Easing Graph** — Real-time visualization of motion curves
+## What you can do
 
-## Quick Start
+- **Animate type with 17 motion presets**, grouped as path, kinetic, reveal, glitch and
+  dimensional. Every preset staggers by letter, word or line, with easing curves you can
+  edit (signature curves, springs, or your own cubic-bézier).
+- **Shape the motion path.** Pick one of 22 shapes (wave, arc, circle, spiral, infinity,
+  heart, …), then drag anchors and handles on the canvas, double-click to add points, or
+  draw freehand. Paths can also **morph** from one shape to another over the loop.
+- **Use real typography.** There are 50 curated Google Fonts (including variable fonts
+  whose weight animates smoothly), and you can upload your own. Kerning is preserved,
+  emoji are safe, and you get multi-line, tracking, leading, case, slant, outline, and
+  gradient or palette fills.
+- **Layer effects:** echo trails, motion blur, glow, drop shadow, 3D extrude, film grain
+  and vignette. Stack up to six text layers, each with its own motion.
+- **Export:** frame-accurate MP4 (H.264, with AV1/VP9 fallbacks), WebM (with
+  transparency where supported), GIF, a PNG frame, or a PNG sequence. Exports are rendered
+  offline frame by frame, so they match the preview exactly at any resolution, up to 4K.
+- **Embed:** copy an `<iframe>`, drop in the `<typoman-player>` web component, or
+  download a single self-contained HTML file. Share a remix link so others can open your
+  scene in the studio.
 
-```bash
-# Just open the file
-open index.html
-# or
-start index.html
+## Embedding
+
+```html
+<!-- iframe: the scene travels in the URL hash -->
+<iframe src="https://markdo27.github.io/typoman/embed.html#c=…" style="border:0;width:100%;aspect-ratio:16/9" title="Animated type"></iframe>
+
+<!-- web component -->
+<script src="https://markdo27.github.io/typoman/player.js" defer></script>
+<typoman-player scene="…" autoplay loop></typoman-player>
 ```
 
-No npm, no build, no server. Just a browser.
+The studio's **Embed** button generates both snippets with your scene filled in.
 
-## Architecture
-
-```
-Offscreen Canvas (per row)          Main Canvas
-┌──────────────────────┐           ┌──────────────────────┐
-│ Font at 1.15x lineH  │──crop──▶ │ drawImage stretched  │
-│ scale(scaleX, 1)     │ to pixel │ into row slot         │
-│ textBaseline='top'   │ bounds   │ [0, y, W, lineH]     │
-└──────────────────────┘           └──────────────────────┘
-```
-
-Each word is rendered to an offscreen canvas, pixel-scanned for glyph bounds, then stretched precisely into its row slot via `drawImage`. Motion presets are pure math functions that modulate `lineScales[]` per frame via `requestAnimationFrame`.
-
-## Keyboard Shortcuts
+## Keyboard
 
 | Key | Action |
-|-----|--------|
-| `Space` | Play / Stop animation |
-| `R` | Randomize colors |
-| `M` | Toggle microphone audio input |
-| `C` | Toggle crazy mode |
+|---|---|
+| `Space` | Play / pause |
+| `←` `→` | Step one frame (`Shift` = 10) |
+| `P` | Edit the path on the canvas |
+| `G` | Safe-area guides |
+| `F` | Clean preview (hide the UI) |
+| `N` | New layer |
+| `R` | Remix (random preset, font and palette) |
+| `⌘/Ctrl Z`, `⇧⌘Z` | Undo / redo |
+| `⌘/Ctrl E` | Export |
+| `?` | Shortcut help |
+
+## How it works
+
+```
+scene JSON ──► TM.Scene.normalize (sanitise) ──► TM.Renderer.render(t)
+                                                  ├─ background
+                                                  ├─ per layer: preset.render(f) × echoes × blur samples
+                                                  │            → gradient fill → shadow / glow → composite
+                                                  └─ grain / vignette
+```
+
+- **Deterministic:** a frame is a pure function of the scene and the time. There's no
+  `Math.random()`, only seeded hashing and noise. The studio preview, the embed player and
+  the offline MP4 encoder therefore produce the same pixels.
+- **Resolution-independent:** every size is relative to the frame, so a 540p preview and a
+  4K export are the same composition.
+- **Safe to share:** scenes arriving from URLs, attributes or storage are sanitised
+  against a strict schema. Fonts are whitelisted and colours validated.
+
+The engine and studio contract, including how to write a preset in about 50 lines, is in
+[`docs/ENGINE.md`](docs/ENGINE.md).
+
+```
+index.html       studio            embed.html   iframe player        player.js  web component
+js/engine/       core · fonts · text · path · scene · renderer
+js/presets/      one file per motion preset
+js/export/       MP4 / WebM / GIF / PNG / ZIP encoders, standalone HTML
+js/studio/       store · controls · inspector · panels · dialogs · app
+vendor/          pinned MIT libraries (mp4-muxer, webm-muxer)
+labs/            earlier experiments (V3 demo, Flash engine, Cavalry study)
+```
+
+## Develop
+
+```bash
+npm start        # serves the repo at http://localhost:8080
+npm test         # headless smoke tests: determinism, loop seams, perf, edge cases, sanitiser fuzz
+```
+
+## Benchmark
+
+The project is benchmarked with the **TYPOMAN Band Score**, an IELTS-style 0–9 rubric
+across eight criteria, scored by a three-judge jury each round. See
+[`docs/BENCHMARK.md`](docs/BENCHMARK.md) and the [round-by-round log](docs/benchmark/).
 
 ## License
 
