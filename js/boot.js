@@ -55,6 +55,7 @@
     'js/presets/strobe-cut.js',
     'js/presets/outline-draw.js',
     'js/presets/focus-pull.js',
+    'js/presets/shutter.js',
   ];
 
   // ── Export & embed runtime (owner: export team) ──
