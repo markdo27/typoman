@@ -155,3 +155,40 @@ deflate-raw base64url). It goes in `#c=…` on `index.html` (to remix) and on `e
 Each team edits only its own files and its own array in `js/boot.js`. Cross-team needs go
 through the APIs above. If something outside your files is broken, report it; don't patch
 it.
+
+## Export & embed API
+
+```js
+// Offline, frame-accurate export (formats: mp4 | webm | gif | png | pngseq)
+const job = new AbortController();
+const { blob, name, info } = await TM.Export.run(scene,
+  { format: 'mp4', resolution: 1080, fps: 30, loops: 2, quality: 'high', transparent: false },
+  { signal: job.signal, onProgress: (p) => {} });
+// info: { codec, label, width, height, fps, frames, duration, bytes, notes[] }
+```
+
+MP4 tries H.264 first (High → Main → Baseline, with the level chosen from size × fps),
+then AV1, then VP9. Without WebCodecs it falls back to real-time MediaRecorder. The
+muxers in `vendor/` load only when an export starts.
+
+```html
+<!-- iframe player: options ride in the hash -->
+<iframe src="embed.html#c=<TM.Scene.encode(scene)>&autoplay=1&loop=1&controls=0&bg=transparent&fit=contain"></iframe>
+
+<!-- web component: loads boot.js from its own URL, works cross-origin -->
+<script src="player.js" defer></script>
+<typoman-player scene="<code>" autoplay loop controls fit="contain"></typoman-player>
+```
+
+Both pause offscreen and when the tab is hidden, and show a still frame under
+`prefers-reduced-motion`. `TM.Export` can also build a self-contained HTML file that
+inlines the engine and only the presets the scene uses.
+
+## Studio additions (UI team)
+
+- Layer helpers: `store.addLayer()`, `duplicateLayer()`, `removeLayer()`, `moveLayer()`,
+  `setLayerVisible()` and `renameLayer()`.
+- `store.undoLabel` and `store.redoLabel`.
+- A `'save'` event.
+- `TM.Studio.toast(msg, kind, ms, { label, run })` adds an action button.
+- The `'view'` event also carries `{ zoom, fit }`.

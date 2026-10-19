@@ -7,6 +7,7 @@ band is the mean of the medians, rounded to the nearest 0.5.
 | Round | MC | TQ | PC | CR | EE | UX | PR | EQ | Overall |
 |---|---|---|---|---|---|---|---|---|---|
 | 0: baseline (V3 demo) | 4.5 | 3 | 3 | 5 | 1 | 4.5 | 5 | 3.5 | **3.5** |
+| 1: rebuilt studio | – | – | – | – | – | – | – | – | *jury pending* |
 
 MC Motion Craft · TQ Typographic Quality · PC Path Control · CR Creative Range &
 Originality · EE Export & Embed · UX Studio UX & Visual Design · PR Performance &
@@ -37,3 +38,27 @@ The jury agreed on the main findings:
 Full reports: [art director](round-0/art-director.md) ·
 [motion designer](round-0/motion-designer.md) ·
 [creative technologist](round-0/creative-technologist.md)
+
+## Round 1: rebuilt studio (built and verified; jury pending)
+
+The Round 1 jury started on snapshot `3f7aecb` but was cut off by account usage limits
+before any judge filed a report. It will run first thing next round, on the same rubric.
+Until then there are **no Round 1 band scores**. What follows is verification evidence,
+not a jury score.
+
+| Check | Result |
+|---|---|
+| `npm test`: 17 presets × determinism, loop seam, 1080p cost, 8 edge cases; sanitiser fuzz; link round trip | all pass. 6–13 ms/frame at 1080p in software raster |
+| Path editor browser tests (real mouse, keyboard and touch; 16:9, 9:16, 390 px) | 69 / 69 |
+| Path geometry unit tests | 4,438 / 4,438 |
+| Studio interaction tests (keyboard-only, undo/redo, layers, pickers, autosave) | pass |
+| MP4 / GIF / WebM export, checked with `ffprobe` | exact frame counts (60 @ 30 fps × 2 s), 1280×720 |
+| H.264 path | not encodable in this container; checked with a mock encoder fed real libx264 output |
+| iframe embed + `<typoman-player>` loaded cross-origin | render correctly, no console errors |
+
+The team's own Round 1 reports list these known gaps, to feed into Round 2:
+- the gradient fill recolours Glitch fringes and Split Flap tiles;
+- Draw On text crowds at sharp inner corners;
+- heavy Orbit and Lens settings exceed 10 ms/frame in software raster;
+- uploaded custom fonts support a single weight;
+- real H.264 output still needs confirming in desktop Chrome or Safari.
