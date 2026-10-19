@@ -42,6 +42,7 @@
     'js/presets/ribbon.js',
     'js/presets/magnet.js',
     'js/presets/kaleido.js',
+    'js/presets/kinetic-grid.js',
   ];
 
   // ── Presets: reveal, glitch & dimensional family (owner: preset team B) ──
