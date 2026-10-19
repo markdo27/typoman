@@ -164,9 +164,11 @@ const results = await page.evaluate(async () => {
     const t = narrow.duration * 0.5;
     const wN = inkW(narrow, 960, 540, t), wW = inkW(wide, 960, 540, t);
     // The family the renderer draws Fraunces (opsz axis) with must keep the same width per px at
-    // any device size; the browser's auto opsz shifts it by ~5% between 81 and 162 px.
+    // any device size; the browser's auto opsz shifts it by ~5.5% between 81 and 162 px. Hinted
+    // text (Linux CI) rounds small-size advances by ~0.4%, so the limit sits between the two.
     const fam = TM.Renderer.familyFor(serif.layers[0], serif);
     const mctx = document.createElement('canvas').getContext('2d');
+    if ('textRendering' in mctx) mctx.textRendering = 'geometricPrecision';
     const perPx = [40, 81, 162, 324].map((px) => { mctx.font = TM.fonts.fontString(fam, 400, px); return mctx.measureText('Hamburg').width / px; });
     const opszRatio = fam !== 'Fraunces' && document.fonts.check(TM.fonts.fontString(fam, 400, 64)) ? Math.max(...perPx) / Math.min(...perPx) : 0;
     const availW = 960 - 2 * stack.layers[0].params.margin * 540;
@@ -220,7 +222,7 @@ console.log(`layer timing: delay ${tmg.delayShifts ? 'ok' : 'FAIL'} · once/hold
 if (!tmg.delayShifts || !tmg.onceHolds || !tmg.onceWaits) fails.push('layer timing semantics broken');
 if (!tmg.lookApplies) fails.push('applyLook failed');
 const ax = results.axes;
-const opszOk = ax.opszRatio > 0 && ax.opszRatio - 1 < 0.002;
+const opszOk = ax.opszRatio > 0 && ax.opszRatio - 1 < 0.015;
 console.log(`variable axes: width ${ax.widthOk ? 'ok' : 'FAIL'} · optical size pinned ${opszOk ? 'ok' : 'FAIL'} (width/px spread ${((ax.opszRatio - 1) * 100).toFixed(3)}% over 40–324 px) · stack inside margins ${ax.stackInside ? 'ok' : 'FAIL'} (${ax.widest} / ${Math.round(ax.availW)} px)`);
 if (!ax.widthOk) fails.push('width axis does not change the letterforms');
 if (!opszOk) fails.push('optical size depends on render resolution');
