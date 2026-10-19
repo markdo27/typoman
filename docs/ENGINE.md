@@ -95,7 +95,7 @@ Any param may take `group: 'Name'` (inspector sub-heading), `hint` and
 | `f.W`, `f.H`, `f.unit` | buffer size in px; unit = min(W, H) |
 | `f.cx`, `f.cy` | layer anchor in px (text block centre) |
 | `f.layout`, `f.glyphs`, `f.lines`, `f.size` | text layout (see below), font size px |
-| `f.params`, `f.layer`, `f.seed`, `f.cache` | params, layer JSON, seed, `setup()` result |
+| `f.params`, `f.layer`, `f.seed`, `f.cache`, `f.bg` | params, layer JSON, seed, `setup()` result, scene background `{ type, color, color2, angle }` |
 | `f.path` | `TM.Path.SampledPath` in px (morph applied) or null |
 | `f.echo`, `f.alpha` | echo index (0 = main pass) and alpha multiplier |
 

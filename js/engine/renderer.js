@@ -435,6 +435,7 @@
         colorOverride,
         paletteShift: 0,
         extrude: this._extrudeFor(layer, L.sizePx, W, H),
+        bg: scene.bg,
         cache: null,
       });
       f.cache = this._setupFor(layer, preset, f);
