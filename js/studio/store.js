@@ -145,6 +145,7 @@
         scene.layers.forEach((l) => {
           if (l.path) l.path = refit(l.path);
           if (l.pathMorph && l.pathMorph.target) l.pathMorph.target = refit(l.pathMorph.target);
+          if (l.pathMorph && Array.isArray(l.pathMorph.keys)) l.pathMorph.keys = l.pathMorph.keys.map((k) => (k ? refit(k) : k));
         });
       }, { reason: 'size' });
     }
