@@ -169,7 +169,12 @@ deflate-raw base64url). It goes in `#c=…` on `index.html` (to remix) and on `e
   `setSize(w, h)`, `select(i)`, `replace(scene)`, `undo()`, `redo()`, and
   `on('change'|'select'|'ui'|'history'|'view', fn)`.
 - `store.ui.editPath` (bool) says whether the on-canvas path editor is active.
-  `store.ui.pathTarget` is `'a' | 'b'` (main path or morph target).
+  `store.ui.pathTool` is `'edit' | 'pen' | 'draw'`. `store.ui.pathTarget` is the index of the
+  edited shape: 0 is the main path A and i is `pathMorph.keys[i - 1]` (`'a'` and `'b'` still
+  work). `store.ui.pathSel` lists the selected node indices.
+  `TM.Studio.pathKeys` gives `list(layer)`, `index(store)`, `def(layer, i)`,
+  `write(layer, i, def)` (keeps `target` = keys[0]) and `focus(store, i)`, which also parks
+  the playhead where the loop reaches shape i.
 - `TM.Studio.registerPanel({ id, title, order, when?(store), build(store, body) → { update() } })`
   adds an inspector panel. An id matching a built-in panel replaces it. Built-in ids and
   orders: `text` 10, `motion` 20, `path` 30, `color` 40, `fx` 50, `canvas` 60.
