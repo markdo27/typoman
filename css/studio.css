@@ -47,6 +47,7 @@
 /* ───────────────────────────── base ───────────────────────────── */
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
+html { overflow: hidden; overflow: clip; } /* the app never scrolls as a page; panels scroll inside */
 body {
   background: var(--bg);
   color: var(--text);
@@ -237,6 +238,29 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .card-path svg { width: 14px; height: 14px; }
 .gallery-empty { text-align: center; color: var(--text-2); padding: 28px 8px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .gallery-empty p { margin: 0; }
+.gallery-empty .hint { max-width: 30ch; margin: -4px 0 4px; }
+.empty-ic { width: 28px; height: 28px; color: var(--accent-fg); }
+.row-center { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+/* view tabs: Presets | Inspiration */
+.gal-tabs { display: flex; gap: 2px; padding: 2px; border-radius: 9px; background: var(--panel-2); border: 1px solid var(--line-2); }
+.gal-tabs button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; border: 0; border-radius: 7px; background: transparent; color: var(--text-2); font-size: 12px; font-weight: 650; }
+.gal-tabs button:hover { color: var(--text); }
+.gal-tabs button.on { background: var(--panel-4); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 1px 3px rgba(0, 0, 0, 0.45); }
+.gal-tabs button:focus-visible { outline-offset: -1px; }
+/* curated looks of the active preset */
+.looks-strip { margin: 0 0 14px; padding: 10px; border-radius: var(--radius); background: linear-gradient(180deg, rgba(71, 87, 255, 0.12), rgba(71, 87, 255, 0.03)); border: 1px solid rgba(140, 152, 255, 0.25); }
+.looks-head { display: flex; align-items: center; gap: 7px; margin: 0 0 8px; font-size: 12px; color: var(--text-2); }
+.looks-head svg { width: 15px; height: 15px; color: var(--accent-fg); }
+.looks-head strong { color: var(--text); font-weight: 650; }
+.looks-head .count { margin-left: auto; }
+.looks-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.look-card { position: relative; display: flex; flex-direction: column; cursor: pointer; text-align: left; outline-offset: 2px; }
+.look-card.mini { border-radius: 8px; padding: 3px 3px 6px; background: var(--panel-2); border: 1px solid var(--line); transition: border-color 0.16s, transform 0.2s var(--ease-out), background 0.16s; }
+.look-card.mini:hover { border-color: var(--line-3); background: var(--panel-3); transform: translateY(-1px); }
+.look-card.mini .card-thumb { border-radius: 5px; }
+.look-card.mini canvas { width: 100%; aspect-ratio: 16 / 9; display: block; }
+.look-card.mini .card-name { padding: 5px 3px 0; font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cards.inspiration .card-cat { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ───────────────────────────── stage ───────────────────────────── */
 .center { grid-area: center; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--pasteboard); position: relative; }

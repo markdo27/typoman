@@ -67,18 +67,66 @@
     const l = UI.storage.get(REMIX_KEY, null) || {};
     return { look: !!l.look, font: !!l.font, colors: !!l.colors };
   }
+  const NICE_EASES = ['glide', 'smooth', 'snap', 'overshoot', 'anticipate', 'spring', 'springSoft', 'outBack', 'outExpo', 'outQuart', 'inOutCubic'];
+  /** A motion param near its default: often the default, otherwise a draw biased toward it. */
+  function remixParam(p) {
+    const r = Math.random;
+    switch (p.type) {
+      case 'range': {
+        if (r() < 0.4) return p.default;
+        const span = p.max - p.min;
+        let v = TM.math.clamp(p.default + (r() < 0.5 ? -1 : 1) * Math.pow(r(), 1.8) * 0.55 * span, p.min, p.max);
+        if (p.step) v = Math.round((v - p.min) / p.step) * p.step + p.min; // whole cycles stay whole
+        return +v.toFixed(4);
+      }
+      case 'select': return r() < 0.6 ? p.default : p.options[Math.floor(r() * p.options.length)][0];
+      case 'toggle': return r() < 0.75 ? p.default : !p.default;
+      case 'ease': return r() < 0.55 ? p.default : NICE_EASES[Math.floor(r() * NICE_EASES.length)];
+      default: return p.default; // colour params follow the palette
+    }
+  }
+
+  /**
+   * Remix: one undoable step. Picks a preset (unless locked), then either starts from one of its
+   * curated looks (sometimes) or rolls palette, font, effects, motion params biased to their
+   * defaults and — for path presets with an untouched shape — a new path. Locks are respected.
+   */
   function remix(store) {
     const locks = remixLocks();
     const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
     const others = TM.presetOrder.filter((id) => id !== store.layer.preset);
     const presetId = locks.look || !others.length ? store.layer.preset : pick(others);
-    const changesPreset = presetId !== store.layer.preset;
-    if (changesPreset) store.setPreset(presetId);
+    const def = TM.presets[presetId];
+    const curated = Studio.looks ? Studio.looks.of(presetId) : [];
+    const look = curated.length && Math.random() < 0.35 ? pick(curated) : null;
     const [, , bg, ...cols] = pick(TM.PALETTES);
     const family = locks.font ? store.layer.font.family : pick(REMIX_FONTS.filter((f) => TM.fonts.has(f)));
     TM.fonts.ensure(family, 700);
-    store.update((s, l) => {
+    const aspect = store.scene.size.w / store.scene.size.h;
+    const sel = store.selected;
+    store.update((s) => {
+      let l = s.layers[sel];
       s.seed = Math.floor(Math.random() * 9999);
+      if (l.preset !== presetId) {
+        l.preset = presetId;
+        l.params = TM.presetDefaults(presetId);
+        if (def.usesPath && (!l.path || l.path.preset)) l.path = TM.Path.preset(def.path || 'wave', aspect);
+      }
+      if (look) {
+        const keep = { font: { ...l.font }, fill: JSON.parse(JSON.stringify(l.fill)), stroke: { ...l.stroke }, bg: { ...s.bg } };
+        const next = TM.Scene.applyLook(s, sel, Object.assign({}, look, { preset: presetId }));
+        Object.keys(s).forEach((k) => { delete s[k]; });
+        Object.assign(s, next);
+        l = s.layers[sel];
+        if (locks.font) l.font = keep.font;
+        if (locks.colors) { l.fill = keep.fill; l.stroke = keep.stroke; s.bg = keep.bg; }
+        return; // a curated look keeps its designer-tuned motion
+      }
+      def.params.forEach((p) => { if (p.type !== 'color') l.params[p.key] = remixParam(p); });
+      if (def.usesPath && (!l.path || l.path.preset) && Math.random() < 0.7) {
+        const shapes = TM.Path.PRESETS.map((x) => x.id).filter((id) => !l.path || id !== l.path.preset);
+        l.path = TM.Path.preset(pick(shapes), aspect);
+      }
       if (!locks.colors) {
         s.bg.type = 'solid';
         s.bg.color = bg;
@@ -100,9 +148,11 @@
       l.fx.extrude.depth = Math.random() < 0.15 ? 0.3 + Math.random() * 0.4 : 0;
       l.fx.blur = Math.random() < 0.2 ? 0.4 : 0;
       s.post.grain = Math.random() < 0.3 ? 0.3 : 0;
-    }, { reason: 'remix', label: 'Remix' });
-    const kept = Object.entries(locks).filter(([, v]) => v).map(([k]) => ({ look: 'look', font: 'font', colors: 'colours' })[k]);
-    toast('Remixed: ' + TM.presets[presetId].name + ' · ' + store.layer.font.family + (kept.length ? ' (kept ' + kept.join(', ') + ')' : ''), 'info', 3200, { label: 'Undo', run: () => { store.undo(); if (changesPreset) store.undo(); } });
+    }, { reason: 'remix', label: look ? 'Remix: ' + look.name : 'Remix' });
+    if (look) TM.prepare(store.scene);
+    const kept = Object.entries(locks).filter(([, v]) => v).map(([k]) => ({ look: 'preset', font: 'font', colors: 'colours' })[k]);
+    const what = look ? '“' + look.name + '” (' + def.name + ')' : def.name + ' · ' + Studio.fontLabel(store.layer.font.family);
+    toast('Remixed: ' + what + (kept.length ? ' · kept ' + kept.join(', ') : ''), 'info', 3200, { label: 'Undo', run: () => store.undo() });
     const btn = $('#remixBtn');
     if (btn && !UI.reducedMotion()) { btn.classList.remove('spin'); void btn.offsetWidth; btn.classList.add('spin'); }
   }
@@ -213,6 +263,10 @@
       this.showTab('edit');
       const ta = this.inspector.reveal('text', 'textarea');
       if (ta && selectAll) ta.select();
+    }
+
+    remix() {
+      remix(this.store);
     }
 
     focusPresets() {

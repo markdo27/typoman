@@ -521,7 +521,10 @@
       if (!b) return null;
       if (b.section.el.classList.contains('collapsed')) b.section.head.click();
       const target = selector ? b.section.el.querySelector(selector) : b.section.head;
-      b.section.el.scrollIntoView({ block: 'nearest', behavior: UI.reducedMotion() ? 'auto' : 'smooth' });
+      // Scroll only the inspector (scrollIntoView would also nudge the page on phones).
+      const box = this.root.getBoundingClientRect(), r = (target || b.section.el).getBoundingClientRect();
+      const delta = selector ? r.top + r.height / 2 - (box.top + box.height / 2) : Math.min(0, r.top - box.top - 60) || Math.max(0, r.bottom - box.bottom + 16);
+      if (Math.abs(delta) > 1) this.root.scrollTo({ top: this.root.scrollTop + delta, behavior: UI.reducedMotion() ? 'auto' : 'smooth' });
       if (target) target.focus({ preventScroll: true });
       return target;
     }
