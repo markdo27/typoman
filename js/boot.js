@@ -42,6 +42,7 @@
 
   // ── Presets: reveal, glitch & dimensional family (owner: preset team B) ──
   var PRESETS_B = [
+    'js/presets/motion-kit.js',
     'js/presets/scramble.js',
     'js/presets/typewriter.js',
     'js/presets/split-flap.js',
@@ -50,6 +51,7 @@
     'js/presets/glitch.js',
     'js/presets/cylinder.js',
     'js/presets/flip.js',
+    'js/presets/sequence.js',
   ];
 
   // ── Export & embed runtime (owner: export team) ──
