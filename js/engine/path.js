@@ -1325,6 +1325,40 @@
     return new SampledPath(xs, ys, closed);
   }
 
+  // ───────────────────────────── path keyframes ─────────────────────────────
+  /** The morph targets of a layer.pathMorph in order: keys[], or [target] in older scenes. */
+  function morphKeys(pm) {
+    if (!pm) return [];
+    if (Array.isArray(pm.keys) && pm.keys.length) return pm.keys;
+    return pm.target ? [pm.target] : [];
+  }
+
+  /**
+   * Path keyframes: the shape at loop progress p. shapes = [A, B, …] as SampledPaths and
+   * opts = layer.pathMorph { mode, ease, eases }: `ease` eases A → B and eases[i] eases the
+   * step out of keys[i]. 'pingpong' plays A → … → last over the first half of the loop and the
+   * exact reverse over the second (one key gives the classic A → B → A); 'cycle' plays
+   * A → … → last → A. Each step takes an equal share of the loop. Pure in p.
+   */
+  function sequence(shapes, opts, p) {
+    const n = shapes.length;
+    if (n < 2) return shapes[0] || null;
+    const o = opts || {}, eases = o.eases || [];
+    const cycle = o.mode === 'cycle';
+    const steps = cycle ? n : n - 1;
+    const x = (cycle ? TM.math.fract(p) : TM.math.pingpong(p)) * steps;
+    const i = Math.min(steps - 1, Math.floor(x));
+    if (x - i <= 0) return shapes[i]; // exactly on a key (some eases miss 0 by an ulp)
+    const t = TM.ease(i === 0 ? o.ease : eases[i - 1], 'smooth')(x - i);
+    return morph(shapes[i], shapes[(i + 1) % n], t);
+  }
+
+  /** Loop progress (0..1) at which shape i of n (0 = A) is reached exactly. */
+  function keyTime(i, n, mode) {
+    if (n < 2 || i <= 0) return 0;
+    return mode === 'cycle' ? i / n : i / (n - 1) / 2;
+  }
+
   TM.Path = {
     SampledPath,
     sample,
@@ -1333,6 +1367,9 @@
     fromPolyline,
     preset,
     morph,
+    morphKeys,
+    sequence,
+    keyTime,
     clone,
     PRESETS: PRESETS.map(([id, label]) => ({ id, label })),
     // queries

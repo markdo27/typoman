@@ -11,7 +11,7 @@
 (function (root) {
   'use strict';
   const TM = root.TM;
-  const { clamp, mod, pingpong, TAU } = TM.math;
+  const { clamp, mod, TAU } = TM.math;
   const DEG = Math.PI / 180;
 
   function makeCanvas(w, h) {
@@ -320,12 +320,12 @@
     _pathFor(layer, W, H, p) {
       if (!layer.path) return null;
       const a = TM.Path.sample(layer.path, W, H);
+      // Path keyframes: A → keys… over the loop, 'pingpong' (default; one key = the classic
+      // A → B → A) or 'cycle', with per-key eases. See TM.Path.sequence.
       const pm = layer.pathMorph;
-      if (pm && pm.enabled && pm.target) {
-        const b = TM.Path.sample(pm.target, W, H);
-        return TM.Path.morph(a, b, TM.ease(pm.ease)(pingpong(p)));
-      }
-      return a;
+      const keys = pm && pm.enabled ? TM.Path.morphKeys(pm) : [];
+      if (!keys.length) return a;
+      return TM.Path.sequence([a].concat(keys.map((k) => TM.Path.sample(k, W, H))), pm, p);
     }
 
     _scratch(id, W, H) {

@@ -46,7 +46,8 @@ vendor/*          pinned third-party code (MIT), served locally
     fill:{ type:'solid'|'gradient'|'palette', color, color2, angle, palette:[hex…] },
     stroke:{ mode:'none'|'outline'|'both', width /*em*/, color },
     path:{ closed, preset?, nodes:[{x,y,ix,iy,ox,oy,k}] } | null,   // normalised 0..1, handles relative
-    pathMorph:{ enabled, target: path|null, ease },                  // path A→B→A over the loop
+    pathMorph:{ enabled, keys:[path…] /*≤ 4*/, eases:[ease…], ease, mode:'pingpong'|'cycle',
+                target /*= keys[0]*/ },                             // path keyframes over the loop
     fx:{ echo:{count,spacing,fade,palette}, blur 0..1, glow:{amount,color},
          shadow:{amount,angle,distance,color}, extrude:{depth,angle,color} },
     anchor:{ x, y },
@@ -126,6 +127,15 @@ shaped run, so Arabic keeps its joined forms. They are placed right to left and 
 ends of open paths). Also `path.atU(u)`, `path.resample(n)`, `path.trace(ctx, s0, s1)` and
 `TM.Path.preset(id, aspect)`, `fromPoints`, `fromPolyline`, `morph`, `toSVG`, `sample`.
 
+**Path keyframes.** `layer.pathMorph.keys` holds up to 4 morph targets (B, C, …) that the
+main path A visits each loop. `ease` eases A → B, and `eases[i]` eases the step out of
+`keys[i]`. In `'pingpong'` (the default) the path plays A → … → last and back; with one key
+that is the classic A → B → A. In `'cycle'` it plays A → … → last → A, and every step takes
+an equal share of the loop. `target` mirrors `keys[0]`, so old scenes and links keep working.
+Code that edits `keys` must also set `target = keys[0]`. The renderer calls
+`TM.Path.sequence([A, …keys], pathMorph, p)`, and `TM.Path.keyTime(i, n, mode)` gives the
+loop progress at which shape i is reached.
+
 **Collision-free text on paths.**
 - `path.offset(d)` gives the parallel curve d px to the normal side (negative = left of
   travel). Use it for lanes and for glyphs sitting above or below the line.
@@ -159,7 +169,12 @@ deflate-raw base64url). It goes in `#c=…` on `index.html` (to remix) and on `e
   `setSize(w, h)`, `select(i)`, `replace(scene)`, `undo()`, `redo()`, and
   `on('change'|'select'|'ui'|'history'|'view', fn)`.
 - `store.ui.editPath` (bool) says whether the on-canvas path editor is active.
-  `store.ui.pathTarget` is `'a' | 'b'` (main path or morph target).
+  `store.ui.pathTool` is `'edit' | 'pen' | 'draw'`. `store.ui.pathTarget` is the index of the
+  edited shape: 0 is the main path A and i is `pathMorph.keys[i - 1]` (`'a'` and `'b'` still
+  work). `store.ui.pathSel` lists the selected node indices.
+  `TM.Studio.pathKeys` gives `list(layer)`, `index(store)`, `def(layer, i)`,
+  `write(layer, i, def)` (keeps `target` = keys[0]) and `focus(store, i)`, which also parks
+  the playhead where the loop reaches shape i.
 - `TM.Studio.registerPanel({ id, title, order, when?(store), build(store, body) → { update() } })`
   adds an inspector panel. An id matching a built-in panel replaces it. Built-in ids and
   orders: `text` 10, `motion` 20, `path` 30, `color` 40, `fx` 50, `canvas` 60.

@@ -13,6 +13,7 @@
   const MAX_LAYERS = 6;
   const MAX_TEXT = 400;
   const MAX_NODES = 96;
+  const MAX_KEYS = 4; // path keyframes after the main path: A → B → C → D → E
 
   const ASPECTS = [
     ['16:9', 'Landscape 16:9', 1920, 1080],
@@ -36,7 +37,7 @@
       fill: { type: 'solid', color: '#ffffff', color2: '#00e5ff', angle: 90, palette: ['#ffffff', '#a3a2ff', '#00e5ff'] },
       stroke: { mode: 'none', width: 0.035, color: '#000000' },
       path: null,
-      pathMorph: { enabled: false, target: null, ease: 'smooth' },
+      pathMorph: { enabled: false, target: null, ease: 'smooth', keys: [], eases: [], mode: 'pingpong' },
       fx: {
         echo: { count: 0, spacing: 0.035, fade: 0.55, palette: false },
         blur: 0,
@@ -112,6 +113,30 @@
     return out;
   }
 
+  /**
+   * Path keyframes. keys[] holds up to MAX_KEYS morph targets (B, C, …) visited after the main
+   * path A each loop; `ease` eases A → B and eases[i] eases the step out of keys[i].
+   * mode 'pingpong' plays A → … → last and back (with one key, the classic A → B → A);
+   * 'cycle' returns from the last key straight to A. `target` always mirrors keys[0], so old
+   * scenes and links (target only) keep working, and code that sets just `target` still
+   * edits keys[0]. Code that edits keys[] must set target = keys[0] too.
+   */
+  function cleanMorph(pm, aspect) {
+    pm = isObj(pm) ? pm : {};
+    const keys = (Array.isArray(pm.keys) ? pm.keys.slice(0, MAX_KEYS) : []).map((k) => cleanPath(k, aspect)).filter(Boolean);
+    const target = cleanPath(pm.target, aspect);
+    if (target) keys[0] = target;
+    const eases = Array.isArray(pm.eases) ? pm.eases : [];
+    return {
+      enabled: bool(pm.enabled, false),
+      target: keys[0] || null,
+      ease: ease(pm.ease, 'smooth'),
+      keys,
+      eases: keys.map((_, i) => ease(eases[i], 'smooth')),
+      mode: pick(pm.mode, ['pingpong', 'cycle'], 'pingpong'),
+    };
+  }
+
   /** Sanitise preset params against the preset's declared schema. */
   function cleanParams(presetId, params) {
     const def = TM.getPreset(presetId);
@@ -183,11 +208,7 @@
         color: color(st.color, d.stroke.color),
       },
       path,
-      pathMorph: {
-        enabled: bool(pm.enabled, false),
-        target: cleanPath(pm.target, aspect),
-        ease: ease(pm.ease, 'smooth'),
-      },
+      pathMorph: cleanMorph(pm, aspect),
       fx: {
         echo: {
           count: int(fx.echo && fx.echo.count, 0, 0, 12),
@@ -283,7 +304,8 @@
       base.params = TM.presetDefaults(l.preset);
       // Untouched preset paths travel as just their id; they're regenerated on decode.
       const slim = { ...l, path: l.path && l.path.preset ? { preset: l.path.preset } : l.path };
-      if (l.pathMorph && l.pathMorph.target && l.pathMorph.target.preset) slim.pathMorph = { ...l.pathMorph, target: { preset: l.pathMorph.target.preset } };
+      // Path keyframes travel in keys[] (target is rebuilt from keys[0]); preset keys as their id.
+      if (l.pathMorph && l.pathMorph.keys.length) slim.pathMorph = { ...l.pathMorph, target: undefined, keys: l.pathMorph.keys.map((k) => (k.preset ? { preset: k.preset } : k)) };
       const m = diff(slim, base) || {};
       m.preset = l.preset; // always explicit
       return m;
@@ -401,5 +423,6 @@
     FPS_OPTIONS,
     MAX_LAYERS,
     MAX_TEXT,
+    MAX_KEYS,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
