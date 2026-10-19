@@ -13,15 +13,15 @@ No install, no account, no build step. It's static files on GitHub Pages.
 - **Animate type with 17 motion presets**, grouped as path, kinetic, reveal, glitch and
   dimensional. Every preset staggers by letter, word or line, with easing curves you can
   edit (signature curves, springs, or your own cubic-bézier).
-- **Shape the motion path.** Pick a shape (wave, arc, circle, spiral, infinity, heart, …),
-  then drag anchors and handles on the canvas, double-click to add points, or draw
-  freehand. Paths can also **morph** from one shape to another over the loop.
+- **Shape the motion path.** Pick one of 22 shapes (wave, arc, circle, spiral, infinity,
+  heart, …), then drag anchors and handles on the canvas, double-click to add points, or
+  draw freehand. Paths can also **morph** from one shape to another over the loop.
 - **Use real typography.** There are 50 curated Google Fonts (including variable fonts
   whose weight animates smoothly), and you can upload your own. Kerning is preserved,
   emoji are safe, and you get multi-line, tracking, leading, case, slant, outline, and
   gradient or palette fills.
 - **Layer effects:** echo trails, motion blur, glow, drop shadow, 3D extrude, film grain
-  and vignette.
+  and vignette. Stack up to six text layers, each with its own motion.
 - **Export:** frame-accurate MP4 (H.264, with AV1/VP9 fallbacks), WebM (with
   transparency where supported), GIF, a PNG frame, or a PNG sequence. Exports are rendered
   offline frame by frame, so they match the preview exactly at any resolution, up to 4K.
@@ -50,6 +50,8 @@ The studio's **Embed** button generates both snippets with your scene filled in.
 | `←` `→` | Step one frame (`Shift` = 10) |
 | `P` | Edit the path on the canvas |
 | `G` | Safe-area guides |
+| `F` | Clean preview (hide the UI) |
+| `N` | New layer |
 | `R` | Remix (random preset, font and palette) |
 | `⌘/Ctrl Z`, `⇧⌘Z` | Undo / redo |
 | `⌘/Ctrl E` | Export |
