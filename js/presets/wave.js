@@ -191,5 +191,11 @@
       out.sort((a, b) => a.z - b.z);
       for (const it of out) f.drawGlyph(it.g, it.o);
     },
+
+    looks: [
+      { name: 'Variable surge', bg: { type: 'solid', color: '#f4f1ea' }, layer: { font: { family: 'Roboto Flex', weight: 400 }, fill: { type: 'solid', color: '#141414' }, params: { weightRange: 1, amp: 0.3, scale: 0.1 } } },
+      { name: 'Neon bounce', bg: { type: 'solid', color: '#07000f' }, layer: { font: { family: 'Unbounded', weight: 800 }, fill: { type: 'palette', palette: ['#ff00e5', '#00f0ff', '#faff00', '#ffffff'] }, fx: { glow: { amount: 0.4, color: '#ff00e5' } }, params: { mode: 'bounce', colorWave: true } } },
+      { name: 'Sunset cascade', bg: { type: 'solid', color: '#1b0a2e' }, layer: { font: { family: 'Bricolage Grotesque', weight: 800 }, fill: { type: 'palette', palette: ['#ff5e5b', '#ffb547', '#ffe3a3', '#ff2e88'] }, params: { mode: 'cascade', amp: 0.5 } } },
+    ],
   });
 })(window.TM);
