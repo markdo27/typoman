@@ -60,9 +60,7 @@
 
     setup(f) {
       const P = f.params, L = f.layout;
-      let inDur = P.inDur, outDur = P.timing === 'in' ? 0 : P.outDur;
-      const sum = inDur + outDur;
-      if (sum > 1) { inDur /= sum; outDur /= sum; }
+      const { inDur, outDur } = TM.MotionKit.windows(P);
 
       // Keystrokes in reading order, with an Enter between lines. w = interval before the key.
       const keys = [];

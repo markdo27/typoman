@@ -7,6 +7,7 @@
  *   MotionKit.slope(fn, x)             numerical slope of an easing
  *   MotionKit.affine(f, A, B, C, D)    drawGlyph options for the glyph matrix [[A, C], [B, D]], keeping slant
  *   MotionKit.units(L, by)             the text split into 'lines' or 'words' with their layout bounds
+ *   MotionKit.canvas(w, h)             a small scratch canvas
  */
 (function (TM) {
   'use strict';
@@ -81,5 +82,13 @@
     return [...map.values()].map((u) => Object.assign(u, { cx: (u.x0 + u.x1) / 2, cy: u.cy / u.glyphs.length, w: u.x1 - u.x0 }));
   }
 
-  TM.MotionKit = { windows, seqAt, rankOf, slope, affine, units };
+  /** A small scratch canvas (presets keep these in their cache, sized to what they need). */
+  function canvas(w, h) {
+    const c = typeof document !== 'undefined' ? document.createElement('canvas') : new OffscreenCanvas(1, 1);
+    c.width = Math.max(1, Math.ceil(w));
+    c.height = Math.max(1, Math.ceil(h));
+    return c;
+  }
+
+  TM.MotionKit = { windows, seqAt, rankOf, slope, affine, units, canvas };
 })(window.TM);

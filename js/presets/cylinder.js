@@ -16,19 +16,7 @@
   const MAX_ARC = 1.9; // radians a line may span (≈109°, readable at the front) before the drum grows
   const SEPARATORS = { dot: '•', space: '', dash: '—', slash: '/', star: '✦' };
 
-  /**
-   * Express the linear map with columns (A, B) (glyph x-axis) and (C, D) (glyph y-axis) as
-   * drawGlyph's rot / sx / sy / skew, folding in the layer's slant so italics survive.
-   */
-  function affine(f, A, B, C, D) {
-    const ts = Math.tan(f.slant);
-    const C2 = C - A * ts, D2 = D - B * ts;
-    const rot = Math.atan2(B, A);
-    const cs = Math.cos(rot), sn = Math.sin(rot);
-    const k12 = cs * C2 + sn * D2, k22 = -sn * C2 + cs * D2;
-    if (Math.abs(k22) < 1e-5) return null;
-    return { rot, sx: Math.hypot(A, B), sy: k22, skew: -Math.atan(k12 / k22) - f.slant };
-  }
+  const affine = TM.MotionKit.affine; // glyph matrix → drawGlyph options, keeping the layer's slant
 
   TM.registerPreset({
     id: 'cylinder',
@@ -95,21 +83,25 @@
       // Tilt drops the front of the ring below the anchor; lift the drum most of the way back so
       // the text sits near the anchor while it faces the camera.
       const lift = 0.6 * Rmax * st * (D / (D - Rmax * ct));
+      // Fit: the drum's silhouette (plus half a glyph) stays inside the frame, even for wide fonts.
+      const fit = Math.min(1, (f.W * 0.47) / (Rmax + L.sizePx * 0.5));
       const items = [];
       const push = (g, ch, s, R, theta, Y) => {
         const phi = s / R + theta;
         const sp = Math.sin(phi), cp = Math.cos(phi);
         const X = R * sp, Z = R * cp;
         const Yt = Y * ct + Z * st, Zt = -Y * st + Z * ct;
-        const k = D / Math.max(D * 0.2, D - Zt);
-        const back = cp < 0;
-        if (back && P.back === 'hide') return;
+        const k = (D / Math.max(D * 0.2, D - Zt)) * fit;
+        // Back faces fade (or vanish) through the edge-on turn instead of stepping there.
+        let backK = 1;
+        if (P.back === 'hide') backK = TM.math.smoothstep(-0.05, 0.25, cp);
+        else if (P.back === 'dim') backK = 0.32 + 0.68 * TM.math.smoothstep(-0.22, 0.22, cp);
+        if (backK <= 0.002) return;
         const m = affine(f, cp * k, -sp * st * k, 0, ct * k);
         if (!m || Math.abs(m.sx) < 0.03 * k) return; // edge-on slivers are invisible; skip the draw
         const zn = Zt / R;
-        let alpha = 1 - P.shade * 0.9 * (1 - zn) * 0.5;
-        if (back && P.back === 'dim') alpha *= 0.32;
-        items.push({ g, ch, z: Zt, x: f.cx + X * k, y: f.cy + Yt * k - lift, m, alpha });
+        const alpha = (1 - P.shade * 0.9 * (1 - zn) * 0.5) * backK;
+        items.push({ g, ch, z: Zt, x: f.cx + X * k, y: f.cy + (Yt * k / fit - lift) * fit, m, alpha });
       };
 
       L.lines.forEach((line, li) => {

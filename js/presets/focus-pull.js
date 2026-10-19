@@ -13,12 +13,7 @@
   const { clamp, fract, TAU } = TM.math;
   const DEEP = [4, 8, 16, 32]; // pyramid levels below ½ resolution
 
-  function makeCanvas(w, h) {
-    const c = typeof document !== 'undefined' ? document.createElement('canvas') : new OffscreenCanvas(w, h);
-    c.width = Math.max(1, w);
-    c.height = Math.max(1, h);
-    return c;
-  }
+  const makeCanvas = (w, h) => TM.MotionKit.canvas(w, h);
 
   TM.registerPreset({
     id: 'focus-pull',

@@ -15,12 +15,7 @@
   const K = TM.MotionKit;
   const { clamp } = TM.math;
 
-  function makeCanvas(w, h) {
-    const c = typeof document !== 'undefined' ? document.createElement('canvas') : new OffscreenCanvas(w, h);
-    c.width = Math.max(1, w);
-    c.height = Math.max(1, h);
-    return c;
-  }
+  const makeCanvas = (w, h) => TM.MotionKit.canvas(w, h);
 
   TM.registerPreset({
     id: 'shutter',

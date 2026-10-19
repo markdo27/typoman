@@ -103,10 +103,8 @@
       const P = f.params, L = f.layout, C = f.cache;
       if (!C) return;
       const together = P.spawn === 'together';
-      // Same in/out normalisation as f.seq(), for the global fades of the "all at once" mode.
-      let inDur = P.inDur, outDur = P.timing === 'in' ? 0 : P.outDur;
-      const total = inDur + outDur;
-      if (total > 1) { inDur /= total; outDur /= total; }
+      // Same in/out lengths as f.seq(), for the global fades of the "all at once" mode.
+      const { inDur, outDur } = TM.MotionKit.windows(P);
       const fadeIn = Math.min(0.1 / f.dur, inDur * 0.3);
       const fadeOut = Math.min(0.14 / f.dur, outDur * 0.3);
       const globalAlpha = together

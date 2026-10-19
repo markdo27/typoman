@@ -72,9 +72,7 @@
       const eIn = TM.ease(P.easeIn, 'springSnappy');
       const eOut = TM.ease(P.easeOut, 'outQuart');
       const glide = f.E.glide;
-      let inDur = P.inDur, outDur = P.timing === 'in' ? 0 : P.outDur;
-      const sum = inDur + outDur;
-      if (sum > 1) { inDur /= sum; outDur /= sum; }
+      const { outDur } = TM.MotionKit.windows(P);
       const pOut = outDur > 0 ? clamp((f.p - (1 - outDur)) / outDur) : 0;
       const R = P.scatter * f.unit;
       const ant = P.anticipation;

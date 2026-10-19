@@ -16,12 +16,7 @@
   const { smoothstep, fract } = TM.math;
   const NOISE = '#%&@$¥§01/\\|=+<>?!';
 
-  function makeCanvas(w, h) {
-    const c = typeof document !== 'undefined' ? document.createElement('canvas') : new OffscreenCanvas(w, h);
-    c.width = w;
-    c.height = h;
-    return c;
-  }
+  const makeCanvas = (w, h) => TM.MotionKit.canvas(w, h);
 
   // Red-only and green+blue-only versions of a colour: drawn offset with 'lighter', they add
   // back up to the original colour wherever they overlap.
@@ -97,9 +92,7 @@
       const srnd = (salt) => f.srand(salt, step);
 
       const loop = P.timing === 'loop';
-      let inDur = loop ? 0 : P.inDur, outDur = P.timing === 'inout' ? P.outDur : 0;
-      const sum = inDur + outDur;
-      if (sum > 1) { inDur /= sum; outDur /= sum; }
+      const { inDur, outDur } = TM.MotionKit.windows(P);
 
       // ── glitch intensity at this moment ──
       let I = 0;
@@ -171,10 +164,6 @@
       bctx.setTransform(1, 0, 0, 1, 0, 0);
       bctx.globalCompositeOperation = 'source-over';
       bctx.clearRect(0, 0, bw, bh);
-      bctx.lineJoin = 'round';
-      bctx.miterLimit = 2;
-      bctx.textAlign = 'left';
-      bctx.textBaseline = 'alphabetic';
 
       const main = f.ctx, mainAlpha = f.alpha;
       const tx = rnd(910) < I * 0.3 ? Math.round(srnd(911) * em * 0.12 * I) : 0; // whole-signal tracking error
@@ -188,23 +177,25 @@
           f.drawGlyph(it.g, o);
         }
       };
-      f.ctx = bctx; f._font = null; f.alpha = 1;
+      f.alpha = 1; // the plate is drawn opaque; echo alpha applies once, when it is copied out
       try {
-        if (!split) plate(0, 0, null);
-        else if (P.split === 'palette') {
-          const pal = f.layer.fill.palette;
-          const c1 = pal[1 % pal.length], c2 = pal[2 % pal.length];
-          plate(-split, -vs, () => c1);
-          plate(split, vs, () => c2);
-          plate(0, 0, null);
-        } else {
-          bctx.globalCompositeOperation = 'lighter';
-          plate(-split, -vs, (g) => channels(f.colorOf(g))[0]);
-          plate(split, vs, (g) => channels(f.colorOf(g))[1]);
-          bctx.globalCompositeOperation = 'source-over';
-        }
+        f.drawInto(bctx, () => {
+          if (!split) plate(0, 0, null);
+          else if (P.split === 'palette') {
+            const pal = f.layer.fill.palette;
+            const c1 = pal[1 % pal.length], c2 = pal[2 % pal.length];
+            plate(-split, -vs, () => c1);
+            plate(split, vs, () => c2);
+            plate(0, 0, null);
+          } else {
+            bctx.globalCompositeOperation = 'lighter';
+            plate(-split, -vs, (g) => channels(f.colorOf(g))[0]);
+            plate(split, vs, (g) => channels(f.colorOf(g))[1]);
+            bctx.globalCompositeOperation = 'source-over';
+          }
+        });
       } finally {
-        f.ctx = main; f._font = null; f.alpha = mainAlpha;
+        f.alpha = mainAlpha;
       }
 
       // ── composite: horizontal strips, some sheared sideways ──

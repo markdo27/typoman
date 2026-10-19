@@ -15,11 +15,7 @@
   const DEG = Math.PI / 180;
   const FALL = 0.34; // share of the in-window spent falling
 
-  /** Numerical derivative of an easing. */
-  function slope(fn, x) {
-    const h = 0.004, a = Math.max(0, x - h), b = Math.min(1, x + h);
-    return b > a ? (fn(b) - fn(a)) / (b - a) : 0;
-  }
+  const slope = TM.MotionKit.slope;
 
   TM.registerPreset({
     id: 'pop',
@@ -75,18 +71,23 @@
             rot = side * P.wobble * DEG * (1 - 0.5 * w);
             alpha = smoothstep(0, 0.16, w);
           } else {
-            // Landed: squash spring from each impact, a rebound hop in between.
+            // Landed: a squash spring from each impact, with a rebound hop in between. The second
+            // impact's spring ramps in over a couple of frames and adds to what is left of the
+            // first, so the shape never steps.
             const w = (u - FALL) / (1 - FALL);
             const settle = 1 - smoothstep(0.72, 1, w);
-            let since = w, amp = sq * 0.42;
-            if (P.bounce > 0 && w < hopShare) {
-              const q = w / hopShare;
-              y = -hopH * 4 * q * (1 - q);
-            } else if (P.bounce > 0) {
-              since = w - hopShare;
-              amp *= 0.42 * P.bounce;
+            const amp = sq * 0.42;
+            let squash = amp * Math.exp(-w * 7) * Math.cos(w * 26);
+            if (P.bounce > 0) {
+              if (w < hopShare) {
+                const q = w / hopShare;
+                y = -hopH * 4 * q * (1 - q);
+              } else {
+                const since = w - hopShare;
+                squash += amp * 0.42 * P.bounce * smoothstep(0, 0.06, since) * Math.exp(-since * 7) * Math.cos(since * 26);
+              }
             }
-            sy = 1 - amp * Math.exp(-since * 7) * Math.cos(since * 26) * settle;
+            sy = 1 - squash * settle;
             rot = side * P.wobble * DEG * 0.5 * Math.exp(-w * 6) * Math.cos(w * 17) * settle;
           }
         } else {
