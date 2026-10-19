@@ -53,6 +53,7 @@
     'js/presets/flip.js',
     'js/presets/sequence.js',
     'js/presets/strobe-cut.js',
+    'js/presets/outline-draw.js',
   ];
 
   // ── Export & embed runtime (owner: export team) ──
