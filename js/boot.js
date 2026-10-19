@@ -52,6 +52,7 @@
     'js/presets/cylinder.js',
     'js/presets/flip.js',
     'js/presets/sequence.js',
+    'js/presets/strobe-cut.js',
   ];
 
   // ── Export & embed runtime (owner: export team) ──
