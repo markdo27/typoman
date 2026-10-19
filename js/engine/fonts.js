@@ -28,7 +28,8 @@
     ['Bebas Neue', 'Condensed', 400, 400],
     ['Oswald', 'Condensed', 200, 700],
     ['League Gothic', 'Condensed', 400, 400, null, { wdth: [75, 100] }],
-    ['Big Shoulders Display', 'Condensed', 100, 900, null, { opsz: [10, 72] }],
+    // No opsz here: Google serves the optical-size version as the separate family "Big Shoulders".
+    ['Big Shoulders Display', 'Condensed', 100, 900],
     ['Science Gothic', 'Condensed', 100, 900, null, { wdth: [50, 200] }],
     ['Six Caps', 'Condensed', 400, 400],
     // Grotesk

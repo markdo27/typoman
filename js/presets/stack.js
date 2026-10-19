@@ -165,6 +165,7 @@
   function drawRow(f, family, row, x, y, sx, sy, skew, i, spacing, runW, capH) {
     const ctx = f.ctx;
     ctx.font = TM.fonts.fontString(family, f.layer.font.weight, REF);
+    if ('fontKerning' in ctx) ctx.fontKerning = 'normal'; // as measured
     f._font = null; // drew with its own font; make drawGlyph re-apply its own
     const ls = 'letterSpacing' in ctx;
     if (ls) ctx.letterSpacing = spacing.toFixed(2) + 'px';

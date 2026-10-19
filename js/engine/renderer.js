@@ -13,6 +13,8 @@
   const TM = root.TM;
   const { clamp, mod, TAU } = TM.math;
   const DEG = Math.PI / 180;
+  // Canvas text kerning control (all current engines; guarded for old ones).
+  const KERN = typeof CanvasRenderingContext2D !== 'undefined' && 'fontKerning' in CanvasRenderingContext2D.prototype;
 
   function makeCanvas(w, h) {
     const c = typeof document !== 'undefined' ? document.createElement('canvas') : new OffscreenCanvas(w, h);
@@ -126,6 +128,9 @@
       const ctx = this.ctx;
       if (this._font === f && ctx.font === this._fontSeen) return;
       ctx.font = f;
+      // Layout measures with kerning 'normal', which (unlike the default 'auto') also kerns
+      // across word spaces; drawing must match or every word after a space shifts.
+      if (KERN && ctx.fontKerning !== 'normal') ctx.fontKerning = 'normal';
       this._font = f;
       this._fontSeen = ctx.font;
     }
@@ -246,6 +251,7 @@
       this._font = null;
       ctx.lineJoin = 'round';
       ctx.miterLimit = 2;
+      if (KERN) ctx.fontKerning = 'normal';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
       try { fn(ctx); } finally {
@@ -348,6 +354,7 @@
       b.ctx.globalAlpha = 1;
       b.ctx.globalCompositeOperation = 'source-over';
       b.ctx.clearRect(0, 0, W, H);
+      if (KERN) b.ctx.fontKerning = 'normal';
       return b;
     }
 

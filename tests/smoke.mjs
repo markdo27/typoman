@@ -177,6 +177,38 @@ const results = await page.evaluate(async () => {
     return { widthOk: wN > 0 && wW > wN * 1.5, opszRatio, stackInside: widest > 0 && widest <= availW + 2, widest, availW };
   })();
 
+  // Kerning: glyphs drawn one by one at their layout positions must match the line drawn as one
+  // native run (kern pairs AV, To, WA, LT). Round 2 found every kern applied one pair late.
+  const kerning = await (async () => {
+    const out = {};
+    for (const family of ['Inter Tight', 'Playfair Display']) {
+      await TM.fonts.ensure(family, 700, 'AVATAR To WAVY LT');
+      const L = TM.text.layout({ text: 'AVATAR To WAVY LT', family, weight: 700, sizePx: 120, tracking: 0, leading: 1, align: 'left', case: 'none' });
+      const Wd = Math.ceil(L.width) + 40, Hd = 180;
+      // Kerning 'normal' as the renderer draws (it also kerns across word spaces, unlike 'auto').
+      const draw = (fn) => { const c = document.createElement('canvas'); c.width = Wd; c.height = Hd; const g = c.getContext('2d'); g.font = L.font; g.fontKerning = 'normal'; g.fillStyle = '#fff'; fn(g); return g.getImageData(0, 0, Wd, Hd).data; };
+      const x0 = 20 - L.lines[0].x;
+      const glyphs = draw((g) => L.glyphs.forEach((gl) => { if (!gl.isSpace) g.fillText(gl.ch, x0 + gl.x, 140); }));
+      const native = draw((g) => g.fillText(L.lines[0].text, 20, 140));
+      let diff = 0, ink = 0;
+      for (let i = 3; i < glyphs.length; i += 4) { diff += Math.abs(glyphs[i] - native[i]); ink += native[i]; }
+      out[family] = ink ? diff / ink : 1;
+    }
+    return out;
+  })();
+
+  // Every catalogue family must load: a bad axis declaration makes Google answer 400 and the
+  // font silently falls back to a generic face (Round 2: Big Shoulders Display).
+  const fontLoads = await (async () => {
+    const failed = [];
+    await Promise.all(TM.FONTS.filter((f) => !f.custom).map(async (f) => {
+      const css = await fetch(TM.fonts.cssUrl([f.family])).then((r) => r.ok, () => false);
+      const ok = css && (await TM.fonts.ensure(TM.fonts.resolve({ family: f.family, weight: 400 }, 120), 400));
+      if (!ok) failed.push(f.family);
+    }));
+    return { total: TM.FONTS.filter((f) => !f.custom).length, failed };
+  })();
+
   // Sanitiser fuzz: garbage must normalise to a valid scene without throwing.
   const garbage = [null, 42, 'x', [], { layers: 'nope' }, { size: { w: -5, h: 1e9 }, fps: 7, duration: 'abc' },
     { layers: [{ text: 5, preset: '<script>', font: { family: 'Comic Sans' }, fill: { color: 'red' }, path: { nodes: [{ x: 'a' }] } }] },
@@ -195,7 +227,7 @@ const results = await page.evaluate(async () => {
   const close = (a, b) => (typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) < 1e-3
     : a && typeof a === 'object' ? b && typeof b === 'object' && Object.keys({ ...a, ...b }).every((k) => close(a[k], b[k])) : a === b);
   const roundTrip = close(s0, s1);
-  return { presets: out, fuzzOk, roundTrip, lineBands, timing, axes };
+  return { presets: out, fuzzOk, roundTrip, lineBands, timing, axes, fontLoads, kerning };
 });
 
 await browser.close();
@@ -221,6 +253,13 @@ const tmg = results.timing;
 console.log(`layer timing: delay ${tmg.delayShifts ? 'ok' : 'FAIL'} · once/hold ${tmg.onceHolds && tmg.onceWaits ? 'ok' : 'FAIL'} · looks ${tmg.lookApplies ? 'ok' : 'FAIL'}`);
 if (!tmg.delayShifts || !tmg.onceHolds || !tmg.onceWaits) fails.push('layer timing semantics broken');
 if (!tmg.lookApplies) fails.push('applyLook failed');
+const kern = Object.entries(results.kerning);
+const kernOk = kern.every(([, v]) => v < 0.03);
+console.log(`kerning (per-glyph vs native run): ${kernOk ? 'ok' : 'FAIL'} (${kern.map(([f, v]) => f + ' ' + (v * 100).toFixed(2) + '%').join(' · ')} of ink differs)`);
+if (!kernOk) fails.push('per-glyph layout loses kerning');
+const fl = results.fontLoads;
+console.log(`catalogue fonts: ${fl.total - fl.failed.length}/${fl.total} load${fl.failed.length ? ' · FAILED: ' + fl.failed.join(', ') : ''}`);
+if (fl.failed.length) fails.push(`fonts that never load: ${fl.failed.join(', ')}`);
 const ax = results.axes;
 const opszOk = ax.opszRatio > 0 && ax.opszRatio - 1 < 0.015;
 console.log(`variable axes: width ${ax.widthOk ? 'ok' : 'FAIL'} · optical size pinned ${opszOk ? 'ok' : 'FAIL'} (width/px spread ${((ax.opszRatio - 1) * 100).toFixed(3)}% over 40–324 px) · stack inside margins ${ax.stackInside ? 'ok' : 'FAIL'} (${ax.widest} / ${Math.round(ax.availW)} px)`);

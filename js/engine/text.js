@@ -1,8 +1,9 @@
 /* TYPOMAN engine — text layout.
  *
  * Splits text into grapheme clusters (so emoji and accented letters stay whole) and lays
- * them out line by line. Glyph x positions come from measuring each line *prefix*, so the
- * font's kerning survives even though presets draw every glyph separately.
+ * them out line by line. Glyph x positions come from measuring each line *prefix* minus the
+ * glyph's own advance, so the font's kerning survives even though presets draw every glyph
+ * separately.
  *
  * Layout space: pixels, origin at the visual centre of the text block, y down. A glyph's
  * `y` is its baseline; `cy` is the vertical centre of its cap-height box.
@@ -79,11 +80,16 @@
 
     lineTexts.forEach((lineText, li) => {
       const { parts, rtl } = clustersFor(lineText);
+      // prefix[k] = kerned width of clusters 0..k-1; adv[k] = cluster k's own advance. Cluster k's
+      // pen position is prefix[k+1] - adv[k]: that includes its kern with the cluster before it
+      // (prefix[k] alone would apply every kern one pair late).
       const prefix = new Float64Array(parts.length + 1);
+      const adv = new Float64Array(parts.length);
       let acc = '';
       for (let k = 0; k < parts.length; k++) {
         acc += parts[k];
         prefix[k + 1] = ctx.measureText(acc).width;
+        adv[k] = ctx.measureText(parts[k]).width;
       }
       const lineW = prefix[parts.length] + Math.max(0, parts.length - 1) * track;
       maxW = Math.max(maxW, lineW);
@@ -101,8 +107,8 @@
           word: wordIndex,
           isSpace,
           // RTL lines read right to left: mirror each cluster's slot within the line.
-          x: rtl ? lineW - (prefix[k + 1] + k * track) : prefix[k] + k * track,
-          w: prefix[k + 1] - prefix[k],
+          x: rtl ? lineW - (prefix[k + 1] + k * track) : prefix[k + 1] - adv[k] + k * track,
+          w: adv[k],
           y: 0,
           cx: 0,
           cy: 0,
