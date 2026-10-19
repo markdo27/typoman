@@ -7,7 +7,7 @@
  *  - Zoom-through dives into a letter near the centre of the outgoing shot; whip pans carry a
  *    velocity-scaled box blur; every shot drifts slowly while it holds, so the frame breathes.
  *  - Letters keep a light stagger inside each move (per-shot in/out). Shots cycle with the loop
- *    and the last shot moves into the first at the seam, so it always loops.
+ *    and the loop point falls mid-hold on the first shot, so it always loops cleanly.
  */
 (function (TM) {
   'use strict';
@@ -75,9 +75,12 @@
       const moveAt = (b) => (P.move === 'mix' ? MOVES[((b % N) + N) % N % MOVES.length] : P.move);
 
       // Each shot, plus its neighbours from the previous/next loop, so the seam is continuous.
+      // The schedule starts half a shot in: the loop point (and frame 0) sits in a hold, on a
+      // readable shot, rather than in the middle of a fast camera move.
+      const p = f.p + slot / 2;
       for (let c = -1; c <= 1; c++) {
         for (let k = 0; k < N; k++) {
-          const tau = f.p + c - k * slot;
+          const tau = p + c - k * slot;
           if (tau < -T / 2 || tau > slot + T / 2) continue;
           const shot = shots[k];
           const uIn = clamp((tau + T / 2) / T), uOut = clamp((tau - slot + T / 2) / T);
