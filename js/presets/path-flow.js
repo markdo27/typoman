@@ -111,23 +111,18 @@
       alpha = smoothstep(-edge, edge * 0.2, s) * (1 - smoothstep(path.length - edge * 0.2, path.length + edge, s));
       if (alpha <= 0.002) return;
     }
-    const pt = path.at(s);
+    // Corner-safe tangent: averaged over about a glyph so letters swing round sharp corners.
+    const win = P.cornerSmooth * size * 0.6;
+    const pt = win > 0.5 && path.atSmooth ? path.atSmooth(s, win * 2) : path.at(s);
     let off = laneOffset;
     if (P.wave > 0) {
       off += Math.sin(TAU * (s / (P.waveLength * size) - P.waveSpeed * f.p)) * P.wave * size * 0.5;
     }
     const x = pt.x + pt.nx * off, y = pt.y + pt.ny * off;
-    // Chord tangent over ~one glyph: smooth rotation through corners.
-    let angle = pt.angle;
-    const win = P.cornerSmooth * size * 0.6;
-    if (win > 0.5) {
-      const a = path.at(s - win), b = path.at(s + win);
-      if (Math.hypot(b.x - a.x, b.y - a.y) > 1e-3) angle = Math.atan2(b.y - a.y, b.x - a.x);
-    }
     f.drawGlyph(g, {
       x,
       y,
-      rot: angle * clamp(P.rotate, 0, 1),
+      rot: pt.angle * clamp(P.rotate, 0, 1),
       alpha,
       ch: ch || undefined,
       anchor: P.align === 'baseline' ? 'baseline' : 'center',

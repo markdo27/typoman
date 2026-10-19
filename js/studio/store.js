@@ -137,11 +137,14 @@
     /** Change output size; un-edited preset paths are regenerated for the new aspect. */
     setSize(w, h) {
       this.update((scene) => {
+        const from = scene.size.w / scene.size.h;
         scene.size = { w, h };
         const aspect = w / h;
+        // Preset shapes are rebuilt for the new frame; hand-edited paths are re-fitted, not stretched.
+        const refit = (def) => (def.preset ? TM.Path.preset(def.preset, aspect) : TM.Path.reaspect ? TM.Path.reaspect(def, from, aspect) : def);
         scene.layers.forEach((l) => {
-          if (l.path && l.path.preset) l.path = TM.Path.preset(l.path.preset, aspect);
-          if (l.pathMorph && l.pathMorph.target && l.pathMorph.target.preset) l.pathMorph.target = TM.Path.preset(l.pathMorph.target.preset, aspect);
+          if (l.path) l.path = refit(l.path);
+          if (l.pathMorph && l.pathMorph.target) l.pathMorph.target = refit(l.pathMorph.target);
         });
       }, { reason: 'size' });
     }
