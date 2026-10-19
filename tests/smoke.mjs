@@ -126,6 +126,21 @@ const results = await page.evaluate(async () => {
     return bands;
   })();
 
+  // Layer timing: a delay shifts the loop; 'once' plays a single pass and holds its end.
+  const timing = (() => {
+    const hashAt = (sc, t) => { const d = pixels(sc, t).data; let h = 0; for (let i = 0; i < d.length; i += 7) h = (h * 31 + d[i]) | 0; return h; };
+    const plain = sceneFor('rise');
+    const delayed = sceneFor('rise', (l) => { l.time = { delay: 1, cycles: 1, mode: 'loop' }; });
+    const once = sceneFor('rise', (l) => { l.time = { delay: 0.5, cycles: 1, mode: 'once' }; });
+    const looked = TM.Scene.applyLook(plain, 0, { name: 'x', bg: { color: '#111111' }, layer: { font: { family: 'Fraunces' }, params: { tilt: 20 } } });
+    return {
+      delayShifts: hashAt(delayed, 2.2) === hashAt(plain, 1.2),
+      onceHolds: hashAt(once, plain.duration * 3) === hashAt(once, plain.duration * 5),
+      onceWaits: hashAt(once, 0.2) === hashAt(once, 0.4),
+      lookApplies: looked.bg.color === '#111111' && looked.layers[0].font.family === 'Fraunces' && looked.layers[0].params.tilt === 20 && looked.layers[0].text === plain.layers[0].text,
+    };
+  })();
+
   // Sanitiser fuzz: garbage must normalise to a valid scene without throwing.
   const garbage = [null, 42, 'x', [], { layers: 'nope' }, { size: { w: -5, h: 1e9 }, fps: 7, duration: 'abc' },
     { layers: [{ text: 5, preset: '<script>', font: { family: 'Comic Sans' }, fill: { color: 'red' }, path: { nodes: [{ x: 'a' }] } }] },
@@ -144,7 +159,7 @@ const results = await page.evaluate(async () => {
   const close = (a, b) => (typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) < 1e-3
     : a && typeof a === 'object' ? b && typeof b === 'object' && Object.keys({ ...a, ...b }).every((k) => close(a[k], b[k])) : a === b);
   const roundTrip = close(s0, s1);
-  return { presets: out, fuzzOk, roundTrip, lineBands };
+  return { presets: out, fuzzOk, roundTrip, lineBands, timing };
 });
 
 await browser.close();
@@ -166,6 +181,10 @@ const lb = results.lineBands;
 const linesOk = lb.length >= 2 && Math.min(lb[0], lb[1]) / Math.max(lb[0], lb[1]) > 0.6;
 console.log(`multi-line font integrity: ${linesOk ? 'ok' : 'FAIL'} (line ink heights ${lb.slice(0, 2).join(' / ')} px)`);
 if (!linesOk) fails.push('second line lost its font (font cache vs save/restore)');
+const tmg = results.timing;
+console.log(`layer timing: delay ${tmg.delayShifts ? 'ok' : 'FAIL'} · once/hold ${tmg.onceHolds && tmg.onceWaits ? 'ok' : 'FAIL'} · looks ${tmg.lookApplies ? 'ok' : 'FAIL'}`);
+if (!tmg.delayShifts || !tmg.onceHolds || !tmg.onceWaits) fails.push('layer timing semantics broken');
+if (!tmg.lookApplies) fails.push('applyLook failed');
 if (!results.roundTrip) fails.push('encode/decode round trip failed');
 const errs = consoleErrors.filter((e) => !/favicon/.test(e));
 if (errs.length) { console.log('\nconsole errors:\n  ' + errs.join('\n  ')); fails.push(`${errs.length} console error(s)`); }

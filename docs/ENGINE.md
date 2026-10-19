@@ -49,7 +49,8 @@ vendor/*          pinned third-party code (MIT), served locally
     pathMorph:{ enabled, target: path|null, ease },                  // path A→B→A over the loop
     fx:{ echo:{count,spacing,fade,palette}, blur 0..1, glow:{amount,color},
          shadow:{amount,angle,distance,color}, extrude:{depth,angle,color} },
-    anchor:{ x, y } }] }
+    anchor:{ x, y },
+    time:{ delay /*s*/, cycles /*1..8 whole loops*/, mode:'loop'|'once' /*once = play a pass, hold its end*/ } }] }
 ```
 
 `path.preset` is set while the path is an untouched preset shape. Editors **must delete
@@ -68,8 +69,16 @@ TM.registerPreset({
   params: [ TM.P.range('amp', 'Amplitude', 0, 1, 0.01, 0.5, { group: 'Motion' }), … ],
   setup(f) { return cache },  // optional; re-run only when text/font/type/params/path/size change
   render(f) { … },
+  looks: [                    // optional, up to 8 curated starting points shown in the gallery
+    { name: 'Neon Night', bg: { type: 'solid', color: '#07000f' },
+      layer: { font: { family: 'Monoton' }, fill: { type: 'palette', palette: ['#ff00e5', '#00f0ff'] },
+               fx: { glow: { amount: 0.6, color: '#ff00e5' } }, params: { … }, path: 'circle' } },
+  ],
 });
 ```
+
+`TM.Scene.applyLook(scene, layerIndex, look)` merges a look into a layer and normalises the
+result. It never touches the user's text.
 
 Param builders (`js/engine/core.js`): `TM.P.range | select | toggle | color | ease`,
 `TM.P.stagger()`, `TM.P.order()`, and `TM.P.sequence(opts)`. The last one gives the
@@ -116,6 +125,14 @@ shaped run, so Arabic keeps its joined forms. They are placed right to left and 
 `{ x, y, angle, tx, ty, nx, ny, inside }` (it wraps when closed and extrapolates past the
 ends of open paths). Also `path.atU(u)`, `path.resample(n)`, `path.trace(ctx, s0, s1)` and
 `TM.Path.preset(id, aspect)`, `fromPoints`, `fromPolyline`, `morph`, `toSVG`, `sample`.
+
+**Collision-free text on paths.**
+- `path.offset(d)` gives the parallel curve d px to the normal side (negative = left of
+  travel). Use it for lanes and for glyphs sitting above or below the line.
+- `path.spaced(h)` re-parameterises the arc length so text gets `h·|turn|` of extra room at
+  bends (curvature smoothed over ±h).
+- Lay glyph centres out on `path.offset(centreOffset).spaced(capH / 2)` and letters stop
+  colliding on concave curves and at sharp corners (Path Flow does this).
 
 **Easing.** `TM.ease(spec)` takes a name from `TM.EASINGS` or a cubic-bézier
 `[x1, y1, x2, y2]`. Signature curves include `glide`, `smooth`, `snap`, `overshoot`,

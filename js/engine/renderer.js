@@ -401,7 +401,11 @@
     _drawPreset(lctx, layer, index, preset, t, W, H, echo, alpha, colorOverride) {
       const scene = this.scene;
       const dur = scene.duration;
-      const tl = mod(t, dur);
+      // Layer timing: delay shifts the layer's start, cycles speeds it up by whole loops (so
+      // the scene still loops seamlessly), and 'once' plays a single pass then holds its end.
+      const tm = layer.time;
+      const lt = tm ? (t - tm.delay) * tm.cycles : t;
+      const tl = tm && tm.mode === 'once' ? clamp(lt, 0, dur * (1 - 1e-6)) : mod(lt, dur);
       const L = this._layout(layer, W, H, preset);
       const f = this.frame;
       const seed = (scene.seed + index * 1013) | 0;

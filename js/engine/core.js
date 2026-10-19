@@ -309,6 +309,8 @@
       if (!PARAM_TYPES.has(p.type)) throw new Error(`Preset ${def.id}: unknown param type "${p.type}" for ${p.key}`);
     });
     def.params = def.params || [];
+    // Optional curated looks: [{ name, bg?, post?, layer: { font, fill, fx, params, path, … } }].
+    def.looks = Array.isArray(def.looks) ? def.looks.filter((l) => l && typeof l.name === 'string').slice(0, 8) : [];
     def.category = def.category || 'Kinetic';
     def.usesPath = !!def.usesPath;
     def.fit = def.fit !== undefined ? !!def.fit : !def.usesPath;

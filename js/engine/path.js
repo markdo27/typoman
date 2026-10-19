@@ -194,6 +194,83 @@
       return new SampledPath(xs, ys, this.closed);
     }
 
+    /**
+     * Parallel curve d px to the side of the normal (negative = the left of travel, which is
+     * "above" for a left-to-right path). Laying text out by arc length on the curve through
+     * the glyphs' centres spaces letters naturally: wider where the curve is convex and
+     * tighter where it is concave, so tops don't collide on inner bends. Loops that a large
+     * offset makes at tight concave corners are cut out. Cached per offset.
+     */
+    offset(d) {
+      if (!(Math.abs(d) > 0.01) || this.n < 2) return this;
+      const key = Math.round(d * 4) / 4;
+      if (!this._offsets) this._offsets = new Map();
+      const hit = this._offsets.get(key);
+      if (hit) return hit;
+      const xs = [], ys = [];
+      let lx = 0, ly = 0;
+      for (let i = 0; i < this.n; i++) {
+        const x = this.xs[i] - this.ty[i] * key, y = this.ys[i] + this.tx[i] * key;
+        // Skip points that move backwards against the base direction (inside a swallowtail).
+        if (xs.length && (x - lx) * this.tx[i] + (y - ly) * this.ty[i] <= 0) continue;
+        xs.push(x);
+        ys.push(y);
+        lx = x;
+        ly = y;
+      }
+      const out = xs.length > 1 ? new SampledPath(Float32Array.from(xs), Float32Array.from(ys), this.closed) : this;
+      if (this._offsets.size > 16) this._offsets.clear();
+      this._offsets.set(key, out);
+      return out;
+    }
+
+    /**
+     * Bend-aware text spacing. Returns a copy re-parameterised so that a run of text laid out
+     * by arc length gets extra room where the path turns: text distance advances at
+     * u'(s) = 1 - h·κ̄(s), with κ̄ the turning averaged over ±h. That's what the inner edge of an
+     * h-high glyph half loses round a bend, so neighbours stop colliding on concave curves and
+     * at sharp corners. Straight stretches are unchanged. Cached per h.
+     */
+    spaced(h) {
+      if (!(h > 0.01) || this.n < 3) return this;
+      const key = Math.round(h * 4) / 4;
+      if (!this._spaced) this._spaced = new Map();
+      const hit = this._spaced.get(key);
+      if (hit) return hit;
+      const n = this.n, src = this.cum, m = src.length, L = this.length;
+      // Cumulative absolute turning at each sample.
+      const turn = new Float64Array(m);
+      for (let i = 1; i < m; i++) {
+        const a = Math.atan2(this.ty[(i - 1) % n], this.tx[(i - 1) % n]);
+        const b = Math.atan2(this.ty[i % n], this.tx[i % n]);
+        turn[i] = turn[i - 1] + Math.abs(TM.math.angleDelta(a, b));
+      }
+      const T = turn[m - 1];
+      const turnAt = (s) => {
+        // Turning accumulated from 0 to s (wrapping on closed paths).
+        let laps = 0;
+        if (this.closed) { laps = Math.floor(s / L); s -= laps * L; } else s = TM.math.clamp(s, 0, L);
+        let lo = 0, hi = m - 1;
+        while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (src[mid] <= s) lo = mid; else hi = mid; }
+        const seg = src[hi] - src[lo];
+        const k = seg > 1e-9 ? (s - src[lo]) / seg : 0;
+        return laps * T + turn[lo] + (turn[hi] - turn[lo]) * k;
+      };
+      const cum = new Float64Array(m);
+      for (let i = 1; i < m; i++) {
+        const seg = src[i] - src[i - 1], mid = (src[i] + src[i - 1]) / 2;
+        const a = mid - key, b = mid + key;
+        const span = this.closed ? 2 * key : Math.min(b, L) - Math.max(a, 0);
+        const density = span > 1e-6 ? (turnAt(b) - turnAt(a)) / span : 0;
+        cum[i] = cum[i - 1] + seg * Math.max(0.15, 1 - key * density);
+      }
+      const out = Object.create(SampledPath.prototype);
+      Object.assign(out, this, { cum, length: cum[m - 1], _offsets: null, _spaced: null, _phi: null });
+      if (this._spaced.size > 16) this._spaced.clear();
+      this._spaced.set(key, out);
+      return out;
+    }
+
     /** Trace the path into a canvas context (no stroke/fill). Optional [s0, s1] sub-range. */
     trace(ctx, s0 = 0, s1 = this.length) {
       if (this.n < 2) return;

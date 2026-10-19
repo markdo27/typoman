@@ -45,6 +45,8 @@
         extrude: { depth: 0, angle: 45, color: '#000000' },
       },
       anchor: { x: 0.5, y: 0.5 },
+      // Per-layer timing: start later, run whole cycles faster, or play once and hold.
+      time: { delay: 0, cycles: 1, mode: 'loop' },
     };
     return overrides ? merge(layer, overrides) : layer;
   }
@@ -208,6 +210,11 @@
         },
       },
       anchor: { x: num(s.anchor && s.anchor.x, 0.5, -0.5, 1.5), y: num(s.anchor && s.anchor.y, 0.5, -0.5, 1.5) },
+      time: {
+        delay: num(s.time && s.time.delay, 0, 0, 600),
+        cycles: int(s.time && s.time.cycles, 1, 1, 8),
+        mode: pick(s.time && s.time.mode, ['loop', 'once'], 'loop'),
+      },
     };
   }
 
@@ -348,6 +355,36 @@
 
   const clone = (scene) => JSON.parse(JSON.stringify(scene));
 
+  /**
+   * Apply a curated look (from a preset's `looks`) to layer `index`. A look may set bg, post,
+   * and layer font / type / fill / stroke / fx / params / anchor / path (a path preset id or
+   * definition). The user's text is never changed. The result is normalised.
+   */
+  function applyLook(scene, index, look) {
+    const s = clone(scene);
+    const l = s.layers[Math.max(0, Math.min(s.layers.length - 1, index | 0))];
+    if (!l || !isObj(look)) return normalize(s);
+    if (isObj(look.bg)) merge(s.bg, look.bg);
+    if (isObj(look.post)) merge(s.post, look.post);
+    if (typeof look.preset === 'string' && TM.getPreset(look.preset)) {
+      if (l.preset !== look.preset) l.params = TM.presetDefaults(look.preset);
+      l.preset = look.preset;
+    }
+    const L = isObj(look.layer) ? look.layer : {};
+    for (const k of ['font', 'type', 'fill', 'stroke', 'fx', 'params', 'anchor', 'time']) {
+      if (isObj(L[k])) l[k] = merge(isObj(l[k]) ? l[k] : {}, clone(L[k]));
+    }
+    if (Array.isArray(L.fill && L.fill.palette)) l.fill.palette = L.fill.palette.slice();
+    const aspect = s.size.w / s.size.h;
+    if (typeof L.path === 'string') l.path = TM.Path.preset(L.path, aspect);
+    else if (isObj(L.path)) l.path = clone(L.path);
+    if (isObj(L.pathMorph)) {
+      l.pathMorph = merge(isObj(l.pathMorph) ? l.pathMorph : {}, clone(L.pathMorph));
+      if (typeof L.pathMorph.target === 'string') l.pathMorph.target = TM.Path.preset(L.pathMorph.target, aspect);
+    }
+    return normalize(s);
+  }
+
   TM.Scene = {
     defaults,
     defaultLayer,
@@ -355,6 +392,7 @@
     normalizeLayer,
     cleanParams,
     minify,
+    applyLook,
     encode,
     decode,
     clone,
