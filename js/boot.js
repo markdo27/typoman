@@ -40,6 +40,7 @@
     'js/presets/lens.js',
     'js/presets/spotlight.js',
     'js/presets/ribbon.js',
+    'js/presets/magnet.js',
   ];
 
   // ── Presets: reveal, glitch & dimensional family (owner: preset team B) ──
