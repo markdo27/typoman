@@ -21,6 +21,17 @@
     name: 'Outline Draw',
     category: 'Reveal',
     description: 'A pen draws every letter’s outline, then colour floods in like liquid filling the letter. Drains and lifts away.',
+    looks: [
+      { name: 'Blueprint', bg: { type: 'solid', color: '#06224a' }, post: { grain: 0.1 },
+        layer: { font: { family: 'Big Shoulders Display', weight: 800 }, fill: { type: 'solid', color: '#e0fbfc' },
+          params: { lineColor: 'accent', accent: '#4cc9f0', flood: 'wipe', keep: true, weight: 0.02 } } },
+      { name: 'Neon Sign', bg: { type: 'solid', color: '#07000f' },
+        layer: { font: { family: 'Righteous', weight: 400 }, fill: { type: 'solid', color: '#ff00e5' },
+          fx: { glow: { amount: 0.6, color: '#ff00e5' } }, params: { lineColor: 'accent', accent: '#00f0ff', flood: 'fade', weight: 0.035 } } },
+      { name: 'Ink & Paper', bg: { type: 'solid', color: '#f4f1ea' },
+        layer: { font: { family: 'Fraunces', weight: 800 }, fill: { type: 'solid', color: '#141414' },
+          params: { lineColor: 'text', flood: 'liquid', wave: 0.8 } } },
+    ],
     params: [
       ...TM.P.sequence({ inDur: 0.55, outDur: 0.3, stagger: 0.55, easeIn: 'smooth', easeOut: 'inOutSine' }),
       TM.P.range('weight', 'Pen width (em)', 0.005, 0.12, 0.001, 0.028, { group: 'Pen' }),

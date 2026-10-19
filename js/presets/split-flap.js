@@ -28,6 +28,17 @@
     name: 'Split Flap',
     category: 'Reveal',
     description: 'A departures board: every letter rolls through its cell and lands with a mechanical bounce.',
+    looks: [
+      { name: 'Departures', bg: { type: 'solid', color: '#121212' }, post: { vignette: 0.3 },
+        layer: { font: { family: 'JetBrains Mono', weight: 700 }, fill: { type: 'solid', color: '#ffb547' },
+          params: { style: 'flap', tileColor: '#232323', tileAlpha: 1, tiles: 'on' } } },
+      { name: 'Slot Machine', bg: { type: 'radial', color: '#3a0d52', color2: '#12001c' },
+        layer: { font: { family: 'Bungee', weight: 400 }, fill: { type: 'palette', palette: ['#ffe3a3', '#ff5e5b', '#ffb547'] },
+          params: { style: 'slot', tileColor: '#1b0a2e', flips: 12, settle: 0.8 } } },
+      { name: 'Bauhaus Board', bg: { type: 'solid', color: '#f1ede4' },
+        layer: { font: { family: 'Archivo Black', weight: 400 }, fill: { type: 'solid', color: '#ffffff' },
+          params: { tileColor: '#e63326', tileAlpha: 1, pad: 0.12, gap: 0.06 } } },
+    ],
     params: [
       ...TM.P.sequence({ inDur: 0.52, outDur: 0.3, stagger: 0.5, easeIn: 'outCubic', easeOut: 'inQuad' }),
       TM.P.select('style', 'Style', [['flap', 'Flaps'], ['slot', 'Slot reel']], 'flap', { group: 'Board' }),

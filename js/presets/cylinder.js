@@ -35,6 +35,17 @@
     name: 'Cylinder',
     category: 'Dimensional',
     description: 'Your text wrapped round a spinning 3D drum: tilted, in perspective, with mirrored back faces.',
+    looks: [
+      { name: 'Gold Ring', bg: { type: 'radial', color: '#2a0f3d', color2: '#05000a' }, post: { vignette: 0.4 },
+        layer: { font: { family: 'Bodoni Moda', weight: 800 }, fill: { type: 'gradient', color: '#fff1d6', color2: '#e0a020', angle: 180 },
+          fx: { glow: { amount: 0.2, color: '#ffb547' } }, params: { repeat: true, separator: 'star', tilt: 22, spin: 'smooth' } } },
+      { name: 'Neon Drum', bg: { type: 'solid', color: '#07000f' },
+        layer: { font: { family: 'Monoton', weight: 400 }, fill: { type: 'palette', palette: ['#ff00e5', '#00f0ff', '#faff00'] },
+          fx: { glow: { amount: 0.55, color: '#ff00e5' } }, params: { repeat: true, separator: 'dot', back: 'full', shade: 0.75 } } },
+      { name: 'Paper Column', bg: { type: 'solid', color: '#f4f1ea' },
+        layer: { font: { family: 'Big Shoulders Display', weight: 800 }, fill: { type: 'solid', color: '#141414' },
+          params: { repeat: true, separator: 'slash', tilt: -16, spin: 'steps', stops: 4, shade: 0.8 } } },
+    ],
     params: [
       TM.P.range('turns', 'Turns per loop', -4, 4, 1, 1, { group: 'Spin', hint: 'Whole turns keep the loop seamless; negative spins the other way' }),
       TM.P.select('spin', 'Spin style', [['present', 'Linger at front'], ['smooth', 'Constant'], ['steps', 'Ratchet']], 'present', { group: 'Spin' }),

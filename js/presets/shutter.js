@@ -27,6 +27,14 @@
     name: 'Shutter',
     category: 'Reveal',
     description: 'Venetian-blind slats flip open one after another to reveal your text, wobble to a stop, then flip shut.',
+    looks: [
+      { name: 'Venetian', bg: { type: 'solid', color: '#f4f1ea' },
+        layer: { font: { family: 'Playfair Display', weight: 900 }, fill: { type: 'solid', color: '#141414' }, params: { size: 0.09, shade: 0.75 } } },
+      { name: 'Barcode', bg: { type: 'solid', color: '#000000' },
+        layer: { font: { family: 'Oswald', weight: 700 }, fill: { type: 'solid', color: '#ffffff' }, params: { dir: 'vertical', size: 0.05, order: 'random' } } },
+      { name: 'Sunset Blinds', bg: { type: 'linear', color: '#1b0a2e', color2: '#ff5e5b', angle: 180 },
+        layer: { font: { family: 'Bricolage Grotesque', weight: 800 }, fill: { type: 'solid', color: '#ffe3a3' }, params: { alternate: true, size: 0.14 } } },
+    ],
     params: [
       ...TM.P.sequence({ inDur: 0.5, outDur: 0.3, stagger: 0.6, easeIn: 'springSoft', easeOut: 'inCubic' })
         .map((p) => (p.key === 'order' ? TM.P.select('order', 'Order', [['start', 'Top / left first'], ['end', 'Bottom / right first'], ['center', 'Centre out'], ['edges', 'Edges in'], ['random', 'Random']], 'start', { group: 'Timing' }) : p)),

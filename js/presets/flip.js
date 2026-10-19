@@ -18,6 +18,17 @@
     name: 'Flip',
     category: 'Dimensional',
     description: 'Letters flip over in 3D like dominoes, flashing a second colour on their backs, then roll away.',
+    looks: [
+      { name: 'Domino', bg: { type: 'solid', color: '#111111' },
+        layer: { font: { family: 'Bebas Neue', weight: 400 }, fill: { type: 'solid', color: '#ffffff' },
+          params: { hinge: 'baseline', turns: 0, backColor: '#e63326', stagger: 0.8 } } },
+      { name: 'Paper Cards', bg: { type: 'solid', color: '#f4f1ea' }, post: { grain: 0.15 },
+        layer: { font: { family: 'DM Serif Display', weight: 400 }, fill: { type: 'solid', color: '#141414' },
+          params: { backColor: '#ff3d00', turns: 1, shade: 0.7 } } },
+      { name: 'Mint Tiles', bg: { type: 'solid', color: '#062925' },
+        layer: { font: { family: 'Outfit', weight: 800 }, fill: { type: 'palette', palette: ['#5cffc8', '#eafff7', '#00b38f'] },
+          params: { backSide: 'palette', turns: 2, hinge: 'top' } } },
+    ],
     params: [
       ...TM.P.sequence({ inDur: 0.5, outDur: 0.3, stagger: 0.7, easeIn: 'springSoft', easeOut: 'inBack' }),
       TM.P.range('turns', 'Extra half-turns', 0, 4, 1, 1, { group: 'Flip', hint: 'Each extra half-turn shows the back once more' }),

@@ -75,6 +75,14 @@
     name: 'Zoom Through',
     category: 'Dimensional',
     description: 'The camera flies through the hole in a letter into the next word, again and again: an endless zoom through your text.',
+    looks: [
+      { name: 'Hyperspace', bg: { type: 'radial', color: '#14143a', color2: '#000000' }, post: { grain: 0.15 },
+        layer: { font: { family: 'Unbounded', weight: 900 }, fill: { type: 'solid', color: '#ffffff' }, params: { twist: 0.45 } } },
+      { name: 'Pop Art', bg: { type: 'solid', color: '#f6bf26' },
+        layer: { font: { family: 'Bowlby One', weight: 400 }, fill: { type: 'solid', color: '#e63326' }, params: { twist: 0, hold: 0.45 } } },
+      { name: 'Mint Dive', bg: { type: 'solid', color: '#062925' },
+        layer: { font: { family: 'Syne', weight: 800 }, fill: { type: 'solid', color: '#5cffc8' }, params: { twist: -0.3 } } },
+    ],
     params: [
       TM.P.select('split', 'Fly through', [['auto', 'Auto'], ['lines', 'Lines'], ['words', 'Words']], 'auto', { group: 'Flight', hint: 'Auto: lines when there are several, otherwise words' }),
       TM.P.range('hold', 'Reading pause', 0, 0.8, 0.01, 0.38, { group: 'Flight' }),

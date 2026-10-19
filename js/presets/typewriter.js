@@ -33,6 +33,17 @@
     name: 'Typewriter',
     category: 'Reveal',
     description: 'Typed key by key with a blinking caret and a human rhythm, then backspaced away.',
+    looks: [
+      { name: 'Manuscript', bg: { type: 'solid', color: '#f3ecdf' }, post: { grain: 0.28, vignette: 0.25 },
+        layer: { font: { family: 'Space Mono', weight: 400 }, type: { case: 'none' }, fill: { type: 'solid', color: '#1d1a16' },
+          params: { ink: 0.7, caret: 'underscore', accentCaret: true, caretColor: '#c8361f', punch: 0.25 } } },
+      { name: 'Prompt', bg: { type: 'solid', color: '#0b0b0c' },
+        layer: { font: { family: 'JetBrains Mono', weight: 500 }, fill: { type: 'solid', color: '#d4ff3a' },
+          fx: { glow: { amount: 0.25, color: '#9bd400' } }, params: { caret: 'block', accentCaret: false, rhythm: 0.35 } } },
+      { name: 'Editorial', bg: { type: 'solid', color: '#ffffff' },
+        layer: { font: { family: 'Instrument Serif', weight: 400 }, type: { case: 'none' }, fill: { type: 'solid', color: '#111111' },
+          params: { live: true, caret: 'bar', caretColor: '#ff3d00', erase: 'select' } } },
+    ],
     params: [
       ...TM.P.sequence({ inDur: 0.5, outDur: 0.26, easeIn: 'linear', easeOut: 'inQuad' })
         .filter((p) => p.key !== 'stagger' && p.key !== 'order'),

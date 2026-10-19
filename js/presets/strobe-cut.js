@@ -19,6 +19,15 @@
     name: 'Strobe Cut',
     category: 'Glitch',
     description: 'A flash edit on the beat: hard cuts between your words with scale and position jumps, invert flashes and stutters.',
+    looks: [
+      { name: 'Rave', bg: { type: 'solid', color: '#000000' },
+        layer: { font: { family: 'Archivo Black', weight: 400 }, fill: { type: 'palette', palette: ['#ff00e5', '#00f0ff', '#faff00', '#ffffff'] },
+          fx: { glow: { amount: 0.3, color: '#ff00e5' } }, params: { colors: 'palette', flash: 0.7, beats: 16, stutter: 0.15 } } },
+      { name: 'Mono Strobe', bg: { type: 'solid', color: '#ffffff' },
+        layer: { font: { family: 'Inter Tight', weight: 900 }, fill: { type: 'solid', color: '#000000' }, params: { flash: 0.65, stutter: 0.5 } } },
+      { name: 'Acid House', bg: { type: 'solid', color: '#d4ff3a' },
+        layer: { font: { family: 'Rubik Mono One', weight: 400 }, fill: { type: 'solid', color: '#0b0b0c' }, params: { jump: 0.95, cutBy: 'letters', beats: 12 } } },
+    ],
     params: [
       TM.P.range('beats', 'Beats per loop', 2, 32, 1, 8, { group: 'Beat', hint: 'Whole beats per loop. BPM = beats × 60 ÷ loop length' }),
       TM.P.select('cutBy', 'Cut between', [['words', 'Words'], ['lines', 'Lines'], ['letters', 'Letters']], 'words', { group: 'Beat' }),
@@ -81,9 +90,10 @@
       // Beat envelope: punch, stutter, invert flash.
       const punch = 1 + P.punch * 0.16 * Math.exp(-local * 9) * (1 - smoothstep(0.3, 0.6, local));
       S *= punch * (1 + 0.035 * local); // a slow push through the beat
-      if (r(10) < P.stutter * 0.7 && local < 0.5 && Math.floor(local * 8) % 2 === 1) return; // 16th-note strobe
+      // 16th-note strobe: the off-flashes leave a faint ghost, so a still frame is never empty.
+      const ghost = r(10) < P.stutter * 0.7 && local < 0.5 && Math.floor(local * 8) % 2 === 1 ? 0.16 : 1;
       const flashLen = Math.min(0.09, beatSec * 0.35) / beatSec;
-      const invert = r(11) < P.flash * 0.6 && local < flashLen;
+      const invert = ghost === 1 && r(11) < P.flash * 0.6 && local < flashLen;
       const pal = f.layer.fill.palette;
       const color = f.colorOverride || (P.colors === 'palette' ? pal[b % pal.length] : null);
 
@@ -98,7 +108,7 @@
       for (const gi of unit.glyphs) {
         const g = L.glyphs[gi];
         const ox = (g.cx - unit.cx) * S, oy = (g.cy - unit.cy) * S;
-        const o = { x: f.cx + dx + ox * cs - oy * sn, y: f.cy + dy + ox * sn + oy * cs, rot, scale: S };
+        const o = { x: f.cx + dx + ox * cs - oy * sn, y: f.cy + dy + ox * sn + oy * cs, rot, scale: S, alpha: ghost };
         if (color) o.color = color;
         f.drawGlyph(g, o);
       }

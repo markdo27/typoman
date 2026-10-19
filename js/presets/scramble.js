@@ -43,6 +43,17 @@
     name: 'Decode',
     category: 'Reveal',
     description: 'Letters cycle through random characters and lock onto your text one by one, then scramble away.',
+    looks: [
+      { name: 'Terminal', bg: { type: 'solid', color: '#030a05' }, post: { grain: 0.18, vignette: 0.35 },
+        layer: { font: { family: 'JetBrains Mono', weight: 600 }, fill: { type: 'solid', color: '#3dff8f' },
+          fx: { glow: { amount: 0.3, color: '#1fbf5f' } }, params: { charset: 'mixed', look: 'accent', accent: '#1d6b3a', rate: 22 } } },
+      { name: 'Redacted', bg: { type: 'solid', color: '#f2eee6' },
+        layer: { font: { family: 'Space Mono', weight: 700 }, fill: { type: 'solid', color: '#141414' },
+          params: { charset: 'blocks', look: 'same', spawn: 'stagger', drift: 0 } } },
+      { name: 'Binary Bloom', bg: { type: 'radial', color: '#1a0638', color2: '#05000c' },
+        layer: { font: { family: 'Unbounded', weight: 700 }, fill: { type: 'palette', palette: ['#ff00e5', '#00f0ff', '#faff00', '#ffffff'] },
+          params: { charset: 'binary', look: 'palette', pop: 0.8 } } },
+    ],
     params: [
       ...TM.P.sequence({ inDur: 0.5, outDur: 0.3, stagger: 0.65, easeIn: 'glide', easeOut: 'inCubic' }),
       TM.P.select('charset', 'Characters', [

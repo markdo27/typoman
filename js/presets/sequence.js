@@ -22,6 +22,15 @@
     name: 'Sequence',
     category: 'Reveal',
     description: 'Your lines play as big lyric-video shots, cut together with camera moves: push, zoom-through, roll and whip pan.',
+    looks: [
+      { name: 'Lyric Video', bg: { type: 'solid', color: '#000000' }, post: { grain: 0.22, vignette: 0.3 },
+        layer: { font: { family: 'Dela Gothic One', weight: 400 }, fill: { type: 'solid', color: '#ffffff' }, params: { move: 'mix' } } },
+      { name: 'Sunset Drive', bg: { type: 'linear', color: '#ff5e5b', color2: '#1b0a2e', angle: 180 },
+        layer: { font: { family: 'Tilt Warp', weight: 400 }, fill: { type: 'solid', color: '#ffe3a3' },
+          fx: { shadow: { amount: 0.5, angle: 90, distance: 0.015, color: '#1b0a2e' } }, params: { move: 'zoom', drift: 0.8 } } },
+      { name: 'Whip Promo', bg: { type: 'solid', color: '#faff00' },
+        layer: { font: { family: 'Archivo Black', weight: 400 }, fill: { type: 'solid', color: '#07000f' }, params: { move: 'whip', stagger: 0.4 } } },
+    ],
     params: [
       TM.P.select('split', 'Shots from', [['auto', 'Auto'], ['lines', 'Each line'], ['words', 'Each word']], 'auto', { group: 'Shots', hint: 'Auto: lines when there are several, otherwise words' }),
       TM.P.select('move', 'Camera move', [['mix', 'Mix'], ['push', 'Push'], ['zoom', 'Zoom through'], ['roll', 'Roll'], ['whip', 'Whip pan']], 'mix', { group: 'Shots' }),

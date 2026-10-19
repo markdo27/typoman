@@ -25,6 +25,15 @@
     name: 'Focus Pull',
     category: 'Dimensional',
     description: 'A lens racks focus across your words: letters on different depth planes slide in and out of focus, with parallax.',
+    looks: [
+      { name: 'Macro', bg: { type: 'radial', color: '#2a2a30', color2: '#050506' }, post: { vignette: 0.5, grain: 0.12 },
+        layer: { font: { family: 'Instrument Serif', weight: 400 }, fill: { type: 'solid', color: '#f6f6f6' }, params: { aperture: 0.8, haze: 0.5 } } },
+      { name: 'Golden Hour', bg: { type: 'linear', color: '#ffb547', color2: '#ff5e5b', angle: 160 },
+        layer: { font: { family: 'Fraunces', weight: 800 }, fill: { type: 'solid', color: '#fff1d6' }, params: { aperture: 0.6, parallax: 0.7 } } },
+      { name: 'Night City', bg: { type: 'solid', color: '#03132e' },
+        layer: { font: { family: 'Space Grotesk', weight: 700 }, fill: { type: 'palette', palette: ['#4cc9f0', '#f72585', '#e0fbfc'] },
+          fx: { glow: { amount: 0.35, color: '#4cc9f0' } }, params: { depth: 1 } } },
+    ],
     params: [
       TM.P.select('focusOn', 'Focus on', [['auto', 'Auto'], ['words', 'Each word'], ['sweep', 'Sweep across']], 'auto', { group: 'Focus', hint: 'Auto: word by word, or a sweep for a single word' }),
       TM.P.range('pull', 'Rack length', 0.1, 0.9, 0.01, 0.4, { group: 'Focus', hint: 'Share of each focus stop spent racking' }),

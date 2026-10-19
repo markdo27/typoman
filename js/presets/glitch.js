@@ -48,6 +48,17 @@
     name: 'Glitch',
     category: 'Glitch',
     description: 'Seeded signal bursts: RGB split, shearing scan bands, swapped glyphs and dropouts. Flickers on and off.',
+    looks: [
+      { name: 'VHS', bg: { type: 'solid', color: '#0d0d10' }, post: { grain: 0.4, vignette: 0.45 },
+        layer: { font: { family: 'Space Grotesk', weight: 700 }, fill: { type: 'solid', color: '#f2f2f2' },
+          params: { timing: 'loop', mode: 'constant', intensity: 0.45, rate: 12 } } },
+      { name: 'Signal Lost', bg: { type: 'solid', color: '#000000' },
+        layer: { font: { family: 'Rubik Mono One', weight: 400 }, fill: { type: 'solid', color: '#ffffff' },
+          params: { intensity: 0.95, bursts: 5, burstLen: 0.24, rate: 18 } } },
+      { name: 'Acid Print', bg: { type: 'solid', color: '#d4ff3a' },
+        layer: { font: { family: 'Archivo Black', weight: 400 }, fill: { type: 'palette', palette: ['#0b0b0c', '#ff00e5', '#00a3ff'] },
+          params: { split: 'palette', intensity: 0.7, blocks: true } } },
+    ],
     params: [
       ...timing,
       TM.P.select('mode', 'Mode', [['bursts', 'Bursts'], ['constant', 'Constant']], 'bursts', { group: 'Glitch' }),

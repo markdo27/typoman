@@ -26,6 +26,17 @@
     name: 'Pop',
     category: 'Reveal',
     description: 'Letters drop in with squash and stretch, bounce and settle, then crouch and spring away.',
+    looks: [
+      { name: 'Cartoon', bg: { type: 'solid', color: '#f6bf26' },
+        layer: { font: { family: 'Bowlby One', weight: 400 }, fill: { type: 'solid', color: '#ffffff' }, stroke: { mode: 'both', width: 0.05, color: '#111111' },
+          fx: { shadow: { amount: 1, angle: 60, distance: 0.012, color: '#111111' } }, params: { squash: 0.8, bounce: 0.75 } } },
+      { name: 'Candy', bg: { type: 'solid', color: '#ffd6e0' },
+        layer: { font: { family: 'Titan One', weight: 400 }, fill: { type: 'palette', palette: ['#ff3e6c', '#2b0a3d', '#ff9f1c', '#00b38f'] },
+          params: { exit: 'pop', wobble: 12 } } },
+      { name: 'Ink Drop', bg: { type: 'solid', color: '#f4f1ea' },
+        layer: { font: { family: 'Shrikhand', weight: 400 }, type: { case: 'none' }, fill: { type: 'solid', color: '#141414' },
+          params: { height: 3, squash: 0.45, bounce: 0.35 } } },
+    ],
     params: [
       ...TM.P.sequence({ inDur: 0.5, outDur: 0.26, stagger: 0.55, easeIn: 'inQuad', easeOut: 'inCubic' }),
       TM.P.range('height', 'Drop height (em)', 0.3, 6, 0.05, 2, { group: 'Bounce' }),
