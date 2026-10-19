@@ -38,6 +38,7 @@
     'js/presets/orbit.js',
     'js/presets/tunnel.js',
     'js/presets/lens.js',
+    'js/presets/spotlight.js',
   ];
 
   // ── Presets: reveal, glitch & dimensional family (owner: preset team B) ──
