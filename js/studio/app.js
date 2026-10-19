@@ -62,7 +62,7 @@
   Studio.toast = toast;
 
   // ───────────────────────────── remix ─────────────────────────────
-  const REMIX_FONTS = ['Anton', 'Bebas Neue', 'Unbounded', 'Syne', 'Dela Gothic One', 'Rubik Mono One', 'Big Shoulders Display', 'Bricolage Grotesque', 'Fraunces', 'Instrument Serif', 'Archivo Black', 'Climate Crisis', 'Tilt Warp', 'Space Grotesk', 'Inter Tight', 'Bodoni Moda', 'Monoton', 'Six Caps', 'Righteous', 'Major Mono Display'];
+  const REMIX_FONTS = ['Anton', 'Bebas Neue', 'Unbounded', 'Syne', 'Dela Gothic One', 'Rubik Mono One', 'Big Shoulders Display', 'Bricolage Grotesque', 'Fraunces', 'Instrument Serif', 'Archivo Black', 'Climate Crisis', 'Tilt Warp', 'Space Grotesk', 'Inter Tight', 'Bodoni Moda', 'Monoton', 'Six Caps', 'Righteous', 'Major Mono Display', 'Roboto Flex', 'Science Gothic', 'Anybody'];
   function remixLocks() {
     const l = UI.storage.get(REMIX_KEY, null) || {};
     return { look: !!l.look, font: !!l.font, colors: !!l.colors };
@@ -140,6 +140,10 @@
         l.font.family = family;
         const f = TM.fonts.get(family);
         l.font.weight = f && f.max > f.min ? Math.round(f.min + (f.max - f.min) * (0.55 + Math.random() * 0.45)) : 400;
+        // Width-axis families roll a width too, biased away from the extremes.
+        const ax = TM.fonts.axes(family);
+        l.font.width = ax && ax.wdth && Math.random() < 0.6 ? Math.round(ax.wdth[0] + (ax.wdth[1] - ax.wdth[0]) * (0.15 + Math.random() * 0.7)) : 100;
+        l.font.opsz = 'auto';
       }
       l.stroke.mode = Math.random() < 0.12 ? 'outline' : 'none';
       l.fx.echo.count = Math.random() < 0.25 ? 3 + Math.floor(Math.random() * 5) : 0;
