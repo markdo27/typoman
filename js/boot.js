@@ -41,6 +41,7 @@
     'js/presets/spotlight.js',
     'js/presets/ribbon.js',
     'js/presets/magnet.js',
+    'js/presets/kaleido.js',
   ];
 
   // ── Presets: reveal, glitch & dimensional family (owner: preset team B) ──
