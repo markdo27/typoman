@@ -622,7 +622,7 @@
     // Is any curve point inside the ball resting on point i? Near points are checked one by one
     // (a swallowtail starts there), farther ones every few points: between two checks the curve
     // can only dip a fraction of a px into the ball.
-    const r2 = r * r * (1 - 1e-3), bad = new Uint8Array(n), stride = Math.max(1, Math.floor(r / (12 * step)));
+    const r2 = r * r * (1 - 1e-3), bad = new Uint8Array(n), stride = Math.max(1, Math.floor(r / (8 * step)));
     let nbad = 0;
     for (let i = 0, run = 0; i < n; i++) {
       run += mark[i];
