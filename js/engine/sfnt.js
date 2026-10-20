@@ -29,6 +29,42 @@
     return out;
   }
 
+  /**
+   * Inflate a zlib table, fed 1 KB at a time and abandoned as soon as it outgrows the size the
+   * table directory declared: a crafted WOFF can't inflate gigabytes before anything checks.
+   */
+  async function inflateCapped(bytes, limit) {
+    const ds = new DecompressionStream('deflate');
+    const writer = ds.writable.getWriter(), reader = ds.readable.getReader();
+    let stop = false;
+    (async () => {
+      try {
+        for (let i = 0; i < bytes.length && !stop; i += 1024) { await writer.ready; await writer.write(bytes.subarray(i, i + 1024)); }
+        if (!stop) await writer.close();
+      } catch (e) { /* the read side reports it */ }
+    })();
+    const chunks = [];
+    let total = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.length;
+        if (total > limit) throw new Error('table larger than declared');
+        chunks.push(value);
+      }
+    } catch (e) {
+      stop = true;
+      reader.cancel().catch(() => {});
+      writer.abort().catch(() => {});
+      return null;
+    }
+    const out = new Uint8Array(total);
+    let o = 0;
+    for (const c of chunks) { out.set(c, o); o += c.length; }
+    return out.buffer;
+  }
+
   /** WOFF 1: tables are stored zlib-compressed one by one (only the ones we read are inflated). */
   async function woffTables(buffer, want) {
     if (typeof DecompressionStream === 'undefined') return null;
@@ -43,9 +79,8 @@
       if (off + comp > buffer.byteLength || orig > 16e6) continue;
       const raw = new Uint8Array(buffer, off, comp);
       if (comp >= orig) { out[tag] = new DataView(raw.slice().buffer); continue; }
-      const stream = new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate'));
-      const data = await new Response(stream).arrayBuffer();
-      out[tag] = new DataView(data);
+      const data = await inflateCapped(raw, orig);
+      if (data) out[tag] = new DataView(data);
     }
     return out;
   }
