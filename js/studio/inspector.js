@@ -235,6 +235,15 @@
     return m ? (m[1] === 'ss' ? 'Set ' : 'Var ') + +m[2] : tag;
   }
 
+  /** Delete transform key k of the selected layer (the last key stays: turn Animate off instead). */
+  Studio.deleteTransformKey = function (store, k) {
+    const ks = store.layer.transform.keys;
+    if (ks.length <= 1 || !ks[k]) return false;
+    store.updateLayer((l) => { l.transform.keys.splice(k, 1); }, { reason: 'transform', label: 'Delete transform key' });
+    store.setUI({ tkey: Math.max(0, k - 1) });
+    return true;
+  };
+
   /** Show/hide controls from a predicate; returns an updater. */
   const showWhen = (pairs) => () => pairs.forEach(([c, ok]) => { c.el.hidden = !ok(); });
 
@@ -506,6 +515,32 @@
           groups.get(g).push(p);
         });
         const visibleIf = [];
+        let spread = null, spreadKey = '';
+        const drawSpread = () => {
+          if (!spread || !spread.isConnected) return;
+          const P = store.layer.params, idx = store.selected;
+          const n = TM.math.clamp([...String(store.layer.text || '').replace(/\s/g, '')].length, 2, 32);
+          const w = Math.max(60, spread.clientWidth || 180);
+          const k = [w, n, P.stagger, JSON.stringify(P.staggerCurve), P.jitter, store.scene.seed, idx].join('|');
+          if (k === spreadKey) return;
+          spreadKey = k;
+          const dpr = Math.min(2, window.devicePixelRatio || 1);
+          spread.width = Math.round(w * dpr); spread.height = Math.round(22 * dpr);
+          const ctx = spread.getContext('2d');
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.clearRect(0, 0, w, 22);
+          ctx.fillStyle = 'rgba(255,255,255,0.06)';
+          ctx.fillRect(0, 10, w, 2);
+          const seed = (store.scene.seed + idx * 1013) | 0, c = P.staggerCurve, j = P.jitter || 0, st = P.stagger != null ? P.stagger : 0.5;
+          for (let i = 0; i < n; i++) {
+            const r = i / (n - 1);
+            let u = c != null && c !== 'linear' ? TM.math.clamp(TM.ease(c, 'linear')(r), 0, 1) : r;
+            if (j > 0) u = u * (1 - j) + j * TM.rand(seed, Math.round(r * 65536), 5113);
+            const x = 3 + u * st * (w - 6);
+            ctx.fillStyle = 'hsl(' + (232 - r * 200) + ' 90% 70%)';
+            ctx.fillRect(Math.round(x) - 1, 4, 2, 14);
+          }
+        };
         groups.forEach((params, g) => {
           if (groups.size > 1) body.append(h('div', { class: 'sub' }, g));
           params.forEach((p) => {
@@ -520,6 +555,12 @@
             if (p.showIf) visibleIf.push([c, p.showIf]);
             ctl.push(c);
             body.append(c.el);
+            // After Jitter (auto-added with Stagger curve to every shared stagger): where each
+            // item starts, as f.spread places it, so the curve and the jitter read at a glance.
+            if (p.key === 'jitter' && preset.params.some((q) => q.key === 'staggerCurve')) {
+              spread = h('canvas', { class: 'spread-preview', height: 22, 'aria-hidden': 'true', 'data-tip': 'Start times along the order, first to last: the Stagger curve bunches them, Jitter shuffles them' });
+              body.append(h('div', { class: 'ctl spread-row' }, h('span', { class: 'lbl' }, 'Starts'), spread));
+            }
             if (p.key === 'fill' && p.type === 'select' && p.options.some((o) => o[0] === 'axis')) {
               axisTip = h('div', { class: 'axis-tip', role: 'note', hidden: true });
               body.append(axisTip);
@@ -556,9 +597,111 @@
           });
           syncFlash();
           syncAxisTip();
+          drawSpread();
         };
         update();
+        requestAnimationFrame(drawSpread); // the strip needs its laid-out width
         return { update, destroy: offFlash };
+      },
+    },
+    {
+      // Transform keyframes (layer.transform): move, scale, turn and fade the finished layer over
+      // its own loop, on top of any preset. Keys show as diamonds on the layer's timeline lane.
+      id: 'transform',
+      title: 'Transform',
+      order: 25,
+      collapsed: true,
+      build(store, body) {
+        const MAX = 16;
+        const tr = () => store.layer.transform;
+        const sel = () => Math.min(store.ui.tkey | 0, Math.max(0, tr().keys.length - 1));
+        const key = () => tr().keys[sel()];
+        const D = () => store.scene.duration;
+        const here = () => Studio.layerProgress ? Studio.layerProgress(store.layer, store.ui.time, D()) : 0;
+        const enable = C.toggle({
+          label: 'Animate',
+          get: () => !!tr().enabled,
+          set: (v) => store.updateLayer((l) => {
+            // A transform needs a key to be on: start with the layer as it is, at the start.
+            if (v && !l.transform.keys.length) l.transform.keys = [{ t: 0, x: 0, y: 0, scale: 1, rot: 0, opacity: 1, ease: 'smooth' }];
+            l.transform.enabled = v;
+          }, { reason: 'transform', label: v ? 'Transform keys on' : 'Transform keys off' }),
+        });
+        enable.el.setAttribute('data-tip', 'Keyframe position, scale, rotation and opacity over the layer’s loop, on top of its motion');
+        const list = h('div', { class: 'tk-list', role: 'listbox', 'aria-label': 'Transform keys' });
+        const addBtn = h('button', { type: 'button', class: 'btn sm', onclick: () => addKey() }, UI.icon('keyframe'), h('span', null, 'Add key at playhead'));
+        const delBtn = h('button', { type: 'button', class: 'btn sm ghost', onclick: () => Studio.deleteTransformKey(store, sel()) }, UI.icon('trash'), h('span', null, 'Delete key'));
+        const keyBind = (prop, label, toUI = (v) => v, fromUI = (v) => v) => ({
+          get: () => (key() ? toUI(key()[prop]) : 0),
+          set: (v) => store.updateLayer((l) => { const k = l.transform.keys[sel()]; if (k) k[prop] = fromUI(v); }, { coalesce: 'L:tkey.' + prop, reason: 'transform', label: 'Key ' + label }),
+        });
+        const pctUI = (v) => Math.round(v * 1000) / 10, pctIn = (v) => v / 100;
+        const time = C.range({ label: 'At', min: 0, max: 100, step: 0.1, decimals: 1, unit: '%', hint: 'Where in the layer’s pass this key sits; drag its diamond on the timeline too',
+          get: () => (key() ? pctUI(key().t) : 0),
+          set: (v) => store.updateLayer((l) => {
+            const ks = l.transform.keys, k = ks[sel()];
+            if (!k) return;
+            k.t = v / 100;
+            ks.sort((a, b) => a.t - b.t);
+            store.ui.tkey = ks.indexOf(k);
+          }, { coalesce: 'L:tkey.t', reason: 'transform', label: 'Key time' }) });
+        const fx = C.range({ label: 'X', min: -100, max: 100, step: 0.1, decimals: 1, unit: '%', default: 0, hint: 'Offset as a share of the frame width', ...keyBind('x', 'X', pctUI, pctIn) });
+        const fy = C.range({ label: 'Y', min: -100, max: 100, step: 0.1, decimals: 1, unit: '%', default: 0, hint: 'Offset as a share of the frame height', ...keyBind('y', 'Y', pctUI, pctIn) });
+        const sc = C.range({ label: 'Scale', min: 0, max: 4, step: 0.01, default: 1, ...keyBind('scale', 'scale') });
+        const rot = C.range({ label: 'Rotation', min: -360, max: 360, step: 1, unit: '°', default: 0, hint: 'Turns about the layer’s anchor', ...keyBind('rot', 'rotation') });
+        const op = C.range({ label: 'Opacity', min: 0, max: 100, step: 1, unit: '%', default: 100, ...keyBind('opacity', 'opacity', (v) => Math.round(v * 100), (v) => v / 100) });
+        const ease = C.ease({ label: 'Ease to next', ...keyBind('ease', 'ease') });
+        const fields = [time, fx, fy, sc, rot, op, ease];
+        const keyBox = h('div', { class: 'slot tk-fields' }, ...fields.map((c) => c.el));
+        const note = h('p', { class: 'hint small' });
+        body.append(enable.el, h('div', { class: 'tk-head' }, list, h('div', { class: 'row-end tk-actions' }, delBtn, addBtn)), keyBox, note);
+
+        function addKey() {
+          const l = store.layer, ks = l.transform.keys;
+          if (ks.length >= MAX) return;
+          const p = +here().toFixed(4);
+          const same = ks.findIndex((k) => Math.abs(k.t - p) < 0.002);
+          if (same >= 0) { store.setUI({ tkey: same }); return; }
+          const v = Studio.transformAt(l, p); // the values the layer has right now
+          const prev = ks.filter((k) => k.t <= p).pop();
+          store.updateLayer((x) => {
+            const k = Object.assign({ t: p }, v, { ease: prev ? prev.ease : 'smooth' });
+            x.transform.enabled = true;
+            x.transform.keys.push(k);
+            x.transform.keys.sort((a, b) => a.t - b.t);
+            store.ui.tkey = x.transform.keys.indexOf(k);
+          }, { reason: 'transform', label: 'Add transform key' });
+          store.setUI({ tkey: store.ui.tkey });
+        }
+        function renderList() {
+          const ks = tr().keys, cur = sel();
+          list.replaceChildren(...ks.map((k, i) => {
+            const b = h('button', { type: 'button', role: 'option', class: 'tk-chip' + (i === cur ? ' on' : ''), 'aria-selected': i === cur ? 'true' : 'false',
+              'data-tip': 'Key ' + (i + 1) + ' at ' + (k.t * 100).toFixed(1) + '% · the playhead moves there' }, UI.icon('keyframe'), h('span', null, Math.round(k.t * 100) + '%'));
+            b.addEventListener('click', () => {
+              const l = store.layer, T = (l.time.delay + (k.t * D()) / l.time.cycles);
+              store.setUI({ tkey: i, time: l.time.mode === 'once' ? Math.min(T, D() - 1e-3) : TM.math.mod(T, D()) });
+            });
+            return b;
+          }));
+        }
+        let listKey = '';
+        const update = () => {
+          enable.update();
+          const on = tr().enabled, n = tr().keys.length;
+          const lk = tr().keys.map((k) => k.t).join(',') + '|' + sel() + '|' + on;
+          if (lk !== listKey) { listKey = lk; renderList(); }
+          list.hidden = keyBox.hidden = delBtn.hidden = !on || !n;
+          addBtn.disabled = n >= MAX;
+          addBtn.setAttribute('data-tip', n >= MAX ? 'Up to ' + MAX + ' keys' : 'Adds a key with the values the layer has at the playhead');
+          delBtn.disabled = n <= 1;
+          delBtn.setAttribute('data-tip', n <= 1 ? 'Turn Animate off to drop the last key' : 'Delete the selected key');
+          if (on && n) fields.forEach((c) => c.update());
+          note.textContent = !on ? 'Off: the layer moves only by its preset.' : n === 1 ? 'One key holds those values all loop. Move the playhead and add another to animate.' : 'Each key eases into the next; values hold before the first and after the last. Keys follow the layer’s timing.';
+        };
+        update();
+        const offUI = store.on('ui', (p) => { if ('tkey' in p) update(); });
+        return { update, destroy: offUI };
       },
     },
     {
@@ -796,7 +939,7 @@
       this.collapsed = UI.storage.get(COLLAPSE_KEY, {}) || {};
       this.signature = '';
       store.on('change', (d) => this.onChange(d));
-      store.on('select', () => this.rebuild());
+      store.on('select', () => { store.ui.tkey = 0; this.rebuild(); }); // transform key selection is per layer
       this.rebuild();
     }
 

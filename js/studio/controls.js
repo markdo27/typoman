@@ -237,6 +237,8 @@
 
   /** Human name for an easing spec. */
   function easeLabel(spec) {
+    const sp = TM.springParams && TM.springParams(spec);
+    if (sp) return 'Spring ' + sp[0] + ' / ' + sp[1];
     if (typeof spec === 'string') return EASE_LABELS.get(spec) || spec;
     if (Array.isArray(spec)) return 'Custom';
     return 'Smooth';
