@@ -23,6 +23,9 @@
   const IDLE_FPS = 12, HOVER_FPS = 30;
   const BUDGET_MS = 3.5;
   const VIEW_KEY = 'typoman.gallery.view';
+  const VIEWS = ['presets', 'inspiration', 'templates'];
+  // Texts that aren't the user's own: a template keeps its own headline then.
+  const DEFAULT_TEXTS = ['TYPE IN MOTION', 'NEW LAYER', 'AA'];
 
   // ───────────────────────────── looks ─────────────────────────────
   const looks = {
@@ -63,7 +66,10 @@
       this.hover = null;
       this.filter = 'All';
       this.query = '';
-      this.view = UI.storage.get(VIEW_KEY, 'presets') === 'inspiration' ? 'inspiration' : 'presets';
+      this.view = VIEWS.includes(UI.storage.get(VIEW_KEY, 'presets')) ? UI.storage.get(VIEW_KEY, 'presets') : 'presets';
+      // Templates render whole multi-layer scenes at their own aspect, letterboxed into the card.
+      this.tplCanvas = document.createElement('canvas');
+      this.tplThumb = new TM.Renderer(this.tplCanvas, { quality: 'preview' });
       this.scenes = new Map();
       this.queue = [];
       this.busyUntil = 0;
@@ -98,14 +104,14 @@
 
     buildShell() {
       this.tabs = h('div', { class: 'gal-tabs', role: 'tablist', 'aria-label': 'Gallery view' });
-      [['presets', 'Presets'], ['inspiration', 'Inspiration']].forEach(([v, label]) => {
+      [['presets', 'Presets'], ['inspiration', 'Inspiration'], ['templates', 'Templates']].forEach(([v, label]) => {
         const b = h('button', { type: 'button', role: 'tab', 'data-view': v }, label);
         b.addEventListener('click', () => this.setView(v));
         b.addEventListener('keydown', (e) => {
           if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
           e.preventDefault();
           e.stopPropagation();
-          const next = v === 'presets' ? 'inspiration' : 'presets';
+          const next = VIEWS[(VIEWS.indexOf(v) + (e.key === 'ArrowRight' ? 1 : VIEWS.length - 1)) % VIEWS.length];
           this.setView(next);
           this.tabs.querySelector(`[data-view="${next}"]`).focus();
         });
@@ -151,7 +157,8 @@
 
     build() {
       const ids = TM.presetOrder.slice();
-      const insp = this.view === 'inspiration';
+      const insp = this.view === 'inspiration', tpl = this.view === 'templates';
+      const tpls = TM.Templates ? TM.Templates.list() : [];
       const all = looks.all();
       this.tabs.querySelectorAll('[role="tab"]').forEach((b) => {
         const on = b.dataset.view === this.view;
@@ -159,9 +166,10 @@
         b.setAttribute('aria-selected', on ? 'true' : 'false');
         b.tabIndex = on ? 0 : -1;
         if (b.dataset.view === 'inspiration') b.replaceChildren(...['Inspiration', all.length ? h('span', { class: 'chip-n' }, String(all.length)) : null].filter(Boolean));
+        if (b.dataset.view === 'templates') { b.hidden = !tpls.length; b.replaceChildren('Templates', h('span', { class: 'chip-n' }, String(tpls.length))); }
       });
-      this.search.placeholder = insp ? 'Search looks' : 'Search presets';
-      const pool = insp ? all.map((e) => TM.presets[e.presetId].category) : ids.map((id) => TM.presets[id].category);
+      this.search.placeholder = tpl ? 'Search templates' : insp ? 'Search looks' : 'Search presets';
+      const pool = tpl ? [] : insp ? all.map((e) => TM.presets[e.presetId].category) : ids.map((id) => TM.presets[id].category);
       const cats = TM.CATEGORIES.filter((c) => pool.includes(c)).concat([...new Set(pool)].filter((c) => !TM.CATEGORIES.includes(c)));
       const chipList = ['All'].concat(cats);
       if (!chipList.includes(this.filter)) this.filter = 'All';
@@ -180,7 +188,14 @@
       this.renderLooks(false);
 
       let shown = 0;
-      if (insp) {
+      if (tpl) {
+        const q = this.query;
+        const list = tpls.filter((t) => !q || (t.name + ' ' + t.description + ' ' + t.aspect).toLowerCase().includes(q));
+        shown = list.length;
+        this.grid.className = 'cards templates';
+        this.grid.setAttribute('aria-label', 'Starter templates');
+        this.grid.replaceChildren(...list.map((t, i) => this.templateCard(t, i === 0)));
+      } else if (insp) {
         const list = all.filter((e) => this.matchesLook(e));
         shown = list.length;
         this.grid.className = 'cards inspiration';
@@ -206,9 +221,9 @@
         }
       }
       const count = document.getElementById('presetCount');
-      if (count) count.textContent = insp ? String(all.length) : shown === ids.length ? String(ids.length) : shown + ' / ' + ids.length;
+      if (count) count.textContent = tpl ? String(tpls.length) : insp ? String(all.length) : shown === ids.length ? String(ids.length) : shown + ' / ' + ids.length;
       const title = document.getElementById('presetsTitle');
-      if (title) title.textContent = insp ? 'Inspiration' : 'Presets';
+      if (title) title.textContent = tpl ? 'Templates' : insp ? 'Inspiration' : 'Presets';
       this.markActive();
       this.scheduleThumbs(0);
     }
@@ -223,7 +238,7 @@
       });
       const cur = this.store.layer.preset;
       this._looksFor = cur;
-      const mine = this.view === 'inspiration' ? [] : looks.of(cur).map((look, index) => ({ presetId: cur, index, look }));
+      const mine = this.view !== 'presets' ? [] : looks.of(cur).map((look, index) => ({ presetId: cur, index, look }));
       this.looksEl.hidden = !mine.length;
       if (!mine.length) { this.looksEl.replaceChildren(); return; }
       const grid = h('div', { class: 'looks-grid', role: 'listbox', 'aria-label': 'Looks for ' + TM.presets[cur].name });
@@ -275,6 +290,46 @@
       card.addEventListener('click', () => this.applyLook(e.presetId, e.index));
       this.register(key, card, cv);
       return card;
+    }
+
+    /** A starter template: the whole scene, at its own aspect, with your text as its headline. */
+    templateCard(t, tabbable) {
+      const key = 'tpl:' + t.id;
+      const { cv, wrap } = this.thumbEl(key);
+      wrap.append(h('span', { class: 'card-aspect', 'aria-hidden': 'true' }, t.aspect));
+      const card = h('div', {
+        class: 'card tpl-card', role: 'option', tabindex: tabbable ? '0' : '-1', 'data-id': key,
+        'aria-label': 'Template ' + t.name + ', ' + t.aspect + ', ' + t.duration + ' second loop. ' + t.description + ' Replaces the whole scene.',
+        'data-tip': t.description,
+      }, wrap, h('span', { class: 'card-name' }, t.name), h('span', { class: 'card-cat' }, t.aspect + ' · ' + t.duration + ' s'));
+      card.addEventListener('click', () => this.applyTemplate(t.id));
+      this.register(key, card, cv);
+      return card;
+    }
+
+    /** The text a template's headline should take: the selected layer's, unless it's a default. */
+    templateText() {
+      const t = String(this.store.layer.text || '').trim();
+      const flat = t.replace(/\s+/g, ' ').toUpperCase();
+      return !t || DEFAULT_TEXTS.includes(flat) ? '' : t;
+    }
+
+    /** Replace the scene with a template: one undo step, your text in its headline. */
+    applyTemplate(id) {
+      const meta = (TM.Templates ? TM.Templates.list() : []).find((t) => t.id === id);
+      const text = this.templateText();
+      const scene = meta && TM.Templates.build(id, text ? { text } : {});
+      if (!scene) return;
+      const store = this.store;
+      store.autoFont = {};
+      store.replace(scene, { label: 'Template: ' + meta.name });
+      // Select the headline (the layer that took the text), else the top layer.
+      const head = scene.layers.findIndex((l) => text && l.text === text);
+      store.select(head >= 0 ? head : scene.layers.length - 1);
+      TM.prepare(store.scene);
+      UI.announce('Template ' + meta.name + ' applied');
+      if (Studio.toast) Studio.toast('Template: ' + meta.name + (text ? ' · with your text' : '') + ' · ' + UI.plural(scene.layers.length, 'layer'), 'info', 4200, { label: 'Undo', run: () => store.undo() });
+      if (Studio.app && Studio.app.stage) Studio.app.stage.flash();
     }
 
     apply(id) {
@@ -363,6 +418,12 @@
 
     /** Thumbnail scene: the selected layer alone at 16:9, with a preset or a look applied. */
     sceneFor(key) {
+      if (key.startsWith('tpl:')) {
+        const text = this.templateText();
+        const s = TM.Templates.build(key.slice(4), text ? { text } : {});
+        if (s) TM.prepare(s, { extras: 'background' });
+        return s;
+      }
       if (key.startsWith('look:')) {
         const [, presetId, idx] = key.split(':');
         const look = looks.of(presetId)[+idx];
@@ -434,6 +495,8 @@
       if (!entry) return;
       let scene = this.scenes.get(id);
       if (!scene) { scene = this.sceneFor(id); this.scenes.set(id, scene); }
+      if (!scene) return;
+      if (id.startsWith('tpl:')) return this.drawTemplate(entry, scene, t);
       this.thumb.setScene(scene);
       try {
         const time = t != null ? t : this.bestTime(entry, scene);
@@ -442,6 +505,20 @@
       const ctx = entry.cv.getContext('2d');
       ctx.clearRect(0, 0, TW, TH);
       ctx.drawImage(this.thumbCanvas, 0, 0);
+    }
+
+    /** Template thumbnail: the scene at its aspect, centred in the 16:9 card. */
+    drawTemplate(entry, scene, t) {
+      const ar = scene.size.w / scene.size.h;
+      const w = ar >= TW / TH ? TW : Math.round(TH * ar), hh = ar >= TW / TH ? Math.round(TW / ar) : TH;
+      if (this.tplCanvas.width !== w || this.tplCanvas.height !== hh) this.tplThumb.resize(w, hh);
+      this.tplThumb.setScene(scene);
+      // Sub-layers play once inside the loop, so the still sits where most of them are on.
+      try { this.tplThumb.render(t != null ? (performance.now() / 1000) % scene.duration : scene.duration * 0.55); } catch (e) { return; }
+      const ctx = entry.cv.getContext('2d');
+      ctx.fillStyle = '#0c0c10';
+      ctx.fillRect(0, 0, TW, TH);
+      ctx.drawImage(this.tplCanvas, Math.round((TW - w) / 2), Math.round((TH - hh) / 2));
     }
 
     tick(now) {

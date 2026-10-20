@@ -837,3 +837,12 @@ body.clean .clean-hint.show, body.clean .clean-hint:hover, body.clean .clean-hin
 .feat-chip:hover { color: var(--text); border-color: var(--text-3); }
 .feat-chip.on { background: var(--text); color: #000; border-color: var(--text); }
 .feat-chip:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 1px; }
+
+/* Layers: track matte badge on a row, and the toolbar button's on state */
+.matte-badge { display: inline-flex; align-items: center; gap: 4px; margin-right: 6px; vertical-align: -2px; }
+.matte-badge svg { width: 12px; height: 12px; flex: none; }
+.matte-badge.matted { color: var(--accent-fg); }
+.layer-tools .icon-btn.on { color: var(--accent-fg); background: rgba(91, 114, 255, 0.14); }
+
+/* Gallery: starter templates (their own aspect, letterboxed in the card) */
+.card-aspect { position: absolute; right: 6px; bottom: 6px; font: 600 9.5px/1 var(--mono); letter-spacing: .04em; color: #fff; background: rgba(0, 0, 0, 0.55); padding: 3px 5px; border-radius: 4px; pointer-events: none; }
