@@ -37,6 +37,8 @@
       this._font = null;
       this._path = undefined;
       this._noise = null;
+      this._ox = 0;
+      this._oy = 0;
       const L = this.layer;
       // Slant the font's own slnt axis already drew (typeset) isn't skewed again.
       this.slant = ((L.type.slant || 0) - (L.font.autoSlnt || 0)) * DEG;
@@ -172,13 +174,14 @@
       const det = a * d - b * c;
       if (!pat || !det) return this.colorOf(g);
       // A pattern lives in user space, so anchor it with M⁻¹·G (G maps the strip to frame px).
+      // Inside drawInto(ctx, fn, { x, y }) the target's pixel (0, 0) is frame (x, y): shift G.
       const ia = d / det, ib = -b / det, ic = -c / det, id = a / det;
       const ie = (c * f - d * e) / det, iff = (b * e - a * f) / det;
-      const m = G.m;
+      const m = G.m, m4 = m[4] - this._ox, m5 = m[5] - this._oy;
       pat.setTransform({
         a: ia * m[0] + ic * m[1], b: ib * m[0] + id * m[1],
         c: ia * m[2] + ic * m[3], d: ib * m[2] + id * m[3],
-        e: ia * m[4] + ic * m[5] + ie, f: ib * m[4] + id * m[5] + iff,
+        e: ia * m4 + ic * m5 + ie, f: ib * m4 + id * m5 + iff,
       });
       return pat;
     }
@@ -324,11 +327,17 @@
       return this.renderer._scratch(id, Math.max(1, Math.round(w)), Math.max(1, Math.round(h)));
     }
 
-    /** Run fn with f.ctx temporarily pointing at another context (e.g. a buffer), so drawGlyph targets it. */
-    drawInto(ctx, fn) {
-      const prev = this.ctx, prevFont = this._font;
+    /**
+     * Run fn with f.ctx temporarily pointing at another context (e.g. a buffer), so drawGlyph
+     * targets it. opts { x, y }: where the target's pixel (0, 0) sits in the frame, for a small
+     * buffer placed over part of it, so gradient fills stay aligned with the rest of the frame.
+     */
+    drawInto(ctx, fn, opts) {
+      const prev = this.ctx, prevFont = this._font, px = this._ox, py = this._oy;
       this.ctx = ctx;
       this._font = null;
+      this._ox = px + ((opts && opts.x) || 0);
+      this._oy = py + ((opts && opts.y) || 0);
       ctx.lineJoin = 'round';
       ctx.miterLimit = 2;
       if (KERN) ctx.fontKerning = 'normal';
@@ -337,6 +346,8 @@
       try { fn(ctx); } finally {
         this.ctx = prev;
         this._font = prevFont;
+        this._ox = px;
+        this._oy = py;
       }
     }
   }

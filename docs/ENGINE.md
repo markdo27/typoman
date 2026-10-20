@@ -238,8 +238,10 @@ RTL lines are marked `line.rtl`. Presets animate them word by word.
 - `f.rand`, `f.srand`, `f.noise` and `f.loopNoise(salt, freq)`.
 - `f.buffer(id, w?, h?)` returns a cleared scratch `{ canvas, ctx }`, pooled per id. It is
   frame-sized by default; pass a small size for blur pyramids or glyph stamps.
-  `f.drawInto(ctx, fn)` points `f.ctx` (and so `drawGlyph`) at another context while
-  `fn` runs; this is how Glitch composes its channel and slice passes.
+  `f.drawInto(ctx, fn, { x, y }?)` points `f.ctx` (and so `drawGlyph`) at another context while
+  `fn` runs; this is how Glitch composes its channel and slice passes. For a small buffer
+  placed over part of the frame, pass where its pixel (0, 0) sits in the frame, so gradient
+  fills stay aligned with the rest of the frame.
 
 **Paths.** `path.length` and `path.closed`. `path.at(s)` returns
 `{ x, y, angle, tx, ty, nx, ny, inside }` (it wraps when closed and extrapolates past the
