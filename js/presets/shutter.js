@@ -13,7 +13,6 @@
 (function (TM) {
   'use strict';
   const K = TM.MotionKit;
-  const { clamp } = TM.math;
 
   const makeCanvas = (w, h) => TM.MotionKit.canvas(w, h);
 
@@ -99,14 +98,14 @@
       try {
         f.drawInto(pctx, () => {
           for (const g of L.glyphs) f.drawGlyph(g, { x: f.cx + g.cx - x0, y: f.cy + g.cy - y0 });
-        });
+        }, { x: x0, y: y0 }); // the plate's pixel (0, 0) is frame (x0, y0): gradients stay put
       } finally { f.alpha = alpha; }
 
       // Each slat: its strip of the plate, squeezed by cos θ about its centre line.
       const ctx = f.ctx;
       f.identity();
       for (const sl of slats) {
-        const a = start + sl.j * t, b = a + t;
+        const a = start + sl.j * t;
         const k = Math.abs(sl.c);
         const widen = 1 + P.persp * 0.08 * Math.abs(sl.sn);
         let dx, dy, dw, dh, sx, sy, sw2, sh2;

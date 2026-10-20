@@ -121,9 +121,17 @@
         ctx.globalAlpha = 1;
         ctx.clearRect(0, 0, c.width, c.height);
         if (!items.length) return;
+        // A gradient fill can't follow a buffer drawn at 1/kk scale (drawInto only shifts), so
+        // each blurred letter takes the gradient's colour where it sits in the frame: once blurred,
+        // a letter-sized gradient step is invisible, and the sharp letters keep the real one.
+        const grad = f.layer.fill.type === 'gradient' && !f.colorOverride;
         f.drawInto(ctx, () => {
-          for (const it of items) f.drawGlyph(it.g, { x: (it.x - x0) / kk, y: (it.y - y0) / kk, scale: it.scale / kk, alpha: it.alpha });
-        });
+          for (const it of items) {
+            const o = { x: (it.x - x0) / kk, y: (it.y - y0) / kk, scale: it.scale / kk, alpha: it.alpha };
+            if (grad) o.color = f.colorOf({ vi: it.g.vi, cx: it.x - f.cx, cy: it.y - f.cy });
+            f.drawGlyph(it.g, o);
+          }
+        }, { x: x0, y: y0 });
       });
       // Fold the pyramid back up: 1/32 → 1/16 → ⅛ → ¼ → ½, each a 2× bilinear upscale drawn over the next level.
       for (let lv = levels.length - 1; lv >= 1; lv--) {
