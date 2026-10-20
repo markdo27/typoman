@@ -11,7 +11,8 @@
  *
  * For each: it renders (canvas inside the player's shadow root, not blank), a paused frame at a
  * fixed time matches a fresh TM.Renderer pixel for pixel, autoplay / loop / controls behave as
- * documented, and nothing logs a console error. Plus: offscreen pause and reduced motion.
+ * documented, and nothing logs a console error. Plus: transparent embeds, a damaged embed code,
+ * offscreen pause, resizing, a 2× screen and prefers-reduced-motion.
  *
  *   npm run test:embed
  *   PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node tests/embed.mjs
@@ -333,8 +334,30 @@ window.__send = (id, msg) => document.getElementById(id).contentWindow.postMessa
     await page.waitForFunction((n) => document.getElementById('loop')._renderer.stats.renders > n + 5, r1.n, { timeout: 5000 }).catch(() => {});
     const r2 = await page.evaluate(() => document.getElementById('loop')._renderer.stats.renders);
     R.check('offscreen: resumes when scrolled back', r2 > r1.n + 5, `${r2 - r1.n} renders`);
+
+    // Resizing the element re-sizes the canvas backing (ResizeObserver) and redraws the frame.
+    await page.evaluate(() => { const el = document.getElementById('still'); el.style.width = '480px'; el.style.height = '270px'; });
+    await page.waitForFunction(() => document.getElementById('still').shadowRoot.querySelector('canvas').width === 480, null, { timeout: WAIT }).catch(() => {});
+    await frames(page, 2);
+    const resized = await playerState(page, 'still');
+    R.check('resize: the canvas backing follows the element', resized.canvas.w === 480 && resized.canvas.h === 270, JSON.stringify(resized.canvas));
+    await matches('resize', page, 'still', 0);
     noErrors('web component', mark);
     await page.close();
+
+    // HiDPI: a 640×360 element on a 2× screen draws a 1280×720 backing, same composition.
+    const hdMark = log.mark();
+    const hdCtx = await browser.newContext({ viewport: { width: 1340, height: 800 }, deviceScaleFactor: 2 });
+    await hdCtx.addInitScript(INIT);
+    const hd = log.watch(await hdCtx.newPage(), 'hidpi');
+    await hd.goto(host.url('/player.html'), { waitUntil: 'load' });
+    await hd.waitForFunction(() => window.__qaEvents.some((e) => e.id === 'still' && e.type === 'ready'), null, { timeout: 30000 });
+    await frames(hd, 2);
+    const hs = await playerState(hd, 'still');
+    R.check('devicePixelRatio 2: canvas backing is 2× the element', hs.canvas && hs.canvas.w === 2 * W && hs.canvas.h === 2 * H, JSON.stringify(hs.canvas));
+    await matches('devicePixelRatio 2', hd, 'still', T_START);
+    noErrors('hidpi', hdMark);
+    await hdCtx.close();
 
     // Reduced motion: autoplay is suppressed; the still shows with a play button.
     const rmMark = log.mark();
