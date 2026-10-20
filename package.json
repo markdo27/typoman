@@ -6,9 +6,10 @@
   "license": "MIT",
   "scripts": {
     "start": "npx --yes http-server . -p 8080 -c-1",
-    "test": "npm run test:smoke && npm run test:export",
+    "test": "npm run test:smoke && npm run test:export && npm run test:embed",
     "test:smoke": "node tests/smoke.mjs",
-    "test:export": "node tests/export.mjs"
+    "test:export": "node tests/export.mjs",
+    "test:embed": "node tests/embed.mjs"
   },
   "devDependencies": {
     "playwright": "1.56.1"
