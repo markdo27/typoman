@@ -204,7 +204,7 @@
         if ('editPath' in patch) document.body.classList.toggle('editing-path', !!store.ui.editPath);
         if ('guides' in patch) document.body.classList.toggle('show-guides', !!store.ui.guides);
         if ('clean' in patch) this.onClean();
-        if ('editPath' in patch || 'guides' in patch) this.syncStagebar();
+        if ('editPath' in patch || 'guides' in patch || 'pathTool' in patch) this.syncStagebar();
         if ('playing' in patch && store.ui.playing) this.stage.dirty = true;
       });
       store.on('change', () => this.syncStagebar());
@@ -473,8 +473,17 @@
       const g = $('#guidesBtn');
       g.classList.toggle('on', !!store.ui.guides);
       g.setAttribute('aria-pressed', store.ui.guides ? 'true' : 'false');
-      if (store.ui.editPath) this.setHint('Editing path · drag points · double-click to add · Del removes · Esc to finish', 'editing');
+      if (store.ui.editPath) this.setHint(this.pathHint(store.ui.pathTool), 'editing');
       else if (!this.stage.board.classList.contains('loading')) this.setHint('');
+    }
+
+    /** What the active path tool does, in the words of the device (click / tap, keys or not). */
+    pathHint(tool) {
+      const touch = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+      if (UI.isPhone()) return { pen: 'Pen · tap for corners, drag for curves', draw: 'Freehand · drag to draw' }[tool] || 'Editing path · drag the points';
+      if (tool === 'pen') return touch ? 'Pen · tap for corners, drag for curves · Finish when done' : 'Pen · click for corners, drag for curves · Enter to finish';
+      if (tool === 'draw') return 'Freehand · drag to draw a path' + (touch ? '' : ' · Esc to finish');
+      return touch ? 'Editing path · drag points · double-tap the curve to add one' : 'Editing path · drag points · double-click to add · Del removes · Esc to finish';
     }
 
     formatMenu(anchor) {
