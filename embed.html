@@ -11,10 +11,13 @@
 <!--
   Chromeless TYPOMAN player for iframes.
   embed.html#c=<TM.Scene.encode(scene)>&autoplay=0|1&loop=0|1&controls=0|1&bg=transparent|RRGGBB&fit=contain|cover&start=<s>
+             &text=<layer 1 text>&text2=…&text6=…&trigger=hover
   Defaults: autoplay=1, loop=1, controls=0, fit=contain. The scene is validated by TM.Scene.normalize().
+  text replaces a layer's text ("\n" breaks the line); trigger=hover plays while the pointer is over it.
   loop=0 plays once and stops on the last frame with no overlay; with controls=1 the corner button
   turns into Replay.
-  postMessage API (from the embedding page): { typoman: 'play' | 'pause' | 'toggle' | 'seek', time }.
+  postMessage API (from the embedding page): { typoman: 'play' | 'pause' | 'toggle' | 'seek', time },
+  and { typoman: 'progress', value: 0..1 } to scrub (e.g. from the parent page's scroll position).
   Events posted to the parent: { typoman: 'ready' | 'play' | 'pause' | 'ended' | 'error', duration }.
 -->
 <style>
@@ -60,6 +63,10 @@
     attr('fit', p.fit === 'cover' ? 'cover' : 'contain');
     attr('bg', bg === 'transparent' ? 'transparent' : /^[0-9a-f]{6}$/i.test(bg) ? '#' + bg : null);
     attr('start', p.start && isFinite(+p.start) ? String(Math.max(0, +p.start)) : null);
+    attr('trigger', p.trigger === 'hover' ? 'hover' : null);
+    ['text', 'text2', 'text3', 'text4', 'text5', 'text6'].forEach(function (k, i) {
+      attr(i ? 'text-' + (i + 1) : 'text', typeof p[k] === 'string' ? p[k].slice(0, 400) : null);
+    });
     var scene = p.c || p.s || '';
     if (scene !== current) {
       current = scene;
@@ -81,6 +88,10 @@
     else if (d.typoman === 'pause') player.pause();
     else if (d.typoman === 'toggle') player.toggle();
     else if (d.typoman === 'seek' && isFinite(+d.time)) player.currentTime = +d.time;
+    else if (d.typoman === 'progress' && isFinite(+d.value) && isFinite(player.duration)) {
+      if (!player.paused) player.pause();
+      player.currentTime = Math.min(1, Math.max(0, +d.value)) * Math.max(0, player.duration - 1 / 60);
+    }
   });
 
   window.addEventListener('hashchange', apply);

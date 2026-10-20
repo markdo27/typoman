@@ -66,6 +66,23 @@ No install, no account, no build step. It's static files on GitHub Pages.
 
 The studio's **Embed** button generates both snippets with your scene filled in.
 
+An embed is live type, not a video, so it can do things a video can't:
+
+```html
+<!-- One design, different copy on every page (\n breaks the line) -->
+<typoman-player scene="…" autoplay loop text="Spring sale\n−40%"></typoman-player>
+
+<!-- Scroll-scrubbed: the animation follows the page's scroll -->
+<typoman-player scene="…" scrub="scroll"></typoman-player>
+
+<!-- Plays while the pointer is over it (a tap toggles on touch screens) -->
+<typoman-player scene="…" trigger="hover" loop></typoman-player>
+```
+
+`text-2` … `text-6` set the other layers. The iframe takes `&text=…&trigger=hover` in its
+URL, and a `{ typoman: 'progress', value: 0..1 }` message lets the parent page scrub it. With
+reduced motion turned on, every embed shows a still and a play button.
+
 ## Keyboard
 
 | Key | Action |
