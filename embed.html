@@ -12,6 +12,8 @@
   Chromeless TYPOMAN player for iframes.
   embed.html#c=<TM.Scene.encode(scene)>&autoplay=0|1&loop=0|1&controls=0|1&bg=transparent|RRGGBB&fit=contain|cover&start=<s>
   Defaults: autoplay=1, loop=1, controls=0, fit=contain. The scene is validated by TM.Scene.normalize().
+  loop=0 plays once and stops on the last frame with no overlay; with controls=1 the corner button
+  turns into Replay.
   postMessage API (from the embedding page): { typoman: 'play' | 'pause' | 'toggle' | 'seek', time }.
   Events posted to the parent: { typoman: 'ready' | 'play' | 'pause' | 'ended' | 'error', duration }.
 -->

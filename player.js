@@ -13,6 +13,9 @@
  * standalone export) are reused. Each player renders into its own shadow-DOM canvas, sized by a
  * ResizeObserver, pauses while offscreen or in a hidden tab, and honours prefers-reduced-motion
  * by showing a still with a play button. Scenes are sanitised by TM.Scene.normalize().
+ *
+ * Without `loop` the player plays once and stops on its last frame, like a hero should: no
+ * overlay. With `controls`, its corner button turns into Replay (clicking the stage replays too).
  */
 (function () {
   'use strict';
@@ -100,6 +103,7 @@
   }
   const PLAY = 'M8 5.2v13.6L19 12z';
   const PAUSE = 'M7 5h3.6v14H7zM13.4 5H17v14h-3.6z';
+  const REPLAY = 'M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5v4h4'; // drawn as a line (class "line")
 
   const CSS = [
     ':host{display:block;position:relative;overflow:hidden;contain:content;aspect-ratio:16/9;-webkit-tap-highlight-color:transparent;font:13px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}',
@@ -108,6 +112,7 @@
     'canvas{position:absolute;display:block;left:0;top:0;width:100%;height:100%}',
     '.btn{appearance:none;-webkit-appearance:none;border:0;margin:0;padding:0;cursor:pointer;color:#fff;background:rgba(12,12,16,.64);display:grid;place-items:center;border-radius:999px;box-shadow:0 4px 18px rgba(0,0,0,.3)}',
     '.btn svg{width:46%;height:46%;fill:currentColor}',
+    '.btn svg.line{fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}',
     '.btn:hover{background:rgba(12,12,16,.82)}',
     '.btn:focus-visible{outline:2px solid #5b72ff;outline-offset:2px}',
     '.big{position:absolute;left:50%;top:50%;width:clamp(40px,13%,72px);height:clamp(40px,13%,72px);transform:translate(-50%,-50%)}',
@@ -166,8 +171,10 @@
       this._mini.addEventListener('click', (e) => { e.stopPropagation(); this.toggle(); });
       this._wrap.addEventListener('click', () => {
         if (!this._ready) return;
+        const controls = this.hasAttribute('controls');
+        if (this._ended && !controls) return; // a play-once hero holds its last frame
         if (!this._playing) this.play();
-        else if (this.hasAttribute('controls')) this.pause();
+        else if (controls) this.pause();
       });
     }
 
@@ -214,6 +221,7 @@
       this._time = Math.max(0, num(t, 0));
       this._started = true;
       this._ended = false;
+      this._sync(); // e.g. a seek after the end: the buttons leave their "ended" state
       this._invalidate();
     }
     play() {
@@ -417,16 +425,21 @@
         // Reduced motion: never animate unless the viewer asked for it.
         if (reduced && this._playing && !this._userPlayed) this._playing = false;
       }
-      this._big.hidden = !this._ready || this._playing;
-      this._mini.hidden = !this._ready || !this.hasAttribute('controls');
-      const label = this._playing ? 'Pause animation' : 'Play animation';
-      if (this._mini.getAttribute('aria-label') !== label) {
-        this._mini.setAttribute('aria-label', label);
-        this._miniIcon.firstChild.setAttribute('d', this._playing ? PAUSE : PLAY);
+      const controls = this.hasAttribute('controls');
+      // The big button invites a first play (no autoplay, reduced motion) or a resume. A
+      // play-once scene that has ended just holds its last frame: no overlay on the headline.
+      this._big.hidden = !this._ready || this._playing || this._ended;
+      this._mini.hidden = !this._ready || !controls;
+      const state = this._playing ? 'pause' : this._ended ? 'replay' : 'play';
+      if (this._miniState !== state) {
+        this._miniState = state;
+        this._mini.setAttribute('aria-label', state === 'pause' ? 'Pause animation' : state === 'replay' ? 'Replay animation' : 'Play animation');
+        this._miniIcon.firstChild.setAttribute('d', state === 'pause' ? PAUSE : state === 'replay' ? REPLAY : PLAY);
+        this._miniIcon.classList.toggle('line', state === 'replay');
       }
       this._wrap.classList.toggle('paused', !this._playing);
       this._mini.classList.toggle('paused', !this._playing);
-      this._wrap.style.cursor = this._ready && (!this._playing || this.hasAttribute('controls')) ? 'pointer' : '';
+      this._wrap.style.cursor = this._ready && (controls || (!this._playing && !this._ended)) ? 'pointer' : '';
       kick();
     }
 
