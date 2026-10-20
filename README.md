@@ -14,7 +14,7 @@ No install, no account, no build step. It's static files on GitHub Pages.
   dimensional and generative: from Path Flow, Ribbon and Orbit to Split Flap, Focus Pull,
   Kaleido and Melt. Every preset staggers by letter, word or line, with easing curves you
   can edit (signature curves, springs, or your own cubic-bézier).
-- **Start from a look.** 82 curated looks (colour, font, motion and timing, designed per
+- **Start from a look.** 87 curated looks (colour, font, motion and timing, designed per
   preset) are one click away in the **Inspiration** view. Applying a look never touches
   your text, and **Remix** mixes curated looks with fresh rolls.
 - **Shape the motion path.** Pick one of 22 shapes (wave, arc, circle, spiral, infinity,
@@ -119,7 +119,7 @@ across eight criteria, scored by a three-judge jury each round. See
 |---|---|
 | 0: original V3 demo | 3.5 |
 | 1: rebuilt studio | 7.0 |
-| 2: more presets, looks, pen tool, path keyframes, layer timing, width & optical size | jury pending |
+| 2: more presets, looks, pen tool, path keyframes, layer timing, width & optical size | **7.5** |
 
 ## License
 

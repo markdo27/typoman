@@ -112,6 +112,15 @@
   TM.FONTS = FONTS;
   TM.FONT_CATEGORIES = ['Condensed', 'Grotesk', 'Display', 'Serif', 'Mono', 'Script', 'Custom'];
 
+  // Waits on the network are bounded, so a hung fonts.googleapis.com can't stall a render: an
+  // export proceeds with a noted fallback, an embed shows its first frame (it asks for a short
+  // wait). Only the *wait* stops; loads carry on, and a late font re-renders through onChange.
+  // A request is abandoned only once it is clearly hung (HUNG_MS).
+  const WAIT_MS = 15000, HUNG_MS = 30000;
+  const timeout = (promise, ms, value) => {
+    let timer;
+    return Promise.race([promise, new Promise((r) => { timer = setTimeout(() => r(value), ms); })]).finally(() => clearTimeout(timer));
+  };
   const linkPromises = new Map(); // css2 query → Promise
   const facePromises = new Map(); // "family|weight" → Promise
   let version = 0;
@@ -212,12 +221,37 @@
     const wdth = widthFor(f, font.width);
     const opsz = opszFor(f, font.opsz, designPx);
     const name = `${f.family} ~${wdth != null ? 'w' + wdth : ''}${opsz != null ? 'o' + opsz : ''}`;
-    if (!instances.has(name)) {
-      instances.set(name, { ...f, family: name, base: f, instance: true, wdth, opsz, ready: null });
+    const inst = instances.get(name);
+    if (inst) inst.used = now();
+    else {
+      instances.set(name, { ...f, family: name, base: f, instance: true, wdth, opsz, ready: null, faces: [], used: now() });
       ensure(name, font.weight);
     }
+    // resolve() runs every frame, so it also does the (cheap, throttled) cleanup.
+    if (instances.size > MAX_INSTANCES && now() - lastEvict > 1000) evict();
     return name;
   }
+
+  // Instances cost ~145 KB of renderer memory each and editing creates them freely (a width
+  // drag, cycling Stack's fonts), so the ones unused for a few seconds are released, oldest
+  // first, beyond a soft cap. Anything drawn every frame stays: resolve() and fontString()
+  // refresh `used`. A released instance is simply re-created on its next use.
+  const MAX_INSTANCES = 64, IDLE_MS = 5000;
+  const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  let lastEvict = -Infinity;
+  function evict() {
+    const t = (lastEvict = now());
+    const idle = [...instances.values()].filter((x) => t - x.used > IDLE_MS).sort((a, b) => a.used - b.used);
+    for (const x of idle) {
+      if (instances.size <= MAX_INSTANCES * 0.75) break;
+      instances.delete(x.family);
+      x.faces.forEach((face) => { try { document.fonts.delete(face); } catch (e) { /* already gone */ } });
+      for (const k of [...facePromises.keys()]) if (k.startsWith(x.family + '|')) facePromises.delete(k);
+    }
+  }
+
+  // Families whose variable axes couldn't be applied (font CSS unreadable): exports report it.
+  const axesFailed = new Set();
 
   /** The values of `axis` a preset sweeping it should draw with (resolve() each with width: v). */
   function ladder(family, axis = 'wdth') {
@@ -250,8 +284,11 @@
   function baseFaces(f) {
     if (blockPromises.has(f.family)) return blockPromises.get(f.family);
     const query = 'family=' + familyQuery(f);
-    const p = (typeof fetch === 'function' ? fetch(`https://fonts.googleapis.com/css2?${query}&display=swap`, { credentials: 'omit' }) : Promise.reject(new Error('no fetch')))
+    const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), HUNG_MS) : 0;
+    const p = (typeof fetch === 'function' ? fetch(`https://fonts.googleapis.com/css2?${query}&display=swap`, { credentials: 'omit', signal: ctl ? ctl.signal : undefined }) : Promise.reject(new Error('no fetch')))
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))))
+      .finally(() => clearTimeout(timer))
       .then((css) => {
         if (!linkPromises.has(query)) {
           const style = document.createElement('style');
@@ -259,11 +296,15 @@
           document.head.appendChild(style);
           linkPromises.set(query, Promise.resolve());
         }
+        axesFailed.delete(f.family);
         return parseFaces(css);
       })
       .catch((e) => {
-        // Blocked (CSP connect-src, offline): the base family still loads through a <link>.
+        // Blocked (CSP connect-src, offline, hung): the base family still loads through a
+        // <link>; width and optical size can't be pinned, and exports say so. Retry later.
         console.warn('[TM.fonts] variable axes unavailable for', f.family, '-', e.message);
+        axesFailed.add(f.family);
+        setTimeout(() => { if (blockPromises.get(f.family) === p) blockPromises.delete(f.family); }, 30000);
         return injectStylesheet([f.family]).then(() => []);
       });
     blockPromises.set(f.family, p);
@@ -280,7 +321,10 @@
         else if (b.stretch) d.stretch = b.stretch;
         if (inst.opsz != null) d.variationSettings = `"opsz" ${inst.opsz}`;
         try {
-          document.fonts.add(new FontFace(inst.family, `url(${b.src}) format("woff2")`, d));
+          const face = new FontFace(inst.family, `url(${b.src}) format("woff2")`, d);
+          if (!instances.has(inst.family)) return; // released while its CSS was loading
+          document.fonts.add(face);
+          inst.faces.push(face);
         } catch (e) {
           console.warn('[TM.fonts] could not add instance face', inst.family, e.message);
         }
@@ -309,6 +353,8 @@
 
   /** Canvas font shorthand. Weight is clamped to what the family supports. */
   function fontString(family, weight, sizePx) {
+    const inst = instances.get(family);
+    if (inst) inst.used = now();
     return `${clampWeight(family, weight)} ${Math.max(0.5, sizePx).toFixed(2)}px ${cssFamily(family)}`;
   }
 
@@ -316,24 +362,25 @@
    * Make sure `family` (a catalogue family or an instance from resolve) at `weight` is ready for
    * canvas rendering. `text` also loads the subsets it needs (e.g. Cyrillic). Never rejects.
    */
-  function ensure(family, weight = 400, text) {
+  function ensure(family, weight = 400, text, waitMs = WAIT_MS) {
     const f = get(family);
     if (!f || !hasDOM || !document.fonts) return Promise.resolve(false);
     const w = clampWeight(family, weight);
     const sample = text ? 'AaBb09' + String(text).slice(0, 200) : 'AaBb09';
     const key = `${family}|${f.variable ? 'var' : w}|${sample}`;
-    if (facePromises.has(key)) return facePromises.get(key);
+    if (facePromises.has(key)) return timeout(facePromises.get(key), waitMs, false);
     const ready = f.custom ? Promise.resolve() : f.instance ? addInstanceFaces(f) : injectStylesheet([family]);
-    const promise = ready
+    const loaded = ready
       .then(() => document.fonts.load(`${w} 64px ${cssFamily(family)}`, sample))
       .then((faces) => {
         bump();
-        return faces.length > 0;
+        return faces.length > 0 && !(f.instance && axesFailed.has(f.base.family));
       })
       .catch(() => false);
     if (facePromises.size > 600) facePromises.clear();
-    facePromises.set(key, promise);
-    return promise;
+    facePromises.set(key, loaded);
+    // Callers wait at most waitMs (false = not ready yet); the load itself carries on.
+    return timeout(loaded, waitMs, false);
   }
 
   /** Load the stylesheet for every catalogue family (used by the font picker previews). */
@@ -370,6 +417,10 @@
     clampWeight,
     resolve,
     ladder,
+    /** True when a family's width / optical size couldn't be applied (its font CSS was unreadable). */
+    axesFailed: (family) => axesFailed.has(TM.fonts.baseOf(family)),
+    /** How many variable-axis instances are registered (tests, diagnostics). */
+    instanceCount: () => instances.size,
     /** The catalogue family behind an instance name (or the family itself). */
     baseOf: (family) => { const f = get(family); return f && f.base ? f.base.family : family; },
     /** The width / optical size a font draws at (null when the family has no such axis). */

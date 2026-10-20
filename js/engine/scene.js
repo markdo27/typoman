@@ -69,9 +69,12 @@
 
   // ───────────────────────────── helpers ─────────────────────────────
   const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+  // Keys that would reach an object's prototype; JSON.parse makes "__proto__" an own key.
+  const UNSAFE_KEY = new Set(['__proto__', 'constructor', 'prototype']);
   function merge(base, over) {
     if (!isObj(over)) return base;
     for (const k of Object.keys(over)) {
+      if (UNSAFE_KEY.has(k)) continue;
       if (isObj(base[k]) && isObj(over[k])) merge(base[k], over[k]);
       else base[k] = over[k];
     }
@@ -172,7 +175,8 @@
   function normalizeLayer(src, index, aspect) {
     const d = defaultLayer();
     const s = isObj(src) ? src : {};
-    const presetId = TM.getPreset(s.preset) ? s.preset : TM.getPreset(d.preset) ? d.preset : TM.presetOrder[0] || d.preset;
+    // typeof first: TM.getPreset(['wave']) would coerce the array to the key 'wave'.
+    const presetId = typeof s.preset === 'string' && TM.getPreset(s.preset) ? s.preset : TM.getPreset(d.preset) ? d.preset : TM.presetOrder[0] || d.preset;
     const preset = TM.getPreset(presetId);
     const family = TM.fonts.has(s.font && s.font.family) ? s.font.family : d.font.family;
     const f = s.fill || {}, st = s.stroke || {}, ty = s.type || {}, fx = s.fx || {};
@@ -264,12 +268,15 @@
       if (seen.has(l.id)) l.id = 'l' + (i + 1) + '-' + seen.size;
       seen.add(l.id);
     });
+    const fps = FPS_OPTIONS.includes(+s.fps) ? +s.fps : d.fps;
     return {
       v: 1,
       name: cleanText(s.name, d.name).replace(/\n/g, ' ').slice(0, 60) || d.name,
       size: { w, h },
-      duration: num(s.duration, d.duration, 0.5, 60),
-      fps: FPS_OPTIONS.includes(+s.fps) ? +s.fps : d.fps,
+      // A whole number of frames per loop: exports render round(duration × fps) frames, so a
+      // fractional count would restart the motion a fraction of a frame early (a hitch).
+      duration: Math.round(num(s.duration, d.duration, 0.5, 60) * fps) / fps,
+      fps,
       seed: int(s.seed, d.seed, 0, 999999),
       bg: {
         type: pick(bg.type, ['solid', 'linear', 'radial', 'transparent'], d.bg.type),
@@ -340,19 +347,37 @@
 
   /** Run bytes through a (de)compression stream, aborting once the output passes `limit` bytes. */
   async function pipe(bytes, stream, limit = Infinity) {
-    const reader = new Blob([bytes]).stream().pipeThrough(stream).getReader();
+    // Feed the transform 1 KB at a time while reading its output: a whole-input write would let
+    // a deflate bomb inflate (to 100+ MB) inside one transform step, before the cap is checked.
+    // Deflate expands at most ~1032:1, so peak memory stays near `limit` plus ~1 MB.
+    const writer = stream.writable.getWriter();
+    const reader = stream.readable.getReader();
     const chunks = [];
-    let total = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.length;
-      if (total > limit) {
-        reader.cancel().catch(() => {});
-        throw new Error('Scene too large');
+    let total = 0, stop = false;
+    const feed = (async () => {
+      try {
+        for (let i = 0; i < bytes.length && !stop; i += 1024) {
+          await writer.ready;
+          await writer.write(bytes.subarray(i, i + 1024));
+        }
+        if (!stop) await writer.close();
+      } catch (e) { /* the read side reports the failure */ }
+    })();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.length;
+        if (total > limit) throw new Error('Scene too large');
+        chunks.push(value);
       }
-      chunks.push(value);
+    } catch (e) {
+      stop = true;
+      reader.cancel().catch(() => {});
+      writer.abort().catch(() => {});
+      throw e;
     }
+    await feed;
     const out = new Uint8Array(total);
     let o = 0;
     for (const c of chunks) { out.set(c, o); o += c.length; }
