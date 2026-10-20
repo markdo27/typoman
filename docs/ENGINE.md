@@ -404,3 +404,25 @@ inlines the engine and only the presets the scene uses.
 - A `'save'` event.
 - `TM.Studio.toast(msg, kind, ms, { label, run })` adds an action button.
 - The `'view'` event also carries `{ zoom, fit }`.
+- `store.setPreset(id)` applies `preset.prefers` while the layer has the untouched default font (or a
+  font a preset swapped in, unchanged since) and returns `{ font: { from, to } }` when it did;
+  `store.autoFont` remembers those swaps per layer. `store.ui.tkey` is the selected transform key.
+- `TM.Studio.safety`: the studio's photosensitivity checks over `TM.Safety.flashes`.
+  `check(scene, { signal })` resolves the result (cached by scene JSON; one check at a time, a
+  check of another scene aborts the running one; callers share an in-flight check), `cached(scene)`,
+  `latest`, `pending`, `watch(store)` (background checks ~1.5 s after the last edit) and
+  `onChange(fn)`. `TM.Studio.flashNote(box, scene, advice, signal)` fills a dialog's `.tm-info` box
+  (checking → pass or warning naming the worst second); `TM.Studio.flashWords(result)` words a
+  failing result. `flashRate` / `flashRisks` / `flashText` read the optional `preset.flashes()`
+  first guess; `FLASH_LIMIT` is 3.
+- `TM.Studio.layerProgress(layer, t, D)` (a layer's loop progress at scene time t) and
+  `TM.Studio.transformAt(layer, p)` (its transform-key values there, as the renderer draws them);
+  `TM.Studio.deleteTransformKey(store, k)`.
+- `TM.Studio.springOf(spec)` gives `[stiffness, damping]` for custom and named springs;
+  `TM.Studio.easeLabel(spec)` names custom springs ("Spring 400 / 5").
+- `TM.Studio.laneParts(layer, D)` (timeline lane segments, shared with the phone Timing chart),
+  `TM.Studio.layerChip(layer, size)`, `TM.Studio.timingNote(layer, short)`,
+  `app.stage.renderStill()` (a full-quality frame when paused on a draft preview),
+  `app.layers.tick()`, and `TM.Studio.customFonts.screen(list, scene)` (vets a project file's fonts).
+- Gallery: a Templates view (`gallery.applyTemplate(id)`: one undoable `store.replace`, the user's
+  text in the headline unless it is a default) next to Presets and Inspiration.
