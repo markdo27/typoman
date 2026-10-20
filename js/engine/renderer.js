@@ -490,7 +490,8 @@
 
     _setupFor(layer, preset, f) {
       if (!preset.setup) return null;
-      const key = JSON.stringify([layer.text, layer.font, layer.type, layer.params, layer.path, layer.stroke, layer.fx, f.W, f.H, f.seed, TM.fonts.version()]);
+      const sc = this.scene;
+      const key = JSON.stringify([layer.text, layer.font, layer.type, layer.params, layer.path, layer.stroke, layer.fx, layer.fill, layer.anchor, layer.time, sc.bg, sc.duration, f.W, f.H, f.seed, TM.fonts.version()]);
       const hit = this._setup.get(layer.id);
       if (hit && hit.key === key && hit.preset === preset.id) return hit.value;
       const value = preset.setup(f);
