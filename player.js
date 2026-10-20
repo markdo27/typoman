@@ -31,6 +31,9 @@
   })();
   const MAX_PIXELS = 1920 * 1080;
   const SVG = 'http://www.w3.org/2000/svg';
+  // Longest wait for fonts before the first frame: after it the player draws with fallback
+  // faces, and each font that arrives later re-renders it (TM.fonts.onChange, below).
+  const FONT_WAIT_MS = 3000;
 
   // ───────────────────────────── engine (loaded once) ─────────────────────────────
   let engine = null;
@@ -288,7 +291,13 @@
       if (token !== this._token) return;
       this._base = scene;
       this._apply();
-      await TM.prepare(this._scene);
+      // A hung or slow font host must not leave a blank box: wait at most FONT_WAIT_MS, and let
+      // a preset's extra instances (Stack's width ladder) load in the background instead of
+      // holding back frame 0. The race guards engines whose prepare() ignores the options.
+      await Promise.race([
+        TM.prepare(this._scene, { timeout: FONT_WAIT_MS, extras: 'background' }),
+        new Promise(function (r) { setTimeout(r, FONT_WAIT_MS + 500); }),
+      ]);
       if (token !== this._token) return;
       this._loading = false;
       this._err.hidden = true;
