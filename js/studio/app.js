@@ -205,6 +205,52 @@
     });
   }
 
+  /**
+   * Back to the studio as it first opens: forget the saved scene and every remembered setting
+   * (Remix locks, panels, gallery view, export choices, recent colours, the tour), then reload
+   * clean. Uploaded fonts are kept unless the user ticks the box. Asks first; nothing is lost
+   * before the user confirms.
+   */
+  function confirmReset(store) {
+    let fonts = false;
+    UI.modal({
+      title: 'Reset the studio?',
+      className: 'confirm-reset',
+      build(body, api) {
+        const box = h('input', { type: 'checkbox', id: 'reset-fonts', onchange: (e) => { fonts = e.target.checked; } });
+        const go = h('button', { type: 'button', class: 'btn primary', onclick: () => { api.close(); resetStudio(store, fonts); } }, 'Reset studio');
+        const cancel = h('button', { type: 'button', class: 'btn ghost', autofocus: true, onclick: () => api.close() }, 'Cancel');
+        body.append(
+          h('p', null, 'This returns TYPOMAN to how it looks the first time you open it: the starter scene, default panels and settings, and the welcome tour. Your current scene and its undo history are cleared.'),
+          h('p', { class: 'hint' }, 'Save a project file first if you want to keep this scene.'),
+          h('label', { class: 'check', for: 'reset-fonts' }, box, ' Also remove my uploaded fonts from this browser'),
+          h('div', { class: 'modal-foot' }, cancel, go));
+      },
+    });
+  }
+
+  async function resetStudio(store, fonts) {
+    // Stop autosave (it also runs on pagehide) so the old scene can't be written back.
+    clearTimeout(store._saveTimer);
+    store.save = () => true;
+    try {
+      const ls = window.localStorage;
+      Object.keys(ls).filter((k) => k === 'typoman' || k.startsWith('typoman.')).forEach((k) => ls.removeItem(k));
+    } catch (e) { /* storage blocked: the reload still starts fresh */ }
+    try { sessionStorage.clear(); } catch (e) { /* ignore */ }
+    if (fonts && window.indexedDB) {
+      await new Promise((done) => {
+        try {
+          const req = indexedDB.deleteDatabase('typoman');
+          req.onsuccess = req.onerror = req.onblocked = () => done();
+        } catch (e) { done(); }
+        setTimeout(done, 1500);
+      });
+    }
+    // Drop any #c= scene from the address too, so the reload opens the starter scene.
+    location.replace(location.pathname + location.search.replace(/([?&])c=[^&]*/g, '$1'));
+  }
+
   function download(blob, name) {
     const a = h('a', { href: URL.createObjectURL(blob), download: name });
     document.body.append(a);
@@ -408,6 +454,8 @@
         { label: 'Copy remix link', icon: 'link', run: () => this.copyLink() },
         { label: 'Keyboard shortcuts', icon: 'keyboard', kbd: '?', run: () => Studio.showShortcuts() },
         { label: 'Replay the tour', icon: 'sparkle', run: () => Studio.onboarding && Studio.onboarding.start() },
+        '-',
+        { label: 'Reset studio…', icon: 'reset', hint: 'Back to how it first opens', run: () => confirmReset(this.store) },
       ], { label: 'Project', width: 260 });
     }
 
