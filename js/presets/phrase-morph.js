@@ -35,7 +35,7 @@
     fit: false,
     params: [
       TM.P.range('hold', 'Hold', 0, 0.85, 0.01, 0.45, { group: 'Timing', hint: 'Share of each phrase’s time spent still' }),
-      TM.P.range('stagger', 'Stagger', 0, 0.9, 0.01, 0.35, { group: 'Timing' }),
+      TM.P.stagger(0.35),
       TM.P.ease('ease', 'Ease', 'smooth', { group: 'Timing' }),
       TM.P.range('arc', 'Arc', -1, 1, 0.01, 0.35, { group: 'Motion', hint: 'Moving letters hop over (or dip under) their path, in cap heights' }),
       TM.P.select('dissolve', 'Others', [['fade', 'Fade'], ['drop', 'Drop'], ['scale', 'Scale'], ['blur', 'Blur']], 'drop', { group: 'Motion' }),
@@ -79,9 +79,9 @@
       const pairs = C.links[k];
       const fromA = new Map(pairs.map(([i, j]) => [i, j]));
       const toB = new Set(pairs.map(([, j]) => j));
-      // Stagger along the destination line, left to right.
+      // Stagger along the destination line, left to right (through the stagger curve and jitter).
       const total = Math.max(1, B.length - 1);
-      const st = (j) => clamp((raw - (j / total) * P.stagger) / Math.max(1e-4, 1 - P.stagger));
+      const st = (j) => f.stagger(raw, j / total, P.stagger);
       const capH = C.capH;
       const out = (it, u) => dissolve(f, it.g, f.cx + it.g.cx, f.cy + it.g.cy, 1 - u, P, capH, false);
       const inn = (it, u) => dissolve(f, it.g, f.cx + it.g.cx, f.cy + it.g.cy, u, P, capH, true);

@@ -138,6 +138,18 @@ const results = await page.evaluate(async () => {
       onceHolds: hashAt(once, plain.duration * 3) === hashAt(once, plain.duration * 5),
       onceWaits: hashAt(once, 0.2) === hashAt(once, 0.4),
       lookApplies: looked.bg.color === '#111111' && looked.layers[0].font.family === 'Fraunces' && looked.layers[0].params.tilt === 20 && looked.layers[0].text === plain.layers[0].text,
+      // Stagger distribution: a curve or jitter changes when letters start; a custom spring
+      // survives normalisation and settles at 1.
+      spread: (() => {
+        const t = plain.duration * 0.15;
+        const curved = sceneFor('rise', (l) => { l.params.staggerCurve = 'inCubic'; });
+        const jittered = sceneFor('rise', (l) => { l.params.jitter = 0.6; });
+        const sprung = sceneFor('rise', (l) => { l.params.easeIn = 'spring(300,6)'; });
+        const sp = TM.ease('spring(300,6)');
+        return hashAt(curved, t) !== hashAt(plain, t) && hashAt(jittered, t) !== hashAt(plain, t) &&
+          curved.layers[0].params.staggerCurve === 'inCubic' && sprung.layers[0].params.easeIn === 'spring(300,6)' &&
+          Math.abs(sp(0.999) - 1) < 0.01 && TM.getPreset('typewriter').params.every((q) => q.key !== 'jitter');
+      })(),
       // The same look over two different prior states gives the same style (no inherited blur,
       // glow or extrude), and a hand-drawn path survives it.
       lookReproducible: (() => {
@@ -261,7 +273,8 @@ const linesOk = lb.length >= 2 && Math.min(lb[0], lb[1]) / Math.max(lb[0], lb[1]
 console.log(`multi-line font integrity: ${linesOk ? 'ok' : 'FAIL'} (line ink heights ${lb.slice(0, 2).join(' / ')} px)`);
 if (!linesOk) fails.push('second line lost its font (font cache vs save/restore)');
 const tmg = results.timing;
-console.log(`layer timing: delay ${tmg.delayShifts ? 'ok' : 'FAIL'} · once/hold ${tmg.onceHolds && tmg.onceWaits ? 'ok' : 'FAIL'} · looks ${tmg.lookApplies ? 'ok' : 'FAIL'} · looks reproducible + keep drawn paths ${tmg.lookReproducible ? 'ok' : 'FAIL'}`);
+console.log(`layer timing: delay ${tmg.delayShifts ? 'ok' : 'FAIL'} · once/hold ${tmg.onceHolds && tmg.onceWaits ? 'ok' : 'FAIL'} · looks ${tmg.lookApplies ? 'ok' : 'FAIL'} · looks reproducible + keep drawn paths ${tmg.lookReproducible ? 'ok' : 'FAIL'} · stagger curve, jitter + springs ${tmg.spread ? 'ok' : 'FAIL'}`);
+if (!tmg.spread) fails.push('stagger curve / jitter / custom spring broken');
 if (!tmg.lookReproducible) fails.push('applyLook depends on prior state or replaced a drawn path');
 if (!tmg.delayShifts || !tmg.onceHolds || !tmg.onceWaits) fails.push('layer timing semantics broken');
 if (!tmg.lookApplies) fails.push('applyLook failed');

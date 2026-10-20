@@ -161,6 +161,15 @@ standard in→hold→out timing set: `timing, inDur, outDur, stagger, order, eas
 Any param may take `group: 'Name'` (inspector sub-heading), `hint` and
 `showIf: { otherKey: value | [values] }`.
 
+**Stagger distribution.** A preset whose params include the shared `TM.P.stagger()` control
+(every `TM.P.sequence()` preset) also gets `staggerCurve` (an ease spec, default `'linear'`)
+and `jitter` (0..1) right after it, added by `registerPreset`. `f.stagger` passes each rank
+through `f.spread(r)`: the curve shapes how start times spread along the order (ease-in bunches
+the first letters, ease-out the last), and jitter mixes in a seeded random rank (1 shuffles the
+order). Items sharing a rank keep sharing it. A preset that times items itself can call
+`f.spread(r)` on its own ranks (Phrase Morph does); one that redefines or drops `stagger`
+(Fly In, Typewriter) gets neither control.
+
 ### The frame `f`
 
 | field | meaning |
@@ -188,8 +197,9 @@ RTL lines are marked `line.rtl`. Presets animate them word by word.
 - `f.drawGlyph(g, { x, y, rot, sx, sy, scale, skew, alpha, color, weight, ch, anchor:'center'|'baseline', size, family, w })`
   centres the glyph on (x, y) by default.
 - `f.drawLine(line, opts)` draws a whole line as one shaped run.
-- `f.rank(g, order)` gives 0..1, `f.stagger(p, r, amount)` gives 0..1, and `f.seq(g)`
-  gives `{ kin, kout, vin, vout, visible, r }`.
+- `f.rank(g, order)` gives 0..1, `f.stagger(p, r, amount)` gives 0..1 (through
+  `f.spread(r)`, the stagger curve and jitter), and `f.seq(g)` gives
+  `{ kin, kout, vin, vout, visible, r }`.
 - `f.colorOf(g)`, `f.font(weight)` and `f.ease(spec)`.
 - **Fills paint glyph ink only.** `drawGlyph` and `drawLine` fill with `f.textPaint(g)`. That
   is the layer colour, or, for gradient fills, a pattern that keeps the gradient fixed in
@@ -229,9 +239,14 @@ loop progress at which shape i is reached.
 - Lay glyph centres out on `path.offset(centreOffset).spaced(capH / 2)` and letters stop
   colliding on concave curves and at sharp corners (Path Flow does this).
 
-**Easing.** `TM.ease(spec)` takes a name from `TM.EASINGS` or a cubic-bézier
-`[x1, y1, x2, y2]`. Signature curves include `glide`, `smooth`, `snap`, `overshoot`,
-`anticipate`, `spring`, `springSoft` and `springSnappy`.
+**Easing.** `TM.ease(spec)` takes a name from `TM.EASINGS`, a cubic-bézier
+`[x1, y1, x2, y2]`, or a custom spring `'spring(stiffness, damping)'` (stiffness 10–1000,
+damping 1–100, unit mass; `TM.springSpec(k, c)` builds one and `TM.springParams(spec)` reads
+it back). Springs are normalised to end at exactly 1. A loose spring that would still be
+ringing at the end of its window is sped up until it settles (under 0.5% by t = 1), and
+over-damped springs creep in on their slow pole. Signature curves include `glide`, `smooth`,
+`snap`, `overshoot`, `anticipate`, `spring` (= `spring(180,12)`), `springSoft` and
+`springSnappy`. Any ease param, path key or transform key accepts all three forms.
 
 ## Rendering API
 

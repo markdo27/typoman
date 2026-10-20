@@ -81,7 +81,20 @@
     /** Local 0..1 progress of an item at rank r when global progress is p (window shrinks with stagger). */
     stagger(p, r, stagger = this.params.stagger || 0) {
       const d = Math.max(1e-4, 1 - stagger);
-      return clamp((p - r * stagger) / d);
+      return clamp((p - this.spread(r) * stagger) / d);
+    }
+
+    /**
+     * A rank as the layer's stagger distribution places it: through the Stagger curve (an ease
+     * spec), then mixed with a seeded random rank by Jitter. Items sharing a rank (a word in
+     * 'words' order) keep sharing it. f.stagger applies it; presets timing items another way
+     * can call it on their own ranks.
+     */
+    spread(r) {
+      const P = this.params, c = P.staggerCurve, j = P.jitter || 0;
+      let u = c != null && c !== 'linear' ? clamp(TM.ease(c, 'linear')(r)) : r;
+      if (j > 0) u = u * (1 - j) + j * this.rand(Math.round(r * 65536), 5113);
+      return u;
     }
 
     /**
