@@ -296,7 +296,8 @@
         TM.fonts.ensure(fam, l.font.weight).then((ok) => {
           if (ok || this.warnedFonts.has(fam)) return;
           this.warnedFonts.add(fam);
-          toast('Couldn’t load ' + fam + '. Check your connection; a fallback font is showing for now.', 'error', 6000);
+          // Say what failed, not what the user did: only an offline browser is "your connection".
+          toast(navigator.onLine === false ? 'You’re offline, so ' + fam + ' can’t load yet; a fallback font is shown.' : 'Couldn’t load ' + fam + ' from Google Fonts, so a fallback font is shown.', 'error', 6000);
         });
       });
     }
