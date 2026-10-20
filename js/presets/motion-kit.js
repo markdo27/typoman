@@ -16,7 +16,7 @@
   const { clamp } = TM.math;
   // Glyphs that usually have a counter (Hebrew ם ס ט; Arabic ه ة ف ق و م ص ض ط ظ). An RTL word
   // is one cluster, rasterised whole, so its hole is found inside the word.
-  const CANDIDATE = /[ABDOPQRabdegopq04689@&%#טםסةص-ظفقمهو]/u;
+  const CANDIDATE = /[ABDOPQRabdegopq04689@&%#\u05D8\u05DD\u05E1\u0629\u0635-\u0638\u0641\u0642\u0645\u0647\u0648]/u;
 
   function windows(P) {
     if (P.timing === 'loop') return { inDur: 0, outDur: 0 };

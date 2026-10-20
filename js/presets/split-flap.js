@@ -27,7 +27,7 @@
   const DRUM_STEP = 0.95; // slot style: angular pitch between characters on the drum (rad)
 
   // ── word cells (lines with right-to-left script) ──
-  const RTL = /[֐-ࣿיִ-﷿ﹰ-﻿]/u; // the ranges the layout marks line.rtl by
+  const RTL = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/u; // the ranges the layout marks line.rtl by
   const HEBREW = 'אבגדהוזחטיכלמנסעפצקרשת';
   const ALPHABETS = ['ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz', '0123456789', HEBREW, 'ابتثجحخدذرزسشصضطظعغفقكلمنهوي'];
   // Letter variants that roll from their base letter: Hebrew final forms, Arabic hamza/alef forms.

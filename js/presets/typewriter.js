@@ -21,7 +21,7 @@
   const IDLE = 0.5;    // seconds after a key before the caret starts blinking
   const PUNCT = /[.,!?;:…)\]]/u;
   const DEG = Math.PI / 180;
-  const RTL = /[֐-ࣿיִ-﷿ﹰ-﻿]/u; // the ranges the layout marks line.rtl by
+  const RTL = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/u; // the ranges the layout marks line.rtl by
 
   /** x such that fn(x) = y, for an easing that rises from 0 to 1 (bisection). */
   function invert(fn, y) {
