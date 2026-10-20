@@ -194,7 +194,7 @@
         const hole = counterOf(fam, wt, g.ch, em);
         if (!hole) continue;
         const sc = Math.sqrt(hole.area) / L.capH - Math.abs(g.cx - u.cx) / Math.max(1, u.w);
-        if (sc > score) { score = sc; best = { x: g.cx + hole.dx, y: g.cy + hole.dy, cw: hole.cw, ch: hole.ch }; }
+        if (sc > score) { score = sc; best = { x: g.cx + hole.dx, y: g.cy + hole.dy, cw: hole.cw, ch: hole.ch, glyphs: [gi] }; }
       }
     }
     if (best) return best;
@@ -202,11 +202,11 @@
     for (let j = 0; j + 1 < gs.length; j++) {
       const a = gs[j], b = gs[j + 1], gap = b.x - a.x - a.w, gx = (a.x + a.w + b.x) / 2;
       const sc = gap / em - Math.abs(gx - u.cx) / Math.max(1, u.w);
-      if (sc > score) { score = sc; best = { x: gx, y: (a.cy + b.cy) / 2, cw: Math.max(em * 0.04, gap + em * 0.04), ch: Infinity }; }
+      if (sc > score) { score = sc; best = { x: gx, y: (a.cy + b.cy) / 2, cw: Math.max(em * 0.04, gap + em * 0.04), ch: Infinity, glyphs: [a.i, b.i] }; }
     }
     if (best) return best;
     const g = gs[gs.length - 1] || { x: u.cx, w: 0, cy: u.cy };
-    return { x: g.x + g.w + em * 0.3, y: g.cy, cw: em * 0.5, ch: Infinity };
+    return { x: g.x + g.w + em * 0.3, y: g.cy, cw: em * 0.5, ch: Infinity, glyphs: g.i != null ? [g.i] : [] };
   }
 
   // ── photosensitivity (WCAG 2.3.1, ITU-R BT.1702; the reading TM.Safety.flashes measures) ──

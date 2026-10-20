@@ -8,6 +8,10 @@
  *  - Zoom is exponential (one constant ratio per word), so every step feels the same speed;
  *    each step eases out of and into a reading pause, and an optional twist rolls the camera.
  *  - Words cycle, and the camera position wraps after the last word, so it loops forever.
+ *  - Photosensitivity: unless "Allow fast flashing" is on, once the camera leaves reading size
+ *    only the letter it dives through keeps full contrast; the others fade to a ghost too faint
+ *    to flash (MotionKit.ghostAlpha), and the next word stays a ghost until it nears reading
+ *    size. Stroke after stroke sweeping a field is what TM.Safety counts as flashing.
  */
 (function (TM) {
   'use strict';
@@ -35,7 +39,7 @@
       TM.P.range('twist', 'Twist', -1, 1, 0.01, 0.25, { group: 'Flight' }),
       TM.P.toggle('counters', 'Aim for counters', true, { group: 'Flight', hint: 'Dive through the hole of an O, D, A… when the word has one' }),
       TM.P.range('fill', 'Fill the frame', 0, 1, 0.01, 0.55, { group: 'Framing' }),
-      TM.P.toggle('fastFlash', 'Allow fast flashing', false, { group: 'Safety', hint: 'Each dive sweeps big strokes across the frame. Off keeps it to 3 flashes per second or fewer (WCAG 2.3.1) by merging words into fewer stops when they come fast' }),
+      TM.P.toggle('fastFlash', 'Allow fast flashing', false, { group: 'Safety', hint: 'Each dive sweeps big strokes across the frame. Off keeps it to 3 flashes per second or fewer (WCAG 2.3.1): letters other than the one the camera dives through fade to a safe ghost, and words that come too fast merge into fewer stops' }),
     ],
 
     setup(f) {
@@ -45,7 +49,7 @@
     render(f) {
       const P = f.params, L = f.layout, C = f.cache;
       if (!C || !C.base.length) return;
-      const units = planFor(C, f), N = units.length;
+      const plan = planFor(C, f), units = plan.units, N = units.length;
       const at = (m) => units[((m % N) + N) % N];
       // Camera position in "words": a reading pause, then an eased dive to the next word.
       const x = f.p * N, k = Math.floor(x), u = fract(x);
@@ -74,7 +78,11 @@
         // Past reading size the camera aims for the portal, which slides to the frame centre.
         const aim = smoothstep(1, Math.pow(R, 0.4), s);
         const px = unit.cx + (unit.portal.x - unit.cx) * aim, py = unit.cy + (unit.portal.y - unit.cy) * aim;
-        items.push({ unit, S, alpha, px, py, rot: P.twist * d * 0.35, d });
+        // Flicker guard: past reading size only the portal letter keeps its contrast (the rest
+        // would sweep stroke after stroke across the frame); a word growing out of the hole
+        // stays a ghost until it nears reading size.
+        const ghost = plan.ghost < 1 ? (s > 1 ? smoothstep(1, Math.pow(R, 0.15), s) : 1 - smoothstep(Math.pow(prev, -0.2), Math.pow(prev, -0.04), s)) : 0;
+        items.push({ unit, S, alpha, px, py, rot: P.twist * d * 0.35, d, ghost: ghost > 0 ? 1 + (plan.ghost - 1) * ghost : 1, out: s > 1 });
       }
       items.sort((a, b) => a.d - b.d); // far (small) first: near letters occlude what is behind them
 
@@ -86,7 +94,8 @@
           const X = f.cx + ox * cs - oy * sn, Y = f.cy + ox * sn + oy * cs;
           const rad = (g.w + L.capH) * it.S * 0.75; // skip letters that are wholly off-frame
           if (X + rad < 0 || X - rad > f.W || Y + rad < 0 || Y - rad > f.H) continue;
-          f.drawGlyph(g, { x: X, y: Y, rot: it.rot, scale: it.S, alpha: it.alpha });
+          const keep = it.out && it.unit.portal.glyphs.includes(gi);
+          f.drawGlyph(g, { x: X, y: Y, rot: it.rot, scale: it.S, alpha: it.alpha * (keep ? 1 : it.ghost) });
         }
       }
     },
@@ -104,13 +113,17 @@
   }
 
   // ── photosensitivity ──
-  // A dive sweeps the portal letter's strokes across the frame: measured, up to two or three
-  // large luminance transitions in its bright phase (see MotionKit.FLASH), so a dive is modelled
-  // as three. Low-contrast type cannot flash.
-  const flashy = (layer, bg) => K.swing(0.5, K.inkColors(layer), K.backdrops(bg));
+  // Measured with TM.Safety (10° fields): with the flicker guard on (only the portal letter keeps
+  // its contrast past reading size), a dive still sweeps that letter's strokes across the frame,
+  // up to six large transitions in a field, bunched in the middle of the dive. A dive is modelled
+  // as those six. Unguarded (fast flashing allowed), every letter's strokes sweep: up to
+  // fourteen. Low-contrast type cannot flash.
+  const DIVE = [0.25, 0.3, 0.35, 0.4, 0.45, 0.5];
+  const DIVE_FAST = Array.from({ length: 14 }, (_, i) => 0.25 + i * 0.025);
+  const flashy = (layer, bg) => K.swing(1, K.inkColors(layer), K.backdrops(bg));
   function diveTimes(M, P, pass) {
     const out = [];
-    for (let m = 0; m < M; m++) for (const q of [0.4, 0.6, 0.8]) out.push(((m + P.hold + (1 - P.hold) * q) / M) * pass);
+    for (let m = 0; m < M; m++) for (const q of (P.fastFlash ? DIVE_FAST : DIVE)) out.push(((m + P.hold + (1 - P.hold) * q) / M) * pass);
     return out;
   }
   /** How many stops the camera makes: one per unit or, with fast flashing off, as many as keep the dives under three flashes a second. */
@@ -124,11 +137,11 @@
   /** The units the camera stops at, for this frame's colours, background and timing (none of them re-run setup), framed for the dive. */
   function planFor(C, f) {
     const key = JSON.stringify([f.layer.fill, f.bg, f.layer.time, f.dur]);
-    let units = C.plans.get(key);
-    if (!units) {
+    let plan = C.plans.get(key);
+    if (!plan) {
       const P = f.params, L = f.layout;
       const { M } = stops(P, C.base.length, K.passOf(f), flashy(f.layer, f.bg));
-      units = group(L, C.base, M).map((u) => {
+      const units = group(L, C.base, M).map((u) => {
         const h = u.h || L.capH;
         const fit = Math.min((f.W * 0.8) / Math.max(1, u.w), (f.H * 0.5) / Math.max(1, h), 4);
         // Portal: the biggest counter near the middle, else a gap between letters.
@@ -136,12 +149,14 @@
         const scale = 1 + (fit - 1) * P.fill;
         // Zoom for the dive: just enough for the hole (an ellipse) to contain the whole frame.
         const need = Math.hypot(f.W / (portal.cw * scale), portal.ch === Infinity ? 0 : f.H / (portal.ch * scale));
-        return Object.assign(u, { scale, portal, ratio: clamp(need * 1.4 * P.dive, 6, 200) }); // counters aren't ellipses: margin
+        return Object.assign({}, u, { scale, portal, ratio: clamp(need * 1.4 * P.dive, 6, 200) }); // counters aren't ellipses: margin
       });
+      // Ghost: how far letters that would flicker fade (to where they can no longer flash; 1 = no guard).
+      plan = { units, ghost: P.fastFlash ? 1 : K.ghostAlpha(K.inkColors(f.layer), K.backdrops(f.bg)) * 0.8 };
       if (C.plans.size > 12) C.plans.clear();
-      C.plans.set(key, units);
+      C.plans.set(key, plan);
     }
-    return units;
+    return plan;
   }
 
   /** M stops from the units, merging neighbours as evenly as possible (M ≥ count: the units as they are). */
