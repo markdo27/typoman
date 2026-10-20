@@ -213,6 +213,28 @@
       set: (v) => store.update((s) => setIn(s, path, v), { coalesce: 'S:' + path, reason: path }),
     };
   }
+  // Names for variable axes beyond weight / width / optical size (TM.fonts.axisList tags).
+  const AXIS_NAMES = { GRAD: 'Grade', XTRA: 'Counters', YOPQ: 'Thin strokes', XROT: 'Rotate X', YROT: 'Rotate Y', YEAR: 'Year', MORF: 'Morph',
+    SOFT: 'Softness', WONK: 'Wonky', CASL: 'Casual', CRSV: 'Cursive', MONO: 'Monospace', BLED: 'Bleed', SCAN: 'Scanlines', ROND: 'Roundness',
+    BNCE: 'Bounce', INFM: 'Informality', SPAC: 'Spacing', CTRS: 'Contrast', ital: 'Italic', slnt: 'Slant axis' };
+  // OpenType features (TM.fonts.features): full names, chip labels, and which ones exclude each other.
+  const FEATURE_NAMES = { tnum: 'Tabular figures', pnum: 'Proportional figures', lnum: 'Lining figures', onum: 'Oldstyle figures', smcp: 'Small caps', zero: 'Slashed zero', case: 'Case forms' };
+  const FEATURE_SHORT = { tnum: 'Tabular', pnum: 'Proportional', lnum: 'Lining', onum: 'Oldstyle', smcp: 'Small caps', zero: 'Slashed 0', case: 'Case' };
+  const FEATURE_PAIRS = { tnum: ['pnum'], pnum: ['tnum'], lnum: ['onum'], onum: ['lnum'] };
+  function featureName(tag) {
+    if (FEATURE_NAMES[tag]) return FEATURE_NAMES[tag];
+    let m = /^ss(\d\d)$/.exec(tag);
+    if (m) return 'Stylistic set ' + +m[1];
+    m = /^cv(\d\d)$/.exec(tag);
+    if (m) return 'Character variant ' + +m[1];
+    return tag;
+  }
+  function featureShort(tag) {
+    if (FEATURE_SHORT[tag]) return FEATURE_SHORT[tag];
+    const m = /^(ss|cv)(\d\d)$/.exec(tag);
+    return m ? (m[1] === 'ss' ? 'Set ' : 'Var ') + +m[2] : tag;
+  }
+
   /** Show/hide controls from a predicate; returns an updater. */
   const showWhen = (pairs) => () => pairs.forEach(([c, ok]) => { c.el.hidden = !ok(); });
 
@@ -304,17 +326,77 @@
               set: layerBinding(store, 'font.opsz').set,
             }));
           }
+          // Any other axis the family has (Grade, Rotate, Year, Morph, Softness…). slnt is left to
+          // Slant: a forward slant moves onto the axis on its own (font.autoSlnt).
+          const custom = TM.fonts.axisList(axesFam).filter((a) => a.tag !== 'wdth' && a.tag !== 'opsz' && a.tag !== 'slnt');
+          custom.forEach((a) => {
+            const span = a.max - a.min;
+            // Whole numbers for wide axes, else a round step near 1/200 of the range (the engine snaps there).
+            const step = span >= 50 ? 1 : [0.5, 0.2, 0.1, 0.05, 0.02, 0.01].find((v) => v <= span / 100) || 0.01;
+            axesCtl.push(C.range({
+              label: AXIS_NAMES[a.tag] || a.tag, min: a.min, max: a.max, step, decimals: step >= 1 ? 0 : String(step).split('.')[1].length,
+              default: a.def, hint: 'Variable axis ' + a.tag + ' (' + a.min + ' to ' + a.max + ')',
+              get: () => { const v = store.layer.font.axes && store.layer.font.axes[a.tag]; return v != null ? v : a.def; },
+              set: (v) => store.updateLayer((l) => {
+                l.font.axes = Object.assign({}, l.font.axes);
+                if (Math.abs(v - a.def) < step / 2) delete l.font.axes[a.tag]; else l.font.axes[a.tag] = v;
+              }, { coalesce: 'L:font.axes.' + a.tag, reason: 'font.axes', label: (AXIS_NAMES[a.tag] || a.tag) + ' axis' }),
+            }));
+          });
           axesCtl.forEach((c) => axesSlot.append(c.el));
         };
         buildAxes();
 
+        // True italic where Google serves one; otherwise say why it's off (Slant draws an oblique).
+        const italic = C.toggle({ label: 'Italic', get: () => !!store.layer.font.italic && TM.fonts.hasItalic(store.layer.font.family), set: (v) => store.updateLayer((l) => { l.font.italic = v; }, { reason: 'font.italic', label: v ? 'Italic' : 'Upright' }) });
+        const italicBox = italic.el.querySelector('input');
+        const syncItalic = () => {
+          const fam = store.layer.font.family, has = TM.fonts.hasItalic(fam);
+          italicBox.disabled = !has;
+          italic.el.classList.toggle('disabled', !has);
+          italic.el.setAttribute('data-tip', has ? 'The typeface’s true italic design' : Studio.fontLabel(fam) + ' has no true italic. Use Slant for an oblique, or pick a family with italics (Playfair Display, Fraunces, Inter Tight…)');
+        };
+        // Per-glyph OpenType features the family has (figures, small caps, stylistic sets…).
+        const featSlot = h('div', { class: 'ctl ctl-feats' });
+        let featFor = null;
+        const buildFeats = () => {
+          featFor = store.layer.font.family;
+          const list = TM.fonts.features ? TM.fonts.features(featFor) : [];
+          featSlot.hidden = !list.length;
+          featSlot.replaceChildren();
+          if (!list.length) return;
+          const chips = h('div', { class: 'feat-chips', role: 'group', 'aria-label': 'OpenType features' });
+          list.forEach((tag) => {
+            const b = h('button', { type: 'button', class: 'feat-chip', 'data-tag': tag, 'aria-pressed': 'false', 'data-tip': featureName(tag) + ' (' + tag + ')' }, featureShort(tag));
+            b.addEventListener('click', () => {
+              const on = !(+(store.layer.font.features || {})[tag] > 0);
+              store.updateLayer((l) => {
+                const f = Object.assign({}, l.font.features);
+                if (on) { f[tag] = 1; (FEATURE_PAIRS[tag] || []).forEach((t) => delete f[t]); } else delete f[tag];
+                l.font.features = f;
+              }, { reason: 'font.features', label: featureName(tag) + (on ? ' on' : ' off') });
+            });
+            chips.append(b);
+          });
+          featSlot.append(h('span', { class: 'lbl' }, list.some((t) => /^(tnum|pnum|lnum|onum)$/.test(t)) && list.every((t) => /^(tnum|pnum|lnum|onum|zero)$/.test(t)) ? 'Figures' : 'Features'), chips);
+        };
+        const syncFeats = () => {
+          if (store.layer.font.family !== featFor) buildFeats();
+          const f = store.layer.font.features || {};
+          featSlot.querySelectorAll('.feat-chip').forEach((b) => { const on = +f[b.dataset.tag] > 0; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+        };
+        buildFeats();
+
         const size = C.range({ label: 'Size', min: 0.02, max: 0.8, step: 0.005, decimals: 3, default: DEF.type.size, hint: 'Relative to the shorter side of the frame', ...layerBinding(store, 'type.size') });
         const tracking = C.range({ label: 'Tracking', min: -0.2, max: 1, step: 0.005, decimals: 3, default: 0, hint: 'Letter spacing in em', ...layerBinding(store, 'type.tracking') });
         const leading = C.range({ label: 'Leading', min: 0.6, max: 2.5, step: 0.01, default: DEF.type.leading, hint: 'Line height', ...layerBinding(store, 'type.leading') });
-        const slant = C.range({ label: 'Slant', min: -20, max: 20, step: 0.5, decimals: 1, unit: '°', default: 0, ...layerBinding(store, 'type.slant') });
+        const slant = C.range({ label: 'Slant', min: -20, max: 20, step: 0.5, decimals: 1, unit: '°', default: 0, hint: 'Leans the letters. On a font with a slant axis (Roboto Flex, Recursive, Science Gothic) a forward slant uses the axis first', ...layerBinding(store, 'type.slant') });
         const align = C.segmented({ label: 'Align', options: [['left', 'Left', 'Align left', 'alignLeft'], ['center', 'Center', 'Align centre', 'alignCenter'], ['right', 'Right', 'Align right', 'alignRight']], ...layerBinding(store, 'type.align') });
         const textCase = C.segmented({ label: 'Case', options: [['none', 'Aa', 'As typed'], ['upper', 'AA', 'Uppercase'], ['lower', 'aa', 'Lowercase'], ['title', 'Ab', 'Title case']], ...layerBinding(store, 'type.case') });
-        ctl.push(size, tracking, leading, slant, align, textCase);
+        const ligs = C.toggle({ label: 'Ligatures', get: () => store.layer.type.ligatures !== false, set: (v) => store.updateLayer((l) => { l.type.ligatures = v; }, { reason: 'type.ligatures', label: v ? 'Ligatures on' : 'Ligatures off' }) });
+        ligs.el.setAttribute('data-tip', 'Draw the font’s ligatures (fi, fl, Th…) as one glyph. Tracking beyond ±0.03 em turns them off, as in CSS');
+        const wrap = C.segmented({ label: 'Wrap', options: [['auto', 'Auto', 'Re-wrap long lines so the type stays large'], ['off', 'Off', 'Keep your line breaks; long lines shrink to fit']], get: () => store.layer.type.wrap || 'auto', set: (v) => store.updateLayer((l) => { l.type.wrap = v; }, { reason: 'type.wrap', label: 'Wrap: ' + (v === 'off' ? 'off' : 'auto') }) });
+        ctl.push(size, tracking, leading, slant, align, textCase, ligs, wrap, italic);
 
         // Position (looks that place the block at the anchor; path looks follow their path).
         const posHead = h('div', { class: 'sub' }, 'Position');
@@ -328,7 +410,7 @@
         const posWrap = h('div', { class: 'slot' }, posHead, px.el, py.el, h('div', { class: 'row-end' }, center));
         ctl.push(px, py);
 
-        body.append(ta.el, fontCtl.el, weightSlot, axesSlot, size.el, tracking.el, leading.el, slant.el, align.el, textCase.el, posWrap);
+        body.append(ta.el, fontCtl.el, weightSlot, italic.el, axesSlot, featSlot, size.el, tracking.el, leading.el, slant.el, align.el, textCase.el, wrap.el, ligs.el, posWrap);
         const update = () => {
           if (store.layer.font.family !== weightFam) buildWeight();
           if (store.layer.font.family !== axesFam) buildAxes();
@@ -336,6 +418,9 @@
           if (weightCtl) weightCtl.update();
           axesCtl.forEach((c) => c.update());
           posWrap.hidden = !!(store.preset && store.preset.usesPath);
+          wrap.el.hidden = !(store.preset && store.preset.fit); // wrap applies to presets that fit the frame
+          syncItalic();
+          syncFeats();
         };
         update();
         return { update };

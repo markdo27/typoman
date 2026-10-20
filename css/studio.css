@@ -826,3 +826,14 @@ body.clean .clean-hint.show, body.clean .clean-hint:hover, body.clean .clean-hin
   .brand:hover .logo b { transform: none; }
   .logo.lg b { animation: none; }
 }
+
+/* Text panel: italic switch (disabled when the family has no true italic), OpenType feature chips */
+.ctl-toggle.disabled label { color: var(--text-3); }
+.ctl-toggle.disabled input { opacity: 0.4; cursor: not-allowed; }
+.ctl-feats { align-items: start; }
+.ctl-feats .lbl { padding-top: 5px; }
+.feat-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.feat-chip { font: 600 11px/1 var(--ui); color: var(--text-2); background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 99px; padding: 5px 9px; cursor: pointer; }
+.feat-chip:hover { color: var(--text); border-color: var(--text-3); }
+.feat-chip.on { background: var(--text); color: #000; border-color: var(--text); }
+.feat-chip:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 1px; }

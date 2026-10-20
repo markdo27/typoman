@@ -29,7 +29,8 @@
     'stroke.mode': 'Stroke', 'stroke.width': 'Stroke width', 'stroke.color': 'Stroke colour',
     'bg.type': 'Background', 'bg.color': 'Background', 'bg.color2': 'Background 2', 'bg.angle': 'Background angle',
     duration: 'Loop length', fps: 'Frame rate', seed: 'Seed', name: 'Rename', replace: 'Replace project',
-    brand: 'Brand kit', layer: 'Layers',
+    brand: 'Brand kit', layer: 'Layers', 'font.italic': 'Italic', 'font.features': 'Font features', 'font.axes': 'Font axis',
+    'type.wrap': 'Wrap', 'type.ligatures': 'Ligatures', matte: 'Track matte', transform: 'Transform keys', template: 'Template',
   };
   function labelFor(reason) {
     if (!reason) return 'Edit';
@@ -49,6 +50,7 @@
       this.futureLabels = [];
       this.listeners = {};
       this.paramMemory = {};
+      this.autoFont = {}; // layer id → { family, weight } a preset's prefers swapped in
       this._coalesceKey = null;
       this._coalesceAt = 0;
       this._saveTimer = 0;
@@ -119,19 +121,41 @@
       this.update((scene, layer) => fn(layer, scene), opts);
     }
 
-    /** Switch the selected layer's preset, remembering each preset's params. */
+    /**
+     * Switch the selected layer's preset, remembering each preset's params. A preset that
+     * `prefers` a font gets it while the layer still has the untouched default font (or a font a
+     * previous preset swapped in and nobody changed since); a font the user chose is never
+     * replaced. Returns { font: { from, to } } when the font was swapped, else null.
+     */
     setPreset(id) {
       const next = TM.getPreset(id);
-      if (!next || this.layer.preset === id) return;
+      if (!next || this.layer.preset === id) return null;
       this.paramMemory[this.layer.id + ':' + this.layer.preset] = this.layer.params;
       const remembered = this.paramMemory[this.layer.id + ':' + id];
       const aspect = this.scene.size.w / this.scene.size.h;
+      const lid = this.layer.id;
+      const def = TM.Scene.defaultLayer().font;
+      const f = this.layer.font;
+      const plain = (fam, w) => f.family === fam && f.weight === w && f.width === 100 && f.opsz === 'auto' && !f.italic && !Object.keys(f.axes || {}).length && !Object.keys(f.features || {}).length;
+      const auto = this.autoFont[lid];
+      // { kept: true }: the user turned a swap down ("Keep Anton"), so the default is their choice now.
+      const untouched = !(auto && auto.kept) && (plain(def.family, def.weight) || (auto && plain(auto.family, auto.weight)));
+      const want = next.prefers && TM.fonts.has(next.prefers.family) ? next.prefers : null;
+      // Untouched: the preferred font, or back to the default when a swapped-in one no longer fits.
+      const to = !untouched ? null : want ? { family: want.family, weight: TM.fonts.clampWeight(want.family, want.weight || 400) } : auto ? { family: def.family, weight: def.weight } : null;
+      const swap = to && (to.family !== f.family || to.weight !== f.weight) ? { from: f.family, to: to.family } : null;
+      if (swap) TM.fonts.ensure(to.family, to.weight);
       this.updateLayer((layer) => {
         layer.preset = id;
         layer.params = remembered ? JSON.parse(JSON.stringify(remembered)) : TM.presetDefaults(id);
         // Swap in this preset's favourite path unless the user has hand-edited the current one.
         if (next.usesPath && (!layer.path || layer.path.preset)) layer.path = TM.Path.preset(next.path || 'wave', aspect);
+        if (swap) { layer.font.family = to.family; layer.font.weight = to.weight; }
       }, { reason: 'preset', label: 'Preset: ' + next.name });
+      if (swap) {
+        if (want) this.autoFont[lid] = to; else delete this.autoFont[lid];
+      }
+      return swap ? { font: swap } : null;
     }
 
     /** Change output size; un-edited preset paths are regenerated for the new aspect. */

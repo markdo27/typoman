@@ -281,8 +281,17 @@
       const p = TM.presets[id];
       if (!p) return;
       if (this.store.layer.preset === id) { UI.announce(p.name + ' is already applied'); return; }
-      this.store.setPreset(id);
+      const swapped = this.store.setPreset(id);
       UI.announce(p.name + ' applied');
+      // A preset that prefers a font swapped it in for the untouched default: say so, one tap back.
+      if (swapped && swapped.font && Studio.toast) {
+        const { from, to } = swapped.font;
+        const store = this.store;
+        Studio.toast(p.name + ' is designed for ' + Studio.fontLabel(to) + ', so the layer uses it now', 'info', 4200, {
+          label: 'Keep ' + Studio.fontLabel(from),
+          run: () => { TM.fonts.ensure(from, 400); store.autoFont[store.layer.id] = { kept: true }; store.updateLayer((l) => { l.font.family = from; l.font.weight = TM.fonts.clampWeight(from, 400); }, { reason: 'font', label: 'Font: ' + from }); },
+        });
+      }
       if (Studio.app && Studio.app.stage) Studio.app.stage.flash();
     }
 
