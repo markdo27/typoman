@@ -105,6 +105,21 @@
     return { h, nx: G.nx[out], ny: G.ny[out], d: Math.sqrt(best) };
   }
 
+  /** Penetration depth of two oriented boxes { x, y, a, w, h } (separating axes), 0 when apart. */
+  function overlap(P, Q) {
+    const cp = Math.cos(P.a), sp = Math.sin(P.a), cq = Math.cos(Q.a), sq = Math.sin(Q.a);
+    const dx = Q.x - P.x, dy = Q.y - P.y;
+    let pen = Infinity;
+    for (const [ux, uy] of [[cp, sp], [-sp, cp], [cq, sq], [-sq, cq]]) {
+      const ra = (P.w / 2) * Math.abs(cp * ux + sp * uy) + (P.h / 2) * Math.abs(-sp * ux + cp * uy);
+      const rb = (Q.w / 2) * Math.abs(cq * ux + sq * uy) + (Q.h / 2) * Math.abs(-sq * ux + cq * uy);
+      const o = ra + rb - Math.abs(dx * ux + dy * uy);
+      if (o <= 0) return 0;
+      pen = Math.min(pen, o);
+    }
+    return pen;
+  }
+
   /** Run the loop's simulation. Returns { poses: Float32Array(frames + 1 × n × STRIDE), frames, ground break info }. */
   function simulate(S, P, dur, fps, seed) {
     const G = S.G, B = S.bodies, n = B.length;
@@ -353,15 +368,33 @@
         for (let i = 0; i < G.segs; i++) if (G.sy[i] < top) { top = G.sy[i]; mid = G.cum[i]; }
       }
       const capH = ref.capH * k;
-      const bodies = [];
-      for (const gi of K.screenOrder(ref, line)) {
-        const g = ref.glyphs[gi];
-        if (g.isSpace) continue;
-        const s = mid + (g.x - line.x + g.w / 2 - width / 2) * k;
+      const glyphs = K.screenOrder(ref, line).map((gi) => ref.glyphs[gi]).filter((g) => !g.isSpace);
+      // Slots: the natural spacing, opened up where a concave bend would make neighbours' boxes
+      // touch (upright on the ground they lean together there), then the run re-centred.
+      const slot = (g, s) => {
         const p = at(G, s);
-        const gw = g.w * k;
-        bodies.push({ g: draw.glyphs[gi], s, w: Math.max(4, gw * 0.94), h: Math.max(4, capH), sx: p.x + p.nx * capH / 2, sy: p.y + p.ny * capH / 2, sa: p.angle, nx: p.nx, ny: p.ny, rank: 0 });
+        return { s, x: p.x + (p.nx * capH) / 2, y: p.y + (p.ny * capH) / 2, a: p.angle, nx: p.nx, ny: p.ny, w: Math.max(4, g.w * k * 0.94), h: Math.max(4, capH) };
+      };
+      let place = [];
+      let lead = mid - (width / 2) * k;
+      for (let pass = 0; pass < 2; pass++) {
+        place = [];
+        let s = lead;
+        glyphs.forEach((g, j) => {
+          if (j) s += (g.x - glyphs[j - 1].x + (g.w - glyphs[j - 1].w) / 2) * k;
+          else s += (g.x - line.x + g.w / 2) * k;
+          let q = slot(g, s);
+          for (let it = 0; j && it < 40 && overlap(place[j - 1], q) > 0; it++) { s += capH * 0.04; q = slot(g, s); }
+          place.push(q);
+        });
+        const span = place.length ? place[place.length - 1].s - place[0].s : 0;
+        const natural = glyphs.length ? (glyphs[glyphs.length - 1].x - glyphs[0].x) * k : 0;
+        lead -= (span - natural) / 2; // keep the opened-up run centred
       }
+      const bodies = glyphs.map((g, j) => {
+        const q = place[j];
+        return { g: draw.glyphs[g.i], s: q.s, w: q.w, h: q.h, sx: q.x, sy: q.y, sa: q.a, nx: q.nx, ny: q.ny, rank: 0 };
+      });
       // Drop order over the drawn glyphs (reading order ranks, as every preset's order control).
       for (const b of bodies) b.rank = f.rank(b.g, f.params.order);
       const key = JSON.stringify([text, Ly.font, Ly.type, Ly.params, Ly.path, Math.round(RW * 1000) / 1000, Math.round(RH * 1000) / 1000, f.seed]);
