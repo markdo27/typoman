@@ -105,9 +105,14 @@
       this.root.append(this.timing);
     }
 
+    /** Is the Timing section on screen? (cheap: no layout read, it runs every frame) */
+    timingShown() {
+      return !!this.timing && UI.isPhone() && document.body.dataset.tab === 'layers' && !document.body.classList.contains('clean');
+    }
+
     renderTiming() {
       if (!this.timing) return;
-      if (this.timing.offsetParent === null) { this._timingDirty = true; return; } // hidden (desktop, other tab)
+      if (!this.timingShown()) { this._timingDirty = true; return; } // hidden (desktop, other tab)
       this._timingDirty = false;
       const store = this.store, s = store.scene, D = s.duration;
       this.tMeta.textContent = (+D.toFixed(2)) + ' s loop';
@@ -145,7 +150,7 @@
 
     /** Per frame (from the app loop): move the chart's playhead; catch up once the section shows. */
     tick() {
-      if (!this.timing || this.timing.offsetParent === null) return;
+      if (!this.timingShown()) return;
       if (this._timingDirty) { this.renderTiming(); return; }
       const s = this.store.scene;
       const u = TM.math.mod(this.store.ui.time, s.duration) / s.duration;

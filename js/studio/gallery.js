@@ -82,8 +82,17 @@
         if (!d || (d.reason !== 'preset' && d.reason !== 'font-preview')) this.scheduleThumbs();
       });
       store.on('select', () => { this.markActive(); if (this.store.layer.preset !== this._looksFor) this.renderLooks(true); this.scheduleThumbs(80); });
-      // Paused stage: idle cards stop animating and settle on their most legible frame.
-      store.on('ui', (p) => { if ('playing' in p && !store.ui.playing) this.scheduleThumbs(120); });
+      // Paused stage: idle cards stop animating and settle on their most legible frame (cached).
+      // Only on the playing → paused change: scrubbing and frame steps also set playing: false.
+      let wasPlaying = store.ui.playing;
+      store.on('ui', (p) => {
+        if (!('playing' in p)) return;
+        if (wasPlaying && !store.ui.playing) {
+          clearTimeout(this._settle);
+          this._settle = setTimeout(() => this.visible.forEach((id) => { if (id !== this.hover) this.drawThumb(id); }), 120);
+        }
+        wasPlaying = store.ui.playing;
+      });
       this.scheduleThumbs(50);
     }
 
