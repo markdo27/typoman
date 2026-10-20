@@ -19,6 +19,30 @@
     if (Studio.inspector) Studio.inspector.rebuild();
   };
 
+  // ───────────────────────────── photosensitivity ─────────────────────────────
+  // Presets that can flash expose an optional preset.flashes(layer, scene): the most large-area
+  // flashes per second for the layer's current params, 0 if none. Above 3 a second (WCAG 2.3.1,
+  // ITU-R BT.1702) the studio warns: in the Motion panel, and in the export and embed dialogs.
+  Studio.FLASH_LIMIT = 3;
+  /**
+   * Flashes per second of a visible layer, 0 when its preset can't tell. The method is asked
+   * for one pass at the scene's pace (cycles 1) and the result scaled by the layer's cycles:
+   * all motion runs on pass progress, so ×2 cycles flash twice as fast, whether or not the
+   * preset's own method counts cycles.
+   */
+  Studio.flashRate = function (layer, scene) {
+    const p = layer && TM.getPreset(layer.preset);
+    if (!p || typeof p.flashes !== 'function' || layer.visible === false || !String(layer.text || '').trim()) return 0;
+    try {
+      const cycles = Math.max(1, (layer.time && layer.time.cycles) || 1);
+      const r = +p.flashes(Object.assign({}, layer, { time: Object.assign({}, layer.time, { cycles: 1 }) }), scene);
+      return Number.isFinite(r) && r > 0 ? r * cycles : 0;
+    } catch (e) { return 0; }
+  };
+  /** Visible layers above the limit: [{ index, layer, rate }]. */
+  Studio.flashRisks = (scene) => scene.layers.map((layer, index) => ({ index, layer, rate: Studio.flashRate(layer, scene) })).filter((x) => x.rate > Studio.FLASH_LIMIT);
+  Studio.flashText = (rate) => 'about ' + (Math.round(rate * 10) / 10) + ' times a second';
+
   // Helpers binding a control to a property path on the selected layer / scene.
   function getIn(obj, path) {
     return path.split('.').reduce((o, k) => (o == null ? o : o[k]), obj);
@@ -185,6 +209,43 @@
             browse));
           if (preset.description) body.append(h('p', { class: 'hint' }, preset.description));
         }
+        // Photosensitivity: a clear, non-blocking warning right under the preset.
+        const flash = h('div', { class: 'flash-warn', role: 'note', hidden: true });
+        let flashShown = -1;
+        const syncFlash = () => {
+          const rate = Studio.flashRate(store.layer, store.scene);
+          const on = rate > Studio.FLASH_LIMIT;
+          flash.hidden = !on;
+          if (!on || Math.abs(rate - flashShown) < 0.05) return;
+          flashShown = rate;
+          flash.replaceChildren(UI.icon('warning'), h('div', null,
+            h('b', null, 'Flashes ' + Studio.flashText(rate)),
+            h('p', null, 'Rapid flashing can trigger seizures in people with photosensitive epilepsy. WCAG 2.3.1 allows at most 3 flashes a second: slow it down, soften the flashes or lengthen the loop before you publish.')));
+        };
+        body.append(flash);
+        // Stack's width-axis fill needs a font with a width axis to reach the edges.
+        const WIDTH_FONTS = ['Roboto Flex', 'Science Gothic', 'Anybody'].filter((f) => TM.fonts.has(f));
+        let axisTip = null, axisTipFor = null;
+        const syncAxisTip = () => {
+          if (!axisTip) return;
+          const fam = store.layer.font.family;
+          const ax = TM.fonts.axes(fam);
+          axisTip.hidden = !(store.layer.params.fill === 'axis' && !(ax && ax.wdth) && WIDTH_FONTS.length);
+          if (axisTip.hidden || axisTipFor === fam) return;
+          axisTipFor = fam;
+          WIDTH_FONTS.forEach((f) => TM.fonts.ensure(f, 700));
+          axisTip.replaceChildren(UI.icon('info'), h('div', null,
+            h('p', null, h('b', null, Studio.fontLabel(fam)), ' has no width axis, so rows can only open their tracking. For a full-bleed stack, try a width-axis font:'),
+            h('div', { class: 'axis-fonts' }, WIDTH_FONTS.map((f) => {
+              const b = h('button', { type: 'button', class: 'btn sm', 'aria-label': 'Use ' + f }, f);
+              b.style.fontFamily = TM.fonts.cssFamily(f);
+              b.addEventListener('click', () => {
+                TM.fonts.ensure(f, store.layer.font.weight);
+                store.updateLayer((l) => { l.font.family = f; l.font.weight = TM.fonts.clampWeight(f, l.font.weight); }, { reason: 'font', label: 'Font: ' + f });
+              });
+              return b;
+            }))));
+        };
         const groups = new Map();
         (preset ? preset.params : []).forEach((p) => {
           const g = p.group || 'Motion';
@@ -206,6 +267,10 @@
             if (p.showIf) visibleIf.push([c, p.showIf]);
             ctl.push(c);
             body.append(c.el);
+            if (p.key === 'fill' && p.type === 'select' && p.options.some((o) => o[0] === 'axis')) {
+              axisTip = h('div', { class: 'axis-tip', role: 'note', hidden: true });
+              body.append(axisTip);
+            }
           });
         });
         // Per-layer timing (layer.time): start later, run whole cycles faster, or play once and hold.
@@ -236,6 +301,8 @@
             const ok = Object.entries(cond).every(([k, v]) => (Array.isArray(v) ? v.includes(store.layer.params[k]) : store.layer.params[k] === v));
             c.el.hidden = !ok;
           });
+          syncFlash();
+          syncAxisTip();
         };
         update();
         return { update };
@@ -501,6 +568,7 @@
       this.headSub.textContent = 'Layer ' + (n - store.selected) + ' of ' + n + (store.preset ? ' · ' + store.preset.name : '') + (l.visible === false ? ' · hidden' : '');
       this.headChip.textContent = (String(l.text || '').trim()[0] || 'T').toUpperCase();
       this.headChip.style.fontFamily = TM.fonts.cssFamily(l.font.family);
+      this.headChip.style.fontWeight = String(TM.fonts.clampWeight(l.font.family, l.font.weight));
       this.headChip.style.color = l.fill.type === 'palette' ? l.fill.palette[0] : l.fill.color;
       this.headChip.style.background = store.scene.bg.type === 'transparent' ? '' : store.scene.bg.color;
       this.headChip.classList.toggle('transparent', store.scene.bg.type === 'transparent');

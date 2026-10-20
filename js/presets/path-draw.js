@@ -51,7 +51,7 @@
     const Ll = lane.length;
     const l = new Float32Array(M + 1), s = new Float32Array(M + 1), x = new Float32Array(M + 1), y = new Float32Array(M + 1);
     const bx = path.xs, by = path.ys, bn = path.n, bcum = path.cum;
-    let j = 0, topY = Infinity, topI = 0;
+    let j = 0, topY = Infinity;
     for (let i = 0; i <= M; i++) {
       l[i] = (Ll * i) / M;
       const q = lane.at(path.closed ? Math.min(l[i], Ll - 1e-3) : l[i]);
@@ -64,9 +64,24 @@
       }
       j = bi;
       s[i] = Math.max(i ? s[i - 1] : 0, bcum[bi]);
-      if (q.y < topY) { topY = q.y; topI = i; }
+      topY = Math.min(topY, q.y);
     }
-    t = { s, l, x, y, length: Ll, top: l[topI] };
+    // The top of the shape: the middle of its topmost stretch (a mean of arc length weighted by
+    // height, circular on closed lanes so a stretch across the lane's start isn't split), so a flat
+    // top (a frame, a rounded square) centres text on its edge, not on the corner it begins at.
+    let yMax = -Infinity;
+    for (let i = 0; i <= M; i++) yMax = Math.max(yMax, y[i]);
+    const tau = Math.max(0.5, (yMax - topY) * 0.02);
+    let sw = 0, sl = 0, sc = 0, sn = 0;
+    for (let i = 0; i < M; i++) {
+      const w = Math.exp(-(y[i] - topY) / tau);
+      sw += w;
+      sl += w * l[i];
+      sc += w * Math.cos((TM.math.TAU * l[i]) / Ll);
+      sn += w * Math.sin((TM.math.TAU * l[i]) / Ll);
+    }
+    const top = path.closed ? TM.math.mod((Math.atan2(sn, sc) / TM.math.TAU) * Ll, Ll) : sl / sw;
+    t = { s, l, x, y, length: Ll, top };
     if (byUp.size > 16) byUp.clear();
     byUp.set(key, t);
     return t;
@@ -117,7 +132,6 @@
       const path = f.path;
       if (!path || path.length < 1) return;
       const P = f.params, L = f.layout, size = f.size, p = f.p;
-      const Lp = path.length;
       const pen = TM.ease(P.penEase, 'smooth');
       const popIn = TM.ease(P.popEase, 'overshoot'), popOut = TM.ease(P.popOut, 'inBack');
       const tab = effortTable(path, size, P.hand ? 1 : 0);
@@ -222,7 +236,7 @@
 
     looks: [
       { name: 'Signature', bg: { type: 'solid', color: '#f4f1ea' }, layer: { font: { family: 'Caveat', weight: 700 }, fill: { type: 'solid', color: '#141414' }, type: { case: 'none' }, params: { width: 0.02, tilt: 8 } } },
-      { name: 'Blueprint', bg: { type: 'solid', color: '#03132e' }, layer: { font: { family: 'JetBrains Mono', weight: 600 }, fill: { type: 'solid', color: '#4cc9f0' }, params: { stroke: 'dashed', side: 'below' }, path: 'circle' } },
+      { name: 'Blueprint', bg: { type: 'solid', color: '#03132e' }, layer: { font: { family: 'JetBrains Mono', weight: 600 }, fill: { type: 'solid', color: '#4cc9f0' }, params: { stroke: 'dashed', side: 'center', width: 0.025 }, path: 'circle' } },
       { name: 'Marker', bg: { type: 'solid', color: '#ffd6e0' }, layer: { font: { family: 'Permanent Marker', weight: 400 }, fill: { type: 'solid', color: '#2b0a3d' }, params: { stroke: 'dots', width: 0.05, popEase: 'springSnappy' }, path: 'arc' } },
     ],
   });

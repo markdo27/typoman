@@ -32,6 +32,8 @@
   const DOUBLE_PX = 12;
   const MAX_DRAWN_NODES = 64;
   const EDGE = 12; // inset of off-screen markers from the visible stage edge, px
+  /** A touch screen (the hints say "tap" there). */
+  const coarse = () => !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
 
   // The stylesheet also styles the Path panel; resolve it next to the engine files.
   (function injectCSS() {
@@ -413,7 +415,8 @@
       this.barKind.hidden = this.barDel.hidden = this.barClose.hidden = !editing;
       this.barBack.hidden = this.barFinish.hidden = tool !== 'pen';
       this.barHint.hidden = editing;
-      const hint = tool === 'draw' ? 'Drag to draw a path' : this.pen && this.pen.nodes.length >= 3 ? 'Click the first point to close · ↵ to finish' : this.pen && this.pen.nodes.length ? 'Click for corners · drag for curves' : 'Click to start a new path';
+      const tap = coarse() ? 'Tap' : 'Click';
+      const hint = tool === 'draw' ? 'Drag to draw a path' : this.pen && this.pen.nodes.length >= 3 ? tap + ' the first point to close · ↵ to finish' : this.pen && this.pen.nodes.length ? tap + ' for corners · drag for curves' : tap + ' to start a new path';
       if (this.barHint.textContent !== hint) this.barHint.textContent = hint;
       const n = this.sel.length;
       this.barKind.disabled = !n;
@@ -430,12 +433,47 @@
         this.barClose.replaceChildren(icon(closed ? 'closed' : 'open'));
       }
       this.barClose.disabled = !closed && def.nodes.length < 3;
-      // Dodge to the top edge when points sit under the toolbar (size measured once per layout).
-      const layoutKey = [tool, want, this.pen ? 1 : 0, W, H].join();
-      if (layoutKey !== this._barKey) { this._barKey = layoutKey; this._barSize = [this.bar.offsetWidth || 240, this.bar.offsetHeight || 36]; }
+      this._placeBar(def, W, H, [tool, want, hint, this.barFinish.hidden].join('|'));
+    }
+
+    /**
+     * Size and place the toolbar against the *visible stage*, not the artboard: a narrow 9:16
+     * artboard must not clip it ("Click the fi…", "Don"). It floats over the pasteboard when it
+     * is wider than the artboard, stays inside the stage when zoomed or scrolled, and only drops
+     * to compact layouts when the stage itself is narrow: 1 hides the hint, 2 the button labels,
+     * 3 also Show all and corner/smooth, and wraps as a last resort.
+     */
+    _placeBar(def, W, H, contentKey) {
+      const bar = this.bar, vr = this._viewRect();
+      const room = vr ? { l: vr.x0 - EDGE, r: vr.x1 + EDGE, t: vr.y0 - EDGE, b: vr.y1 + EDGE } : { l: 0, r: W, t: 0, b: H };
+      const avail = Math.max(120, Math.floor(room.r - room.l - 16));
+      const fitKey = contentKey + '|' + avail;
+      if (fitKey !== this._barKey) {
+        this._barKey = fitKey;
+        bar.style.maxWidth = 'none';
+        let level = 0;
+        for (; level < 3; level++) {
+          bar.dataset.fit = String(level);
+          if (bar.offsetWidth <= avail) break;
+        }
+        bar.dataset.fit = String(level);
+        bar.style.maxWidth = avail + 'px';
+        this._barSize = [bar.offsetWidth || 240, bar.offsetHeight || 36];
+      }
       const [bw, bh] = this._barSize;
-      const under = def.nodes.some((p) => p.y * H > H - bh - 24 && p.y * H < H + 8 && Math.abs(p.x * W - W / 2) < bw / 2 + 16);
-      this.bar.classList.toggle('at-top', under);
+      // Centred on the visible part of the artboard, kept inside the visible stage.
+      const v0 = Math.max(0, room.l), v1 = Math.min(W, room.r);
+      let cx = v1 > v0 ? (v0 + v1) / 2 : W / 2;
+      cx = Math.min(Math.max(cx, room.l + 8 + bw / 2), room.r - 8 - bw / 2);
+      // At the artboard's foot (or the stage's, when zoomed in); dodge to the top when points
+      // sit under it.
+      const foot = Math.min(H, room.b) - 10;
+      const under = def.nodes.some((p) => { const x = p.x * W, y = p.y * H; return y > foot - bh - 14 && y < foot + 18 && Math.abs(x - cx) < bw / 2 + 16; });
+      const top = under ? Math.max(0, room.t) + 10 : foot - bh;
+      bar.classList.toggle('at-top', under);
+      bar.style.left = cx.toFixed(1) + 'px';
+      bar.style.top = top.toFixed(1) + 'px';
+      bar.style.bottom = 'auto';
     }
 
     // ── geometry of the view ──
@@ -500,7 +538,11 @@
       this.root.style.display = on ? '' : 'none';
       this.svg.setAttribute('data-pe-tool', on ? this.tool : '');
       this._syncBar(on, on ? v.cssW : 0, on ? v.cssH : 0);
-      if (!on) { this.svg.removeAttribute('data-pe-cursor'); return; }
+      if (!on) {
+        this.svg.removeAttribute('data-pe-cursor');
+        if (this.stage) this.stage.removeAttribute('data-pe-cursor');
+        return;
+      }
       const W = v.cssW, H = v.cssH, def = this.shown, tool = this.tool, g = this.g;
       const view = this._viewRect();
       this.root.setAttribute('data-target', String(this.target));
@@ -638,7 +680,11 @@
       else if (tool === 'pen') c = hv && hv.type === 'close' ? 'close' : 'pen';
       else if (g) c = g.kind === 'marquee' ? '' : 'grabbing';
       else if (hv) c = hv.type === 'curve' ? 'move' : 'point';
-      if (c) this.svg.setAttribute('data-pe-cursor', c); else this.svg.removeAttribute('data-pe-cursor');
+      // The stage too: off-frame points are hovered over the pasteboard, outside the overlay.
+      for (const el of [this.svg, this.stage]) {
+        if (!el) continue;
+        if (c) el.setAttribute('data-pe-cursor', c); else el.removeAttribute('data-pe-cursor');
+      }
     }
 
     /** Anchor positions in px, pinned to the visible stage when off-screen. */

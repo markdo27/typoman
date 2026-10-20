@@ -5,6 +5,12 @@
  *
  * Attributes: scene (string from TM.Scene.encode, or scene JSON), autoplay, loop, controls,
  *   bg ("transparent" or a hex colour), fit ("contain" | "cover"), start (s), poster (s), label.
+ *   text, text-2 … text-6: replace layer 1…6's text ("\n" or a real newline breaks the line),
+ *     so one design can carry different copy on every page.
+ *   trigger="hover": play while the pointer is over the player (tap toggles on touch screens).
+ *   scrub="scroll": the animation follows the page's scroll instead of playing. It starts as the
+ *     player enters at the bottom of the viewport and ends as it leaves at the top.
+ *   Reduced motion turns both into a still with a play button.
  * Properties/methods: scene (object), play(), pause(), toggle(), currentTime, duration, paused.
  * Events: ready, play, pause, ended, error.
  *
@@ -13,6 +19,9 @@
  * standalone export) are reused. Each player renders into its own shadow-DOM canvas, sized by a
  * ResizeObserver, pauses while offscreen or in a hidden tab, and honours prefers-reduced-motion
  * by showing a still with a play button. Scenes are sanitised by TM.Scene.normalize().
+ *
+ * Without `loop` the player plays once and stops on its last frame, like a hero should: no
+ * overlay. With `controls`, its corner button turns into Replay (clicking the stage replays too).
  */
 (function () {
   'use strict';
@@ -21,10 +30,16 @@
   const me = document.currentScript;
   const BASE = (function () {
     try { if (me && me.src) return new URL('./', me.src).href; } catch (e) { /* inline copy */ }
-    return (window.TM_MANIFEST && window.TM_MANIFEST.base) || new URL('./', location.href).href;
+    if (window.TM_MANIFEST && window.TM_MANIFEST.base) return window.TM_MANIFEST.base;
+    // blob:, data: and about:srcdoc pages (an inlined standalone copy) have no folder to resolve
+    // against; they already carry the engine, so the base is never used to load it.
+    try { return new URL('./', location.href).href; } catch (e) { return './'; }
   })();
   const MAX_PIXELS = 1920 * 1080;
   const SVG = 'http://www.w3.org/2000/svg';
+  // Longest wait for fonts before the first frame: after it the player draws with fallback
+  // faces, and each font that arrives later re-renders it (TM.fonts.onChange, below).
+  const FONT_WAIT_MS = 3000;
 
   // ───────────────────────────── engine (loaded once) ─────────────────────────────
   let engine = null;
@@ -72,6 +87,10 @@
     else if (reduceMQ.addListener) reduceMQ.addListener(onEnvironment);
   }
   document.addEventListener('visibilitychange', onEnvironment);
+  // Scroll-scrubbed players follow every scroll, including nested scrollers (capture phase).
+  function onScroll() { live.forEach(function (p) { p._scrub(); }); }
+  window.addEventListener('scroll', onScroll, { passive: true, capture: true });
+  window.addEventListener('resize', onScroll, { passive: true });
   const io = 'IntersectionObserver' in window
     ? new IntersectionObserver(function (entries) { entries.forEach(function (e) { e.target._setVisible(e.isIntersecting); }); }, { rootMargin: '48px' })
     : null;
@@ -97,6 +116,7 @@
   }
   const PLAY = 'M8 5.2v13.6L19 12z';
   const PAUSE = 'M7 5h3.6v14H7zM13.4 5H17v14h-3.6z';
+  const REPLAY = 'M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5v4h4'; // drawn as a line (class "line")
 
   const CSS = [
     ':host{display:block;position:relative;overflow:hidden;contain:content;aspect-ratio:16/9;-webkit-tap-highlight-color:transparent;font:13px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}',
@@ -105,6 +125,7 @@
     'canvas{position:absolute;display:block;left:0;top:0;width:100%;height:100%}',
     '.btn{appearance:none;-webkit-appearance:none;border:0;margin:0;padding:0;cursor:pointer;color:#fff;background:rgba(12,12,16,.64);display:grid;place-items:center;border-radius:999px;box-shadow:0 4px 18px rgba(0,0,0,.3)}',
     '.btn svg{width:46%;height:46%;fill:currentColor}',
+    '.btn svg.line{fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}',
     '.btn:hover{background:rgba(12,12,16,.82)}',
     '.btn:focus-visible{outline:2px solid #5b72ff;outline-offset:2px}',
     '.big{position:absolute;left:50%;top:50%;width:clamp(40px,13%,72px);height:clamp(40px,13%,72px);transform:translate(-50%,-50%)}',
@@ -121,7 +142,7 @@
 
   // ───────────────────────────── element ─────────────────────────────
   class TypomanPlayer extends HTMLElement {
-    static get observedAttributes() { return ['scene', 'autoplay', 'loop', 'controls', 'bg', 'fit', 'start', 'poster', 'label']; }
+    static get observedAttributes() { return ['scene', 'autoplay', 'loop', 'controls', 'bg', 'fit', 'start', 'poster', 'label', 'text', 'text-2', 'text-3', 'text-4', 'text-5', 'text-6', 'trigger', 'scrub']; }
 
     constructor() {
       super();
@@ -161,10 +182,17 @@
       root.append(this._style, this._dyn, this._wrap, this._big, this._mini, this._err);
       this._big.addEventListener('click', (e) => { e.stopPropagation(); this.play(); });
       this._mini.addEventListener('click', (e) => { e.stopPropagation(); this.toggle(); });
+      // trigger="hover": a mouse or pen plays while over the player; touch taps toggle below.
+      this.addEventListener('pointerenter', (e) => { if (e.pointerType !== 'touch' && this._hover()) this._run(true); });
+      this.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'touch' && this._hover()) this._run(false); });
       this._wrap.addEventListener('click', () => {
         if (!this._ready) return;
+        if (this._scrubbing()) return;
+        if (this._hover()) { this._run(!this._playing); return; }
+        const controls = this.hasAttribute('controls');
+        if (this._ended && !controls) return; // a play-once hero holds its last frame
         if (!this._playing) this.play();
-        else if (this.hasAttribute('controls')) this.pause();
+        else if (controls) this.pause();
       });
     }
 
@@ -193,6 +221,10 @@
         case 'autoplay': if (!this._userPlayed) { this._autoDone = false; if (newV === null) { this._playing = false; } } this._sync(); break;
         case 'start': if (!this._started) { this._time = Math.max(0, num(newV, 0)); this._invalidate(); } break;
         case 'label': this._label(); break;
+        case 'text': case 'text-2': case 'text-3': case 'text-4': case 'text-5': case 'text-6':
+          if (this._base) { this._apply(); this._refont(); this._invalidate(); }
+          break;
+        case 'scrub': this._sync(); this._scrub(); this._invalidate(); break;
         default: this._sync(); this._invalidate();
       }
     }
@@ -211,6 +243,7 @@
       this._time = Math.max(0, num(t, 0));
       this._started = true;
       this._ended = false;
+      this._sync(); // e.g. a seek after the end: the buttons leave their "ended" state
       this._invalidate();
     }
     play() {
@@ -277,7 +310,13 @@
       if (token !== this._token) return;
       this._base = scene;
       this._apply();
-      await TM.prepare(this._scene);
+      // A hung or slow font host must not leave a blank box: wait at most FONT_WAIT_MS, and let
+      // a preset's extra instances (Stack's width ladder) load in the background instead of
+      // holding back frame 0. The race guards engines whose prepare() ignores the options.
+      await Promise.race([
+        TM.prepare(this._scene, { timeout: FONT_WAIT_MS, extras: 'background' }),
+        new Promise(function (r) { setTimeout(r, FONT_WAIT_MS + 500); }),
+      ]);
       if (token !== this._token) return;
       this._loading = false;
       this._err.hidden = true;
@@ -291,13 +330,18 @@
       this._layout();
       if (this._wantPlay) { this._wantPlay = false; this.play(); }
       this._sync();
+      this._scrub();
       this._invalidate();
     }
 
-    /** Apply attribute overrides (background) to the loaded scene. */
+    /** Apply attribute overrides (background, text) to the loaded scene. */
     _apply() {
       const TM = window.TM;
       const s = TM.Scene.clone(this._base);
+      ['text', 'text-2', 'text-3', 'text-4', 'text-5', 'text-6'].forEach((name, i) => {
+        const v = this.getAttribute(name);
+        if (v != null && s.layers[i]) s.layers[i].text = v.replace(/\\n/g, '\n');
+      });
       let bg = (this.getAttribute('bg') || '').trim();
       if (/^[0-9a-f]{6}$/i.test(bg)) bg = '#' + bg;
       if (bg === 'transparent') s.bg.type = 'transparent';
@@ -346,7 +390,40 @@
     }
 
     _invalidate() { this._dirty = true; kick(); }
-    _setVisible(v) { this._visible = v; if (v) kick(); }
+    _setVisible(v) { this._visible = v; if (v) { this._scrub(); kick(); } }
+
+    /** Load the fonts new text needs (another script's subset), then redraw. */
+    _refont() {
+      const TM = window.TM, token = this._token;
+      if (!TM || !this._scene) return;
+      Promise.resolve(TM.prepare(this._scene, { timeout: FONT_WAIT_MS, extras: 'background' })).then(() => { if (token === this._token) this._invalidate(); }, function () {});
+    }
+
+    _reduced() { return !!(reduceMQ && reduceMQ.matches); }
+    _hover() { return this.getAttribute('trigger') === 'hover' && !this._reduced(); }
+    _scrubbing() { return this.getAttribute('scrub') === 'scroll' && !this._reduced(); }
+
+    /** Hover trigger: start or stop without counting as the viewer's own play/pause. */
+    _run(on) {
+      if (!this._ready) return;
+      if (on) {
+        if (this._ended) { this._time = Math.max(0, num(this.getAttribute('start'), 0)); this._ended = false; }
+        this._started = true;
+        if (!this._playing) { this._playing = true; this._emit('play'); }
+      } else if (this._playing) { this._playing = false; this._emit('pause'); }
+      this._sync();
+      this._invalidate();
+    }
+
+    /** Scroll scrub: the target time from where the player sits in the viewport. */
+    _scrub() {
+      if (!this._ready || !this._scene || !this._scrubbing()) return;
+      const r = this.getBoundingClientRect(), vh = window.innerHeight || document.documentElement.clientHeight || 1;
+      const u = Math.min(1, Math.max(0, (vh - r.top) / (vh + r.height)));
+      this._target = u * Math.max(0, this._scene.duration - 1 / this._scene.fps);
+      if (!this._started) { this._started = true; this._time = this._target; this._dirty = true; }
+      if (this._visible) kick();
+    }
 
     _posterTime() {
       const p = this.getAttribute('poster');
@@ -358,6 +435,17 @@
 
     _tick(now) {
       if (!this._ready || !this._scene) return false;
+      if (this._scrubbing() && this._target != null) {
+        if (!this._visible) { this._last = 0; return false; }
+        // Ease toward the scroll position (a short time constant smooths coarse wheel steps).
+        const dt = this._last ? Math.min(0.1, (now - this._last) / 1000) : 1 / 60;
+        const gap = this._target - this._time;
+        const settled = Math.abs(gap) < 0.25 / this._scene.fps;
+        this._time = settled ? this._target : this._time + gap * (1 - Math.exp(-dt / 0.09));
+        this._last = settled ? 0 : now;
+        if (!settled || this._dirty) this._draw();
+        return !settled;
+      }
       const active = this._playing && this._visible && !document.hidden;
       if (active) {
         if (this._last) {
@@ -402,11 +490,14 @@
 
     _sync() {
       if (!this._root) return;
-      const reduced = !!(reduceMQ && reduceMQ.matches);
+      const reduced = this._reduced();
+      const scrub = this._scrubbing();
       if (this._ready) {
+        // Scroll scrub drives time itself; hover waits for the pointer.
+        if (scrub && this._playing) this._playing = false;
         if (!this._autoDone) {
           this._autoDone = true;
-          if (this.hasAttribute('autoplay') && !reduced && !this._userPlayed) {
+          if (this.hasAttribute('autoplay') && !reduced && !this._userPlayed && !scrub && !this._hover()) {
             this._playing = true;
             this._started = true;
           }
@@ -414,16 +505,21 @@
         // Reduced motion: never animate unless the viewer asked for it.
         if (reduced && this._playing && !this._userPlayed) this._playing = false;
       }
-      this._big.hidden = !this._ready || this._playing;
-      this._mini.hidden = !this._ready || !this.hasAttribute('controls');
-      const label = this._playing ? 'Pause animation' : 'Play animation';
-      if (this._mini.getAttribute('aria-label') !== label) {
-        this._mini.setAttribute('aria-label', label);
-        this._miniIcon.firstChild.setAttribute('d', this._playing ? PAUSE : PLAY);
+      const controls = this.hasAttribute('controls');
+      // The big button invites a first play (no autoplay, reduced motion) or a resume. A
+      // play-once scene that has ended just holds its last frame: no overlay on the headline.
+      this._big.hidden = !this._ready || this._playing || this._ended || scrub || this._hover();
+      this._mini.hidden = !this._ready || !controls || scrub;
+      const state = this._playing ? 'pause' : this._ended ? 'replay' : 'play';
+      if (this._miniState !== state) {
+        this._miniState = state;
+        this._mini.setAttribute('aria-label', state === 'pause' ? 'Pause animation' : state === 'replay' ? 'Replay animation' : 'Play animation');
+        this._miniIcon.firstChild.setAttribute('d', state === 'pause' ? PAUSE : state === 'replay' ? REPLAY : PLAY);
+        this._miniIcon.classList.toggle('line', state === 'replay');
       }
       this._wrap.classList.toggle('paused', !this._playing);
       this._mini.classList.toggle('paused', !this._playing);
-      this._wrap.style.cursor = this._ready && (!this._playing || this.hasAttribute('controls')) ? 'pointer' : '';
+      this._wrap.style.cursor = this._ready && (controls || (!this._playing && !this._ended)) ? 'pointer' : '';
       kick();
     }
 

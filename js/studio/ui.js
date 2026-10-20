@@ -370,7 +370,9 @@
     if (!text || target.disabled && !target.hasAttribute('data-tip-disabled')) return;
     if (!tip.el) { tip.el = h('div', { class: 'tip', role: 'presentation' }); document.body.append(tip.el); }
     const kbd = target.getAttribute('data-kbd');
-    tip.el.replaceChildren(h('span', null, text), kbd ? h('kbd', null, kbd) : null);
+    // replaceChildren() would print a null child as the text "null": add the key only when set.
+    tip.el.replaceChildren(h('span', null, text));
+    if (kbd) tip.el.append(h('kbd', null, kbd));
     tip.target = target;
     tip.el.style.left = '-999px';
     tip.el.classList.add('on');

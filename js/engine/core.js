@@ -104,14 +104,33 @@
     if (t < 2.5 / d1) return n1 * (t -= 2.25 / d1) * t + 0.9375;
     return n1 * (t -= 2.625 / d1) * t + 0.984375;
   }
-  /** Damped spring step response normalised so f(1) = 1. */
+  /**
+   * Damped spring step response (unit mass) normalised so f(1) = 1. One unit of t is a second of
+   * spring time, sped up when a loose spring would still be ringing at the end (its envelope is
+   * under 0.5% by t = 1), so any stiffness and damping settles inside its window.
+   */
   function spring(stiffness, damping) {
     const w = Math.sqrt(stiffness), z = damping / (2 * w);
-    const wd = w * Math.sqrt(Math.max(1e-6, 1 - z * z));
-    const raw = (t) => 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + (z * w / wd) * Math.sin(wd * t));
-    const end = raw(1);
-    return (t) => (t <= 0 ? 0 : t >= 1 ? 1 : raw(t) / end);
+    let raw, T;
+    if (z < 0.999) {
+      // Under-damped: rings, with envelope e^(−zωt).
+      const wd = w * Math.sqrt(1 - z * z);
+      raw = (t) => 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + (z * w / wd) * Math.sin(wd * t));
+      T = Math.log(200) / (z * w);
+    } else if (z <= 1.001) {
+      raw = (t) => 1 - Math.exp(-w * t) * (1 + w * t); // critically damped
+      T = 7.43 / w;
+    } else {
+      // Over-damped: two real poles; the slow one sets how long it creeps in.
+      const r = Math.sqrt(z * z - 1), s1 = -w * (z - r), s2 = -w * (z + r);
+      raw = (t) => 1 - (s2 * Math.exp(s1 * t) - s1 * Math.exp(s2 * t)) / (s2 - s1);
+      T = Math.log(200) / -s1;
+    }
+    T = Math.max(1, T);
+    const end = raw(T);
+    return (t) => (t <= 0 ? 0 : t >= 1 ? 1 : raw(t * T) / end);
   }
+  TM.spring = spring;
 
   /** CSS-style cubic-bezier(x1, y1, x2, y2) solver (Newton–Raphson with bisection fallback). */
   TM.cubicBezier = function (x1, y1, x2, y2) {
@@ -196,9 +215,22 @@
   ];
 
   const bezierCache = new Map();
+  // Custom springs: 'spring(stiffness, damping)', stiffness 10–1000, damping 1–100.
+  const SPRING_RE = /^spring\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\)$/;
+  const SPRING_K = [10, 1000], SPRING_C = [1, 100];
+  /** [stiffness, damping] of a custom spring spec, or null. */
+  TM.springParams = function (spec) {
+    const m = typeof spec === 'string' && SPRING_RE.exec(spec);
+    if (!m) return null;
+    const k = +m[1], c = +m[2];
+    return k >= SPRING_K[0] && k <= SPRING_K[1] && c >= SPRING_C[0] && c <= SPRING_C[1] ? [k, c] : null;
+  };
+  /** The spec string for a custom spring (values rounded and clamped to the allowed range). */
+  TM.springSpec = (k, c) => `spring(${Math.round(clamp(k, SPRING_K[0], SPRING_K[1]))},${+clamp(c, SPRING_C[0], SPRING_C[1]).toFixed(1)})`;
   /**
-   * Resolve an easing spec to a function. A spec is a name from TM.EASINGS or a
-   * cubic-bézier array [x1, y1, x2, y2]. Unknown specs fall back to `fallback`.
+   * Resolve an easing spec to a function. A spec is a name from TM.EASINGS, a cubic-bézier
+   * array [x1, y1, x2, y2] or a custom spring 'spring(stiffness, damping)'. Unknown specs fall
+   * back to `fallback`.
    */
   TM.ease = function (spec, fallback = 'smooth') {
     if (typeof spec === 'function') return spec;
@@ -207,10 +239,20 @@
       if (!bezierCache.has(key)) bezierCache.set(key, TM.cubicBezier(spec[0], spec[1], spec[2], spec[3]));
       return bezierCache.get(key);
     }
+    if (typeof spec === 'string' && !EASINGS[spec]) {
+      const sp = TM.springParams(spec);
+      if (sp) {
+        if (!bezierCache.has(spec)) {
+          if (bezierCache.size > 256) bezierCache.clear();
+          bezierCache.set(spec, spring(sp[0], sp[1]));
+        }
+        return bezierCache.get(spec);
+      }
+    }
     return EASINGS[spec] || EASINGS[fallback] || EASINGS.linear;
   };
   TM.isEaseSpec = (spec) =>
-    (typeof spec === 'string' && Object.prototype.hasOwnProperty.call(EASINGS, spec)) ||
+    (typeof spec === 'string' && (Object.prototype.hasOwnProperty.call(EASINGS, spec) || !!TM.springParams(spec))) ||
     (Array.isArray(spec) && spec.length === 4 && spec.every(Number.isFinite) &&
       spec[0] >= 0 && spec[0] <= 1 && spec[2] >= 0 && spec[2] <= 1 &&
       Math.abs(spec[1]) <= 3 && Math.abs(spec[3]) <= 3);
@@ -309,6 +351,8 @@
       if (!PARAM_TYPES.has(p.type)) throw new Error(`Preset ${def.id}: unknown param type "${p.type}" for ${p.key}`);
     });
     def.params = def.params || [];
+    const si = def.params.findIndex((p) => p.key === 'stagger' && p.spread);
+    if (si >= 0 && !def.params.some((p) => p.key === 'staggerCurve')) def.params.splice(si + 1, 0, ...TM.P.spread());
     // Optional curated looks: [{ name, bg?, post?, layer: { font, fill, fx, params, path, … } }].
     def.looks = Array.isArray(def.looks) ? def.looks.filter((l) => l && typeof l.name === 'string').slice(0, 8) : [];
     def.category = def.category || 'Kinetic';
@@ -346,7 +390,14 @@
     toggle: (key, label, def, extra) => Object.assign({ key, label, type: 'toggle', default: !!def }, extra),
     color: (key, label, def, extra) => Object.assign({ key, label, type: 'color', default: def }, extra),
     ease: (key, label, def, extra) => Object.assign({ key, label, type: 'ease', default: def }, extra),
-    stagger: (def = 0.5) => TM.P.range('stagger', 'Stagger', 0, 0.95, 0.01, def, { group: 'Timing' }),
+    // `spread: true` marks the shared stagger control: registerPreset gives every preset that uses
+    // it a stagger-distribution curve and seeded jitter (applied in f.stagger, see f.spread).
+    stagger: (def = 0.5) => TM.P.range('stagger', 'Stagger', 0, 0.95, 0.01, def, { group: 'Timing', spread: true }),
+    /** The distribution controls that follow a shared stagger control (added automatically). */
+    spread: () => [
+      TM.P.ease('staggerCurve', 'Stagger curve', 'linear', { group: 'Timing', hint: 'How start times spread along the order: ease-in bunches the first letters, ease-out the last' }),
+      TM.P.range('jitter', 'Jitter', 0, 1, 0.01, 0, { group: 'Timing', hint: 'Seeded random offset of each start time: 0 keeps the order, 1 shuffles it' }),
+    ],
     order: (def = 'start') => TM.P.select('order', 'Order', TM.ORDERS, def, { group: 'Timing' }),
     /** In → hold → out sequencing used by reveal-style presets (read by f.seq). */
     sequence: (o = {}) => [

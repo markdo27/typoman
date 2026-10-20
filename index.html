@@ -9,7 +9,11 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230015ff'/%3E%3Cpath d='M9 9h14v4h-5v12h-4V13H9z' fill='%23fff'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Anton&display=swap">
+<!-- UI fonts load without blocking: a hung fonts.googleapis.com must not stop the studio from
+     booting (a plain stylesheet link holds back rendering and every script after it). Until
+     they arrive the studio draws in the system fallbacks named in css/studio.css. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Anton&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Anton&display=swap"></noscript>
 <link rel="stylesheet" href="css/studio.css">
 </head>
 <body class="booting" data-tab="presets">
@@ -66,6 +70,7 @@
           <div class="frame-label" aria-hidden="true"><span id="frameName">Untitled</span><span id="frameDims"></span></div>
           <div id="artboard" class="artboard" tabindex="0" role="group" aria-roledescription="artboard" aria-label="Artboard. Click text to select it, drag to move. With the artboard focused, arrow keys nudge the selected text.">
             <canvas id="stageCanvas" role="img" aria-label="Animation preview"></canvas>
+            <span id="draftBadge" class="draft-badge" hidden tabindex="0" aria-label="Draft preview: heavy effects are simplified while the preview plays. Exports always render at full quality." data-tip="Heavy effects are simplified while the preview plays, so it can differ from the export. Exports always render at full quality; pause to see a full-quality frame.">Draft preview</span>
             <div id="hoverBox" class="hover-box" hidden></div>
             <div id="selBox" class="sel-box" hidden><i></i><i></i><i></i><i></i></div>
             <div id="snapV" class="snap v" hidden></div>

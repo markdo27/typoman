@@ -19,6 +19,13 @@ Notes:
   `BlockAdditions`, BlockAddID 1). Opaque WebM uses webm-muxer.
 - The GIF encoder (`js/export/gif.js`) and ZIP writer (`js/export/zip.js`) are TYPOMAN code
   (MIT), not vendored.
+- **Local patch in `mp4-muxer.min.js`:** the `av1C` box builder always wrote the placeholder
+  `81 00 00 00` (level 2.0, 4:4:4, no config OBUs). It now writes
+  `decoderConfig.description` when one is given, the same way the avcC and hvcC builders
+  already do. The one-line change is
+  `av1:()=>I("av1C",[129,0,0,0])` → `av1:e=>I("av1C",e.info.decoderConfig&&e.info.decoderConfig.description?[...new Uint8Array(e.info.decoderConfig.description)]:[129,0,0,0])`.
+  `js/export/video.js` builds that record from the first key frame's sequence-header OBU.
+  Re-apply the patch when updating the library.
 
 To update a library, download the new pinned build, keep its licence header, bump the version
 here and in the header, and re-run the export checks (ffprobe on MP4/WebM output).
