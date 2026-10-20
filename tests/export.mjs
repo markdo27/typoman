@@ -60,6 +60,8 @@ const sizeFor = (short) => ({ w: Math.round((short * 16) / 9 / 2) * 2, h: short 
 const JOBS = [
   { id: 'webm', label: 'WebM VP9, 2 loops', scene: 'solid', opts: { format: 'webm', resolution: 720, fps: FPS, loops: 2 }, frames: 60, kind: 'video', sample: [0, 1, 8, 15, 22, 29, 30, 45, 59] },
   { id: 'mp4', label: 'MP4 (negotiated codec)', scene: 'flow', opts: { format: 'mp4', resolution: 720, fps: FPS, loops: 1 }, frames: 30, kind: 'video', sample: [0, 1, 10, 20, 29] },
+  // What browsers without H.264 and AV1 encoders get: VP9 in MP4 (its own colour-box handling).
+  { id: 'mp4-vp9', label: 'MP4, VP9 fallback (H.264 and AV1 masked)', scene: 'solid', opts: { format: 'mp4', resolution: 720, fps: FPS, loops: 1 }, mask: ['avc1', 'av01'], frames: 30, kind: 'video', sample: [0, 1, 10, 20, 29] },
   { id: 'gif', label: 'GIF 240p', scene: 'flap', opts: { format: 'gif', resolution: 240, fps: FPS, loops: 1 }, frames: 30, kind: 'gif' },
   { id: 'png', label: 'PNG still', scene: 'solid', opts: { format: 'png', resolution: 720, time: 0.5 }, frames: 1, kind: 'png', time: 0.5 },
   { id: 'png-alpha', label: 'PNG still, transparent', scene: 'alpha', opts: { format: 'png', resolution: 720, time: 0.4, transparent: true }, frames: 1, kind: 'png', time: 0.4 },
@@ -96,20 +98,49 @@ async function installPageHelpers(page) {
       }
       return out;
     };
-    window.__qaExport = async (sceneIn, opts) => {
+    /**
+     * Run an export. mask: codec-string prefixes that VideoEncoder.isConfigSupported pretends not
+     * to support while it runs, to exercise the negotiation fallbacks (e.g. VP9 in MP4).
+     */
+    window.__qaExport = async (sceneIn, opts, mask) => {
       const progress = [];
+      const orig = VideoEncoder.isConfigSupported;
+      if (mask) {
+        VideoEncoder.isConfigSupported = (cfg) => (mask.some((m) => String(cfg.codec).startsWith(m)) ? Promise.resolve({ supported: false, config: cfg }) : orig.call(VideoEncoder, cfg));
+        TM.Export._clearCodecCache();
+      }
       const t0 = performance.now();
-      const res = await TM.Export.run(TM.Scene.normalize(sceneIn), opts, { onProgress: (p) => progress.push(+(p.fraction || 0)) });
-      const ms = performance.now() - t0;
+      let res, ms, neg = null;
+      try {
+        res = await TM.Export.run(TM.Scene.normalize(sceneIn), opts, { onProgress: (p) => progress.push(+(p.fraction || 0)) });
+        ms = performance.now() - t0;
+        // negotiate() caches per plan, so this is the probe the export itself ran.
+        if (opts.format === 'mp4' || opts.format === 'webm') neg = await TM.Export.negotiate(res.plan);
+      } finally {
+        if (mask) { VideoEncoder.isConfigSupported = orig; TM.Export._clearCodecCache(); }
+      }
       let monotonic = true;
       for (let i = 1; i < progress.length; i++) if (progress[i] < progress[i - 1] - 1e-9) monotonic = false;
-      const neg = opts.format === 'mp4' || opts.format === 'webm' ? await TM.Export.negotiate(res.plan) : null;
       return {
         ms, name: res.name, info: res.info, plan: res.plan,
         tried: neg ? neg.tried.map((t) => `${t.id}:${t.ok ? 'yes' : 'no'}`).join(' ') : '',
         progress: { count: progress.length, monotonic, last: progress[progress.length - 1] },
         b64: await toB64(new Uint8Array(await res.blob.arrayBuffer())),
       };
+    };
+    /** Abort an export a few frames in: it must reject with AbortError, promptly. */
+    window.__qaCancel = async (sceneIn, opts) => {
+      const job = new AbortController();
+      let tAbort = 0, done = 0;
+      try {
+        await TM.Export.run(TM.Scene.normalize(sceneIn), opts, {
+          signal: job.signal,
+          onProgress: (p) => { if (p.phase === 'render' && p.done >= 3 && !job.signal.aborted) { done = p.done; tAbort = performance.now(); job.abort(); } },
+        });
+        return { rejected: false, aborted: job.signal.aborted };
+      } catch (e) {
+        return { rejected: true, name: e.name, message: String(e.message), afterFrames: done, latencyMs: tAbort ? performance.now() - tAbort : null };
+      }
     };
   });
 }
@@ -194,12 +225,21 @@ await run(async (cleanup) => {
       `${fit.bad.length} of ${fit.total} length × fps combinations don't, e.g. ${fit.bad.filter((b) => /^2\.7 s|^3\.3 s/.test(b)).slice(0, 3).join('; ')}`);
   }
 
+  // Cancelling: an aborted export rejects with AbortError at once; the exports below then show
+  // the exporter still works afterwards.
+  {
+    R.section('cancel');
+    const c = await page.evaluate(({ scene, opts }) => window.__qaCancel(scene, opts), { scene: SCENES.solid, opts: { format: 'webm', resolution: 720, fps: FPS, loops: 4 } });
+    R.check('cancel: an aborted WebM export rejects with AbortError', c.rejected && c.name === 'AbortError', c.rejected ? `${c.name}: ${c.message}` : 'the export finished anyway');
+    R.check('cancel: it stops within a second of the abort', c.latencyMs != null && c.latencyMs < 1000, `${c.latencyMs == null ? '?' : Math.round(c.latencyMs)} ms after frame ${c.afterFrames}`);
+  }
+
   for (const job of JOBS) {
     const scene = SCENES[job.scene];
     R.section(`${job.label}  [${job.id}: ${job.scene} scene, ${scene.layers[0].preset}]`);
     let res;
     try {
-      res = await page.evaluate(({ scene, opts }) => window.__qaExport(scene, opts), { scene, opts: job.opts });
+      res = await page.evaluate(({ scene, opts, mask }) => window.__qaExport(scene, opts, mask), { scene, opts: job.opts, mask: job.mask || null });
     } catch (e) {
       R.check(`${job.id}: export completes`, false, String(e.message || e).split('\n')[0]);
       continue;
@@ -240,9 +280,16 @@ async function checkVideo(R, page, job, scene, res, file, bytes, size, hasFF) {
   const { info } = res;
   const want = { avc: 'h264', av1: 'av1', vp9: 'vp9', vp8: 'vp8' }[info.family];
   if (job.opts.format === 'mp4') {
-    R.info(`MP4 codec in use: ${info.codec} (${info.label})${info.family !== 'avc' ? ' — no H.264 encoder in this browser, negotiation fell back' : ''}`);
+    R.info(`MP4 codec in use: ${info.codec} (${info.label})${job.mask ? ` — ${job.mask.join(', ')} masked` : info.family !== 'avc' ? ' — no H.264 encoder in this browser, negotiation fell back' : ''}`);
+    if (job.mask) R.check(`${job.id}: negotiation falls back to VP9`, info.family === 'vp9', info.codec);
     const top = boxes(bytes).map((b) => b.type);
-    R.check('mp4: fast start (ftyp, then moov before mdat)', top[0] === 'ftyp' && top.indexOf('moov') > 0 && top.indexOf('moov') < top.indexOf('mdat'), top.join(' '));
+    R.check(`${job.id}: fast start (ftyp, then moov before mdat)`, top[0] === 'ftyp' && top.indexOf('moov') > 0 && top.indexOf('moov') < top.indexOf('mdat'), top.join(' '));
+    if (info.family === 'vp9') {
+      // vpcC (VP codec ISO-BMFF binding): 8-bit 4:2:0, the colour the stream is tagged with.
+      const box = findBox(bytes, ['moov', 'trak', 'mdia', 'minf', 'stbl', 'stsd', 'vp09', 'vpcC']);
+      const b = box && bytes.subarray(box.body + 4, box.end);
+      R.check(`${job.id}: vpcC box says 8-bit 4:2:0`, !!b && b[2] >> 4 === 8 && ((b[2] >> 1) & 7) <= 1, b ? `profile ${b[0]}, level ${b[1]}, bit depth ${b[2] >> 4}, chroma ${(b[2] >> 1) & 7}, primaries/transfer/matrix ${b[3]}/${b[4]}/${b[5]}` : 'missing');
+    }
   } else {
     R.check('webm: VP9 chosen first for WebM', info.family === 'vp9', info.codec);
     R.check('webm: EBML header', bytes.readUInt32BE(0) === 0x1a45dfa3);

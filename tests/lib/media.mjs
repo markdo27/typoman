@@ -157,9 +157,10 @@ export function boxes(buf, start = 0, end = buf.length) {
 /** First box along a path of types, e.g. ['moov', 'trak', 'mdia']; containers are descended plainly. */
 export function findBox(buf, pathTypes, list = boxes(buf)) {
   let cur = null;
-  for (const type of pathTypes) {
+  for (const [k, type] of pathTypes.entries()) {
     cur = list.find((b) => b.type === type);
     if (!cur) return null;
+    if (k === pathTypes.length - 1) break; // the target's body isn't necessarily boxes
     let body = cur.body;
     if (type === 'stsd') body += 8; // full box header + entry_count
     else if (['avc1', 'av01', 'vp09', 'hvc1', 'hev1'].includes(type)) body += 78; // VisualSampleEntry fields
