@@ -384,9 +384,11 @@
      * `top` (px above the glyph centres) where the curve turns left, `bottom` where it turns
      * right. h·|ω| is exactly what the inner corners of neighbouring rigid glyph boxes lose, so
      * every pair gets the room its own turning takes, on the concave side's account only, and
-     * straight stretches keep the layout's spacing. When rotate < 1 the boxes also lean against
-     * the curve, and a leaning pair needs its advance along the box's own axis (1/cos of the
-     * lean, but no more than its height over the sine; `width` is the narrowest advance).
+     * straight stretches keep the layout's spacing. Where the drawn angle differs from the
+     * curve's (averaging turns glyphs early into a bend, rotate < 1 holds them back), the boxes
+     * lean against the curve, and a leaning pair needs its advance along the boxes' own axis
+     * (1/cos of the lean, but no more than its height over the sine; `width` is the narrowest
+     * advance).
      * `spread` px eases σ in and out like a tracking curve: a max-filter followed by a
      * triangle blur of the same reach, so it only ever adds room. `amount` scales the extra
      * room, `cap` bounds σ. Cached per options.
@@ -414,21 +416,42 @@
         const t = seg > 1e-9 ? clamp((s - cum[i]) / seg) : 0;
         ang[m] = Math.atan2(lerp(this.ty[i], this.ty[j], t), lerp(this.tx[i], this.tx[j], t));
       }
-      let w = new Float64Array(M);
-      for (let m = 0; m < M; m++) w[m] = (angleDelta(ang[m], ang[m + 1]) / ds) * rotate;
-      // atSmooth's triangle over `smooth` px: two box passes of half that width.
+      const d = new Float64Array(M);
+      for (let m = 0; m < M; m++) d[m] = angleDelta(ang[m], ang[m + 1]);
+      // The glyphs' rotation rate: the turning, averaged like atSmooth (a triangle over `smooth`
+      // px, i.e. two box passes of half that width), times `rotate`.
       const half = Math.round(smooth / 2 / ds);
+      let w = new Float64Array(M);
+      for (let m = 0; m < M; m++) w[m] = (d[m] / ds) * rotate;
       if (half > 0) w = boxFilter(boxFilter(w, half, closed), half, closed);
+      // Their lean against the curve: the drawn angle (rotate × the averaged tangent angle) less
+      // the curve's own. Averaging turns a glyph early into a bend; rotate < 1 holds it back.
+      let lean = null;
+      if (half > 0 || rotate < 1) {
+        const E = 2 * half, th = new Float64Array(M), ext = new Float64Array(M + 2 * E);
+        let acc = 0;
+        for (let m = 0; m < M; m++) { th[m] = acc + d[m] / 2; acc += d[m]; }
+        for (let t = 0; t < ext.length; t++) {
+          const m = t - E, lap = Math.floor(m / M);
+          ext[t] = closed ? th[m - lap * M] + lap * acc : th[clamp(m, 0, M - 1)];
+        }
+        const sm = half > 0 ? boxFilter(boxFilter(ext, half, false), half, false) : ext;
+        lean = new Float64Array(M);
+        for (let m = 0; m < M; m++) {
+          const a = sm[m + E] + ang[0];
+          lean[m] = angleDelta(th[m] + ang[0], rotate * Math.atan2(Math.sin(a), Math.cos(a)));
+        }
+      }
       const H = top + bottom;
       let sig = new Float64Array(M);
       for (let m = 0; m < M; m++) {
         const h = w[m] > 0 ? bottom : top;
         let k = 1 / Math.max(1 / cap, 1 - h * Math.abs(w[m]));
-        if (rotate < 1) {
-          // Lean of the boxes against the curve: the glyph turns by rotate × the tangent angle.
-          const lean = (1 - rotate) * (ang[m] + angleDelta(ang[m], ang[m + 1]) / 2);
-          const c = Math.abs(Math.cos(lean)), sn = Math.abs(Math.sin(lean));
-          k *= Math.min(c > 1e-6 ? 1 / c : cap, sn > 1e-6 ? Math.max(1, H / (width * sn)) : cap);
+        if (lean) {
+          // A pair of boxes leaning by φ needs its advance along the boxes' own axis (1/cos φ),
+          // unless the lean already lifts one clear of the other (height over sin φ).
+          const c = Math.abs(Math.cos(lean[m])), sn = Math.abs(Math.sin(lean[m]));
+          if (sn > 1e-4) k *= Math.min(c > 1e-6 ? 1 / c : cap, Math.max(1, H / (width * sn)));
         }
         sig[m] = clamp(1 + amount * (k - 1), 1, cap);
       }

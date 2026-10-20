@@ -19,12 +19,15 @@
   // Bend radii, as the block's reach toward the inside of the bend plus a multiple of the
   // glyphs' own reach h (so the innermost glyph edge keeps a radius of that multiple × h):
   //  - HARD always: lanes stay clean, and bend spacing stays under 1 + 1/0.35 ≈ 3.9×.
-  //  - comfort(k), from Corner smoothing: 1.25 h (spacing ≤ 1.8×, ≈ 0.35 em a pair) at 0, about
-  //    3 h (≤ 1.33×) by default, 6 h at 1. Kept wherever it moves the type no further than
-  //    reach(k) from the drawn path, so stars keep their points and waves their swing.
+  //  - comfort(k), from Corner smoothing k: 1.25 h (spacing ≤ 1.8×, ≈ 0.35 em a pair) at 0,
+  //    2.6 h (≤ 1.4×) by default, 4.75 h at 1. Kept wherever it moves the type no further than
+  //    reach(k) from the drawn path, so stars keep their points and waves most of their swing.
+  // Measured on the default wave (16:9, TYPE IN MOTION): worst in-word gap 0.13 em, the type at
+  // most 0.24 em off the drawn path. Tuned against zigzags, the heart, 1:1 and 9:16, 1–3 lines.
   const HARD = 0.35;
-  const comfort = (k) => 1.25 + 4.75 * Math.pow(clamp(k, 0, 1), 1.4);
-  const reach = (k) => 0.4 + 1.2 * clamp(k, 0, 1); // em: 1 em by default
+  const comfort = (k) => 1.25 + 3.5 * Math.pow(clamp(k, 0, 1), 1.4);
+  const reach = (k) => 0.35 + clamp(k, 0, 1); // em
+  const rotWin = (k) => 1.6 * clamp(k, 0, 1); // em: atSmooth window for the glyphs' angle
   const LIMIT = 2; // em: the hard radii never move the type further than this
   const SPREAD = 0.35; // em: how far bend spacing eases in and out around a bend
 
@@ -155,7 +158,7 @@
     const n = L.lines.length;
     const amp = P.wave > 0 ? P.wave * size * 0.5 : 0;
     const lift = P.align === 'baseline' ? -L.capH / 2 : 0;
-    const win = P.cornerSmooth * size * 1.2; // atSmooth window used when drawing
+    const win = rotWin(P.cornerSmooth) * size; // atSmooth window used when drawing
     const key = [n, L.lineGap, L.capH, size, lift, amp, P.cornerSmooth, P.bendSpacing, P.rotate, P.waveLength, lines.map((m) => m.top + ',' + m.bottom + ',' + m.wMin).join(';')].join('|');
     const hit = built.get(base);
     if (hit && hit.key === key) return hit;
@@ -233,8 +236,8 @@
       if (alpha <= 0.002) return;
     }
     // Tangent averaged over about a glyph, so letters swing round a turn instead of snapping.
-    const win = P.cornerSmooth * size * 0.6;
-    const pt = win > 0.5 ? path.atSmooth(s, win * 2) : path.at(s);
+    const win = rotWin(P.cornerSmooth) * size;
+    const pt = win > 1 ? path.atSmooth(s, win) : path.at(s);
     let off = 0;
     if (P.wave > 0) {
       off = Math.sin(TAU * (path.srcAt(s) / G.waveLen - P.waveSpeed * f.p)) * P.wave * size * 0.5;
