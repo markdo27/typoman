@@ -6,11 +6,12 @@
   "license": "MIT",
   "scripts": {
     "start": "npx --yes http-server . -p 8080 -c-1",
-    "test": "npm run test:smoke && npm run test:export && npm run test:embed && npm run test:sweep",
+    "test": "npm run test:smoke && npm run test:export && npm run test:embed && npm run test:sweep && npm run test:studio",
     "test:smoke": "node tests/smoke.mjs",
     "test:export": "node tests/export.mjs",
     "test:embed": "node tests/embed.mjs && node tests/embed-live.mjs",
-    "test:sweep": "node tests/sweep.mjs"
+    "test:sweep": "node tests/sweep.mjs",
+    "test:studio": "node tests/studio.mjs"
   },
   "devDependencies": {
     "playwright": "1.56.1"
