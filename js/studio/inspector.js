@@ -20,28 +20,174 @@
   };
 
   // ───────────────────────────── photosensitivity ─────────────────────────────
-  // Presets that can flash expose an optional preset.flashes(layer, scene): the most large-area
-  // flashes per second for the layer's current params, 0 if none. Above 3 a second (WCAG 2.3.1,
-  // ITU-R BT.1702) the studio warns: in the Motion panel, and in the export and embed dialogs.
-  Studio.FLASH_LIMIT = 3;
+  // TM.Safety.flashes(scene) is the source of truth: it renders the loop small and counts flashes
+  // the way WCAG 2.3.1 defines them (above 3 a second fails). Studio.safety runs it for the
+  // studio: one check at a time, results cached by scene JSON, and a check of a newer scene
+  // aborts an older one. The Motion panel asks in the background once edits settle; the export
+  // and embed dialogs ask when they open. A preset's own flashes(layer, scene) is optional and
+  // only a first guess while the real check is pending (or when TM.Safety isn't loaded).
+  Studio.FLASH_LIMIT = (TM.Safety && TM.Safety.LIMIT) || 3;
   /**
-   * Flashes per second of a visible layer, 0 when its preset can't tell. The method is asked
-   * for one pass at the scene's pace (cycles 1) and the result scaled by the layer's cycles:
-   * all motion runs on pass progress, so ×2 cycles flash twice as fast, whether or not the
-   * preset's own method counts cycles.
+   * Fast path: flashes per second of a visible layer by its preset's own estimate, 0 when it
+   * can't tell. preset.flashes(layer, scene) already accounts for the layer's cycles, so it is
+   * asked as is.
    */
   Studio.flashRate = function (layer, scene) {
     const p = layer && TM.getPreset(layer.preset);
     if (!p || typeof p.flashes !== 'function' || layer.visible === false || !String(layer.text || '').trim()) return 0;
     try {
-      const cycles = Math.max(1, (layer.time && layer.time.cycles) || 1);
-      const r = +p.flashes(Object.assign({}, layer, { time: Object.assign({}, layer.time, { cycles: 1 }) }), scene);
-      return Number.isFinite(r) && r > 0 ? r * cycles : 0;
+      const r = +p.flashes(layer, scene);
+      return Number.isFinite(r) && r > 0 ? r : 0;
     } catch (e) { return 0; }
   };
   /** Visible layers above the limit: [{ index, layer, rate }]. */
   Studio.flashRisks = (scene) => scene.layers.map((layer, index) => ({ index, layer, rate: Studio.flashRate(layer, scene) })).filter((x) => x.rate > Studio.FLASH_LIMIT);
   Studio.flashText = (rate) => 'about ' + (Math.round(rate * 10) / 10) + ' times a second';
+
+  const abortError = () => new DOMException('Flash check aborted', 'AbortError');
+  const keys = new WeakMap(); // scene object → cache key (store scenes are replaced, never mutated)
+  const listeners = new Set();
+  /**
+   * The studio's photosensitivity checks, on top of TM.Safety.flashes.
+   *   check(scene, { signal })  → Promise of { ok, flashes, red, worstAt, frames, limit }, or null
+   *                               without TM.Safety; rejects with an AbortError when aborted
+   *   cached(scene)             the result for exactly this scene, or null
+   *   latest                    { key, result } of the last finished check (any scene)
+   *   pending                   true while the background check for the current scene waits
+   *   watch(store), onChange(fn) background checks ~1.5 s after the last edit; fn hears results
+   */
+  const safety = {
+    available: () => !!(TM.Safety && typeof TM.Safety.flashes === 'function'),
+    latest: null,
+    pending: false,
+    _cache: new Map(),
+    _run: null,
+    keyOf(scene) {
+      let k = keys.get(scene);
+      if (k == null) { k = JSON.stringify(Object.assign({}, scene, { name: '' })); keys.set(scene, k); }
+      return k;
+    },
+    cached(scene) {
+      const k = this.keyOf(scene);
+      const hit = this._cache.get(k);
+      if (!hit) return null;
+      this._cache.delete(k); // most recently used last
+      this._cache.set(k, hit);
+      return hit;
+    },
+    _remember(key, result) {
+      this._cache.set(key, result);
+      while (this._cache.size > 32) this._cache.delete(this._cache.keys().next().value);
+      this.latest = { key, result };
+    },
+    check(scene, opts = {}) {
+      if (!this.available()) return Promise.resolve(null);
+      const hit = this.cached(scene);
+      if (hit) return Promise.resolve(hit);
+      const signal = opts.signal;
+      if (signal && signal.aborted) return Promise.reject(abortError());
+      const key = this.keyOf(scene);
+      let run = this._run;
+      if (!run || run.key !== key) {
+        if (run) run.ctrl.abort(); // a newer scene: that check is stale
+        const ctrl = new AbortController();
+        const snap = TM.Scene.clone(scene);
+        run = this._run = { key, ctrl, users: 0 };
+        run.promise = (async () => {
+          await TM.prepare(snap); // fonts first, as an export would draw them
+          if (ctrl.signal.aborted) throw abortError();
+          const result = await TM.Safety.flashes(snap, { signal: ctrl.signal });
+          this._remember(key, result);
+          return result;
+        })();
+        const done = () => { if (this._run === run) this._run = null; };
+        run.promise.then(done, done);
+      }
+      const mine = run;
+      mine.users++;
+      return new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = (fn, v) => {
+          if (settled) return;
+          settled = true;
+          mine.users--;
+          if (signal) signal.removeEventListener('abort', onAbort);
+          fn(v);
+        };
+        const onAbort = () => {
+          finish(reject, abortError());
+          // Nobody else waiting: stop rendering frames nobody will read.
+          if (mine.users <= 0 && this._run === mine) { mine.ctrl.abort(); this._run = null; }
+        };
+        if (signal) signal.addEventListener('abort', onAbort);
+        mine.promise.then((r) => finish(resolve, r), (e) => finish(reject, e));
+      });
+    },
+    onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+    _emit() { listeners.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } }); },
+    /**
+     * Background checks of the store's scene: ~1.5 s after the last edit (sooner at start), in an
+     * idle moment, never while the tab is hidden. Each edit aborts the check of the scene before.
+     */
+    watch(store) {
+      if (this._watched || !this.available()) return;
+      this._watched = store;
+      let timer = 0, idle = 0, ctrl = null;
+      const stop = () => {
+        clearTimeout(timer);
+        if (idle && window.cancelIdleCallback) window.cancelIdleCallback(idle);
+        idle = 0;
+        if (ctrl) { ctrl.abort(); ctrl = null; }
+      };
+      const schedule = (ms) => {
+        stop();
+        this.pending = !this.cached(store.scene);
+        this._emit();
+        if (this.pending) timer = setTimeout(start, ms);
+      };
+      const start = () => {
+        if (document.hidden) return; // picked up again on visibilitychange
+        const run = () => {
+          idle = 0;
+          const scene = store.scene;
+          const mine = (ctrl = new AbortController());
+          this.check(scene, { signal: mine.signal }).then(() => {
+            if (ctrl !== mine) return;
+            ctrl = null;
+            this.pending = false;
+            this._emit();
+          }, (e) => {
+            if (ctrl !== mine || (e && e.name === 'AbortError')) return;
+            ctrl = null;
+            console.warn('[studio] flash check failed', e);
+            this.pending = false;
+            this._emit();
+          });
+        };
+        if (window.requestIdleCallback) idle = window.requestIdleCallback(run, { timeout: 1000 });
+        else run();
+      };
+      store.on('change', () => schedule(1500));
+      document.addEventListener('visibilitychange', () => { if (!document.hidden && this.pending && !ctrl && !idle) schedule(400); });
+      schedule(1200);
+    },
+  };
+  Studio.safety = safety;
+
+  const secs = (t) => (Math.round(t * 10) / 10).toFixed(1) + ' s';
+  /**
+   * Words for a failing TM.Safety result: { title, when } — what flashes how often, and when the
+   * worst second starts ("from 2.5 s").
+   */
+  Studio.flashWords = function (res) {
+    const L = res.limit || Studio.FLASH_LIMIT;
+    const n = (v) => String(Math.round(v * 10) / 10);
+    const gen = res.flashes > L, red = res.red > L;
+    const title = gen && red ? 'Flashes about ' + n(res.flashes) + ' times a second, red ' + n(res.red)
+      : red ? 'Red flashes about ' + n(res.red) + ' times a second'
+        : 'Flashes about ' + n(res.flashes) + ' times a second';
+    return { title, when: 'from ' + secs(res.worstAt || 0) };
+  };
 
   // Helpers binding a control to a property path on the selected layer / scene.
   function getIn(obj, path) {
@@ -65,6 +211,39 @@
       set: (v) => store.update((s) => setIn(s, path, v), { coalesce: 'S:' + path, reason: path }),
     };
   }
+  // Names for variable axes beyond weight / width / optical size (TM.fonts.axisList tags).
+  const AXIS_NAMES = { GRAD: 'Grade', XTRA: 'Counters', YOPQ: 'Thin strokes', XROT: 'Rotate X', YROT: 'Rotate Y', YEAR: 'Year', MORF: 'Morph',
+    SOFT: 'Softness', WONK: 'Wonky', CASL: 'Casual', CRSV: 'Cursive', MONO: 'Monospace', BLED: 'Bleed', SCAN: 'Scanlines', ROND: 'Roundness',
+    BNCE: 'Bounce', INFM: 'Informality', SPAC: 'Spacing', CTRS: 'Contrast', ital: 'Italic', slnt: 'Slant axis' };
+  // OpenType features (TM.fonts.features): full names, chip labels, and which ones exclude each other.
+  const FEATURE_NAMES = { tnum: 'Tabular figures', pnum: 'Proportional figures', lnum: 'Lining figures', onum: 'Oldstyle figures', smcp: 'Small caps', zero: 'Slashed zero', case: 'Case forms',
+    c2sc: 'Capitals to small caps', ordn: 'Ordinals', sups: 'Superscript', subs: 'Subscript', sinf: 'Scientific inferiors', frac: 'Fractions', salt: 'Stylistic alternates', swsh: 'Swash' };
+  const FEATURE_SHORT = { tnum: 'Tabular', pnum: 'Proportional', lnum: 'Lining', onum: 'Oldstyle', smcp: 'Small caps', zero: 'Slashed 0', case: 'Case',
+    c2sc: 'Caps → sc', ordn: 'Ordinals', sups: 'Sup', subs: 'Sub', sinf: 'Inferiors', frac: 'Fractions', salt: 'Alternates', swsh: 'Swash' };
+  const FEATURE_PAIRS = { tnum: ['pnum'], pnum: ['tnum'], lnum: ['onum'], onum: ['lnum'] };
+  function featureName(tag) {
+    if (FEATURE_NAMES[tag]) return FEATURE_NAMES[tag];
+    let m = /^ss(\d\d)$/.exec(tag);
+    if (m) return 'Stylistic set ' + +m[1];
+    m = /^cv(\d\d)$/.exec(tag);
+    if (m) return 'Character variant ' + +m[1];
+    return tag;
+  }
+  function featureShort(tag) {
+    if (FEATURE_SHORT[tag]) return FEATURE_SHORT[tag];
+    const m = /^(ss|cv)(\d\d)$/.exec(tag);
+    return m ? (m[1] === 'ss' ? 'Set ' : 'Var ') + +m[2] : tag;
+  }
+
+  /** Delete transform key k of the selected layer (the last key stays: turn Animate off instead). */
+  Studio.deleteTransformKey = function (store, k) {
+    const ks = store.layer.transform.keys;
+    if (ks.length <= 1 || !ks[k]) return false;
+    store.updateLayer((l) => { l.transform.keys.splice(k, 1); }, { reason: 'transform', label: 'Delete transform key' });
+    store.setUI({ tkey: Math.max(0, k - 1) });
+    return true;
+  };
+
   /** Show/hide controls from a predicate; returns an updater. */
   const showWhen = (pairs) => () => pairs.forEach(([c, ok]) => { c.el.hidden = !ok(); });
 
@@ -156,17 +335,77 @@
               set: layerBinding(store, 'font.opsz').set,
             }));
           }
+          // Any other axis the family has (Grade, Rotate, Year, Morph, Softness…). slnt is left to
+          // Slant: a forward slant moves onto the axis on its own (font.autoSlnt).
+          const custom = TM.fonts.axisList(axesFam).filter((a) => a.tag !== 'wdth' && a.tag !== 'opsz' && a.tag !== 'slnt');
+          custom.forEach((a) => {
+            const span = a.max - a.min;
+            // Whole numbers for wide axes, else a round step near 1/200 of the range (the engine snaps there).
+            const step = span >= 50 ? 1 : [0.5, 0.2, 0.1, 0.05, 0.02, 0.01].find((v) => v <= span / 100) || 0.01;
+            axesCtl.push(C.range({
+              label: AXIS_NAMES[a.tag] || a.tag, min: a.min, max: a.max, step, decimals: step >= 1 ? 0 : String(step).split('.')[1].length,
+              default: a.def, hint: 'Variable axis ' + a.tag + ' (' + a.min + ' to ' + a.max + ')',
+              get: () => { const v = store.layer.font.axes && store.layer.font.axes[a.tag]; return v != null ? v : a.def; },
+              set: (v) => store.updateLayer((l) => {
+                l.font.axes = Object.assign({}, l.font.axes);
+                if (Math.abs(v - a.def) < step / 2) delete l.font.axes[a.tag]; else l.font.axes[a.tag] = v;
+              }, { coalesce: 'L:font.axes.' + a.tag, reason: 'font.axes', label: (AXIS_NAMES[a.tag] || a.tag) + ' axis' }),
+            }));
+          });
           axesCtl.forEach((c) => axesSlot.append(c.el));
         };
         buildAxes();
 
+        // True italic where Google serves one; otherwise say why it's off (Slant draws an oblique).
+        const italic = C.toggle({ label: 'Italic', get: () => !!store.layer.font.italic && TM.fonts.hasItalic(store.layer.font.family), set: (v) => store.updateLayer((l) => { l.font.italic = v; }, { reason: 'font.italic', label: v ? 'Italic' : 'Upright' }) });
+        const italicBox = italic.el.querySelector('input');
+        const syncItalic = () => {
+          const fam = store.layer.font.family, has = TM.fonts.hasItalic(fam);
+          italicBox.disabled = !has;
+          italic.el.classList.toggle('disabled', !has);
+          italic.el.setAttribute('data-tip', has ? 'The typeface’s true italic design' : Studio.fontLabel(fam) + ' has no true italic. Use Slant for an oblique, or pick a family with italics (Playfair Display, Fraunces, Inter Tight…)');
+        };
+        // Per-glyph OpenType features the family has (figures, small caps, stylistic sets…).
+        const featSlot = h('div', { class: 'ctl ctl-feats' });
+        let featFor = null;
+        const buildFeats = () => {
+          featFor = store.layer.font.family;
+          const list = TM.fonts.features ? TM.fonts.features(featFor) : [];
+          featSlot.hidden = !list.length;
+          featSlot.replaceChildren();
+          if (!list.length) return;
+          const chips = h('div', { class: 'feat-chips', role: 'group', 'aria-label': 'OpenType features' });
+          list.forEach((tag) => {
+            const b = h('button', { type: 'button', class: 'feat-chip', 'data-tag': tag, 'aria-pressed': 'false', 'data-tip': featureName(tag) + ' (' + tag + ')' }, featureShort(tag));
+            b.addEventListener('click', () => {
+              const on = !(+(store.layer.font.features || {})[tag] > 0);
+              store.updateLayer((l) => {
+                const f = Object.assign({}, l.font.features);
+                if (on) { f[tag] = 1; (FEATURE_PAIRS[tag] || []).forEach((t) => delete f[t]); } else delete f[tag];
+                l.font.features = f;
+              }, { reason: 'font.features', label: featureName(tag) + (on ? ' on' : ' off') });
+            });
+            chips.append(b);
+          });
+          featSlot.append(h('span', { class: 'lbl' }, list.some((t) => /^(tnum|pnum|lnum|onum)$/.test(t)) && list.every((t) => /^(tnum|pnum|lnum|onum|zero)$/.test(t)) ? 'Figures' : 'Features'), chips);
+        };
+        const syncFeats = () => {
+          if (store.layer.font.family !== featFor) buildFeats();
+          const f = store.layer.font.features || {};
+          featSlot.querySelectorAll('.feat-chip').forEach((b) => { const on = +f[b.dataset.tag] > 0; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+        };
+        buildFeats();
+
         const size = C.range({ label: 'Size', min: 0.02, max: 0.8, step: 0.005, decimals: 3, default: DEF.type.size, hint: 'Relative to the shorter side of the frame', ...layerBinding(store, 'type.size') });
         const tracking = C.range({ label: 'Tracking', min: -0.2, max: 1, step: 0.005, decimals: 3, default: 0, hint: 'Letter spacing in em', ...layerBinding(store, 'type.tracking') });
         const leading = C.range({ label: 'Leading', min: 0.6, max: 2.5, step: 0.01, default: DEF.type.leading, hint: 'Line height', ...layerBinding(store, 'type.leading') });
-        const slant = C.range({ label: 'Slant', min: -20, max: 20, step: 0.5, decimals: 1, unit: '°', default: 0, ...layerBinding(store, 'type.slant') });
+        const slant = C.range({ label: 'Slant', min: -20, max: 20, step: 0.5, decimals: 1, unit: '°', default: 0, hint: 'Leans the letters. On a font with a slant axis (Roboto Flex, Recursive, Science Gothic) a forward slant uses the axis first', ...layerBinding(store, 'type.slant') });
         const align = C.segmented({ label: 'Align', options: [['left', 'Left', 'Align left', 'alignLeft'], ['center', 'Center', 'Align centre', 'alignCenter'], ['right', 'Right', 'Align right', 'alignRight']], ...layerBinding(store, 'type.align') });
         const textCase = C.segmented({ label: 'Case', options: [['none', 'Aa', 'As typed'], ['upper', 'AA', 'Uppercase'], ['lower', 'aa', 'Lowercase'], ['title', 'Ab', 'Title case']], ...layerBinding(store, 'type.case') });
-        ctl.push(size, tracking, leading, slant, align, textCase);
+        const ligs = C.toggle({ label: 'Ligatures', get: () => store.layer.type.ligatures !== false, set: (v) => store.updateLayer((l) => { l.type.ligatures = v; }, { reason: 'type.ligatures', label: v ? 'Ligatures on' : 'Ligatures off' }) });
+        ligs.el.setAttribute('data-tip', 'Draw the font’s ligatures (fi, fl, Th…) as one glyph. Tracking beyond ±0.03 em turns them off, as in CSS');
+        const wrap = C.segmented({ label: 'Wrap', options: [['auto', 'Auto', 'Re-wrap long lines so the type stays large'], ['off', 'Off', 'Keep your line breaks; long lines shrink to fit']], get: () => store.layer.type.wrap || 'auto', set: (v) => store.updateLayer((l) => { l.type.wrap = v; }, { reason: 'type.wrap', label: 'Wrap: ' + (v === 'off' ? 'off' : 'auto') }) });
+        ctl.push(size, tracking, leading, slant, align, textCase, ligs, wrap, italic);
 
         // Position (looks that place the block at the anchor; path looks follow their path).
         const posHead = h('div', { class: 'sub' }, 'Position');
@@ -180,7 +419,7 @@
         const posWrap = h('div', { class: 'slot' }, posHead, px.el, py.el, h('div', { class: 'row-end' }, center));
         ctl.push(px, py);
 
-        body.append(ta.el, fontCtl.el, weightSlot, axesSlot, size.el, tracking.el, leading.el, slant.el, align.el, textCase.el, posWrap);
+        body.append(ta.el, fontCtl.el, weightSlot, italic.el, axesSlot, featSlot, size.el, tracking.el, leading.el, slant.el, align.el, textCase.el, wrap.el, ligs.el, posWrap);
         const update = () => {
           if (store.layer.font.family !== weightFam) buildWeight();
           if (store.layer.font.family !== axesFam) buildAxes();
@@ -188,6 +427,9 @@
           if (weightCtl) weightCtl.update();
           axesCtl.forEach((c) => c.update());
           posWrap.hidden = !!(store.preset && store.preset.usesPath);
+          wrap.el.hidden = !(store.preset && store.preset.fit); // wrap applies to presets that fit the frame
+          syncItalic();
+          syncFeats();
         };
         update();
         return { update };
@@ -209,20 +451,40 @@
             browse));
           if (preset.description) body.append(h('p', { class: 'hint' }, preset.description));
         }
-        // Photosensitivity: a clear, non-blocking warning right under the preset.
+        // Photosensitivity: a clear, non-blocking warning right under the preset. TM.Safety checks
+        // the whole scene in the background once edits settle (Studio.safety.watch); until it
+        // has, the last warning stays up marked "Rechecking…", or a preset's own estimate shows.
         const flash = h('div', { class: 'flash-warn', role: 'note', hidden: true });
-        let flashShown = -1;
+        let flashShown = '';
         const syncFlash = () => {
-          const rate = Studio.flashRate(store.layer, store.scene);
-          const on = rate > Studio.FLASH_LIMIT;
+          const S = Studio.safety;
+          const exact = S.available() ? S.cached(store.scene) : null;
+          let res = exact, stale = false, guess = 0;
+          if (!exact && S.available() && S.latest && !S.latest.result.ok) { res = S.latest.result; stale = true; }
+          if (!res) {
+            const risks = Studio.flashRisks(store.scene);
+            guess = risks.reduce((m, r) => Math.max(m, r.rate), 0);
+          }
+          const on = (res && !res.ok) || guess > 0;
           flash.hidden = !on;
-          if (!on || Math.abs(rate - flashShown) < 0.05) return;
-          flashShown = rate;
+          flash.classList.toggle('stale', stale);
+          if (!on) { flashShown = ''; return; }
+          const key = res ? [res.flashes, res.red, res.worstAt, stale].join('|') : 'guess' + guess.toFixed(1);
+          if (key === flashShown) return;
+          flashShown = key;
+          const words = res ? Studio.flashWords(res) : { title: 'Flashes ' + Studio.flashText(guess), when: '' };
+          const go = res ? h('button', { type: 'button', class: 'link-btn', 'data-tip': 'Move the playhead to the worst second',
+            onclick: () => store.setUI({ time: Math.min(res.worstAt || 0, store.scene.duration - 1e-3) }) }, 'Show me') : null;
+          const several = store.scene.layers.filter((l) => l.visible !== false).length > 1;
           flash.replaceChildren(UI.icon('warning'), h('div', null,
-            h('b', null, 'Flashes ' + Studio.flashText(rate)),
-            h('p', null, 'Rapid flashing can trigger seizures in people with photosensitive epilepsy. WCAG 2.3.1 allows at most 3 flashes a second: slow it down, soften the flashes or lengthen the loop before you publish.')));
+            h('b', null, words.title),
+            h('p', null, (res ? 'Worst in the second ' + words.when + (several ? ', all layers together' : '') + '. ' : '') +
+              'Rapid flashing can trigger seizures in people with photosensitive epilepsy. WCAG 2.3.1 allows at most 3 flashes a second: slow it down, soften the flashes or lengthen the loop before you publish.'),
+            h('div', { class: 'fw-foot' }, go, stale || !res ? h('span', { class: 'fw-state' }, S.available() ? 'Rechecking…' : '') : null)));
         };
         body.append(flash);
+        Studio.safety.watch(store);
+        const offFlash = Studio.safety.onChange(() => syncFlash());
         // Stack's width-axis fill needs a font with a width axis to reach the edges.
         const WIDTH_FONTS = ['Roboto Flex', 'Science Gothic', 'Anybody'].filter((f) => TM.fonts.has(f));
         let axisTip = null, axisTipFor = null;
@@ -253,6 +515,32 @@
           groups.get(g).push(p);
         });
         const visibleIf = [];
+        let spread = null, spreadKey = '';
+        const drawSpread = () => {
+          if (!spread || !spread.isConnected) return;
+          const P = store.layer.params, idx = store.selected;
+          const n = TM.math.clamp([...String(store.layer.text || '').replace(/\s/g, '')].length, 2, 32);
+          const w = Math.max(60, spread.clientWidth || 180);
+          const k = [w, n, P.stagger, JSON.stringify(P.staggerCurve), P.jitter, store.scene.seed, idx].join('|');
+          if (k === spreadKey) return;
+          spreadKey = k;
+          const dpr = Math.min(2, window.devicePixelRatio || 1);
+          spread.width = Math.round(w * dpr); spread.height = Math.round(22 * dpr);
+          const ctx = spread.getContext('2d');
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.clearRect(0, 0, w, 22);
+          ctx.fillStyle = 'rgba(255,255,255,0.06)';
+          ctx.fillRect(0, 10, w, 2);
+          const seed = (store.scene.seed + idx * 1013) | 0, c = P.staggerCurve, j = P.jitter || 0, st = P.stagger != null ? P.stagger : 0.5;
+          for (let i = 0; i < n; i++) {
+            const r = i / (n - 1);
+            let u = c != null && c !== 'linear' ? TM.math.clamp(TM.ease(c, 'linear')(r), 0, 1) : r;
+            if (j > 0) u = u * (1 - j) + j * TM.rand(seed, Math.round(r * 65536), 5113);
+            const x = 3 + u * st * (w - 6);
+            ctx.fillStyle = 'hsl(' + (232 - r * 200) + ' 90% 70%)';
+            ctx.fillRect(Math.round(x) - 1, 4, 2, 14);
+          }
+        };
         groups.forEach((params, g) => {
           if (groups.size > 1) body.append(h('div', { class: 'sub' }, g));
           params.forEach((p) => {
@@ -267,6 +555,12 @@
             if (p.showIf) visibleIf.push([c, p.showIf]);
             ctl.push(c);
             body.append(c.el);
+            // After Jitter (auto-added with Stagger curve to every shared stagger): where each
+            // item starts, as f.spread places it, so the curve and the jitter read at a glance.
+            if (p.key === 'jitter' && preset.params.some((q) => q.key === 'staggerCurve')) {
+              spread = h('canvas', { class: 'spread-preview', height: 22, 'aria-hidden': 'true', 'data-tip': 'Start times along the order, first to last: the Stagger curve bunches them, Jitter shuffles them' });
+              body.append(h('div', { class: 'ctl spread-row' }, h('span', { class: 'lbl' }, 'Starts'), spread));
+            }
             if (p.key === 'fill' && p.type === 'select' && p.options.some((o) => o[0] === 'axis')) {
               axisTip = h('div', { class: 'axis-tip', role: 'note', hidden: true });
               body.append(axisTip);
@@ -303,9 +597,111 @@
           });
           syncFlash();
           syncAxisTip();
+          drawSpread();
         };
         update();
-        return { update };
+        requestAnimationFrame(drawSpread); // the strip needs its laid-out width
+        return { update, destroy: offFlash };
+      },
+    },
+    {
+      // Transform keyframes (layer.transform): move, scale, turn and fade the finished layer over
+      // its own loop, on top of any preset. Keys show as diamonds on the layer's timeline lane.
+      id: 'transform',
+      title: 'Transform',
+      order: 25,
+      collapsed: true,
+      build(store, body) {
+        const MAX = 16;
+        const tr = () => store.layer.transform;
+        const sel = () => Math.min(store.ui.tkey | 0, Math.max(0, tr().keys.length - 1));
+        const key = () => tr().keys[sel()];
+        const D = () => store.scene.duration;
+        const here = () => Studio.layerProgress ? Studio.layerProgress(store.layer, store.ui.time, D()) : 0;
+        const enable = C.toggle({
+          label: 'Animate',
+          get: () => !!tr().enabled,
+          set: (v) => store.updateLayer((l) => {
+            // A transform needs a key to be on: start with the layer as it is, at the start.
+            if (v && !l.transform.keys.length) l.transform.keys = [{ t: 0, x: 0, y: 0, scale: 1, rot: 0, opacity: 1, ease: 'smooth' }];
+            l.transform.enabled = v;
+          }, { reason: 'transform', label: v ? 'Transform keys on' : 'Transform keys off' }),
+        });
+        enable.el.setAttribute('data-tip', 'Keyframe position, scale, rotation and opacity over the layer’s loop, on top of its motion');
+        const list = h('div', { class: 'tk-list', role: 'listbox', 'aria-label': 'Transform keys' });
+        const addBtn = h('button', { type: 'button', class: 'btn sm', onclick: () => addKey() }, UI.icon('keyframe'), h('span', null, 'Add key at playhead'));
+        const delBtn = h('button', { type: 'button', class: 'btn sm ghost', onclick: () => Studio.deleteTransformKey(store, sel()) }, UI.icon('trash'), h('span', null, 'Delete key'));
+        const keyBind = (prop, label, toUI = (v) => v, fromUI = (v) => v) => ({
+          get: () => (key() ? toUI(key()[prop]) : 0),
+          set: (v) => store.updateLayer((l) => { const k = l.transform.keys[sel()]; if (k) k[prop] = fromUI(v); }, { coalesce: 'L:tkey.' + prop, reason: 'transform', label: 'Key ' + label }),
+        });
+        const pctUI = (v) => Math.round(v * 1000) / 10, pctIn = (v) => v / 100;
+        const time = C.range({ label: 'At', min: 0, max: 100, step: 0.1, decimals: 1, unit: '%', hint: 'Where in the layer’s pass this key sits; drag its diamond on the timeline too',
+          get: () => (key() ? pctUI(key().t) : 0),
+          set: (v) => store.updateLayer((l) => {
+            const ks = l.transform.keys, k = ks[sel()];
+            if (!k) return;
+            k.t = v / 100;
+            ks.sort((a, b) => a.t - b.t);
+            store.ui.tkey = ks.indexOf(k);
+          }, { coalesce: 'L:tkey.t', reason: 'transform', label: 'Key time' }) });
+        const fx = C.range({ label: 'X', min: -100, max: 100, step: 0.1, decimals: 1, unit: '%', default: 0, hint: 'Offset as a share of the frame width', ...keyBind('x', 'X', pctUI, pctIn) });
+        const fy = C.range({ label: 'Y', min: -100, max: 100, step: 0.1, decimals: 1, unit: '%', default: 0, hint: 'Offset as a share of the frame height', ...keyBind('y', 'Y', pctUI, pctIn) });
+        const sc = C.range({ label: 'Scale', min: 0, max: 4, step: 0.01, default: 1, ...keyBind('scale', 'scale') });
+        const rot = C.range({ label: 'Rotation', min: -360, max: 360, step: 1, unit: '°', default: 0, hint: 'Turns about the layer’s anchor', ...keyBind('rot', 'rotation') });
+        const op = C.range({ label: 'Opacity', min: 0, max: 100, step: 1, unit: '%', default: 100, ...keyBind('opacity', 'opacity', (v) => Math.round(v * 100), (v) => v / 100) });
+        const ease = C.ease({ label: 'Ease to next', ...keyBind('ease', 'ease') });
+        const fields = [time, fx, fy, sc, rot, op, ease];
+        const keyBox = h('div', { class: 'slot tk-fields' }, ...fields.map((c) => c.el));
+        const note = h('p', { class: 'hint small' });
+        body.append(enable.el, h('div', { class: 'tk-head' }, list, h('div', { class: 'row-end tk-actions' }, delBtn, addBtn)), keyBox, note);
+
+        function addKey() {
+          const l = store.layer, ks = l.transform.keys;
+          if (ks.length >= MAX) return;
+          const p = +here().toFixed(4);
+          const same = ks.findIndex((k) => Math.abs(k.t - p) < 0.002);
+          if (same >= 0) { store.setUI({ tkey: same }); return; }
+          const v = Studio.transformAt(l, p); // the values the layer has right now
+          const prev = ks.filter((k) => k.t <= p).pop();
+          store.updateLayer((x) => {
+            const k = Object.assign({ t: p }, v, { ease: prev ? prev.ease : 'smooth' });
+            x.transform.enabled = true;
+            x.transform.keys.push(k);
+            x.transform.keys.sort((a, b) => a.t - b.t);
+            store.ui.tkey = x.transform.keys.indexOf(k);
+          }, { reason: 'transform', label: 'Add transform key' });
+          store.setUI({ tkey: store.ui.tkey });
+        }
+        function renderList() {
+          const ks = tr().keys, cur = sel();
+          list.replaceChildren(...ks.map((k, i) => {
+            const b = h('button', { type: 'button', role: 'option', class: 'tk-chip' + (i === cur ? ' on' : ''), 'aria-selected': i === cur ? 'true' : 'false',
+              'data-tip': 'Key ' + (i + 1) + ' at ' + (k.t * 100).toFixed(1) + '% · the playhead moves there' }, UI.icon('keyframe'), h('span', null, Math.round(k.t * 100) + '%'));
+            b.addEventListener('click', () => {
+              const l = store.layer, T = (l.time.delay + (k.t * D()) / l.time.cycles);
+              store.setUI({ tkey: i, time: l.time.mode === 'once' ? Math.min(T, D() - 1e-3) : TM.math.mod(T, D()) });
+            });
+            return b;
+          }));
+        }
+        let listKey = '';
+        const update = () => {
+          enable.update();
+          const on = tr().enabled, n = tr().keys.length;
+          const lk = tr().keys.map((k) => k.t).join(',') + '|' + sel() + '|' + on;
+          if (lk !== listKey) { listKey = lk; renderList(); }
+          list.hidden = keyBox.hidden = delBtn.hidden = !on || !n;
+          addBtn.disabled = n >= MAX;
+          addBtn.setAttribute('data-tip', n >= MAX ? 'Up to ' + MAX + ' keys' : 'Adds a key with the values the layer has at the playhead');
+          delBtn.disabled = n <= 1;
+          delBtn.setAttribute('data-tip', n <= 1 ? 'Turn Animate off to drop the last key' : 'Delete the selected key');
+          if (on && n) fields.forEach((c) => c.update());
+          note.textContent = !on ? 'Off: the layer moves only by its preset.' : n === 1 ? 'One key holds those values all loop. Move the playhead and add another to animate.' : 'Each key eases into the next; values hold before the first and after the last. Keys follow the layer’s timing.';
+        };
+        update();
+        const offUI = store.on('ui', (p) => { if ('tkey' in p) update(); });
+        return { update, destroy: offUI };
       },
     },
     {
@@ -543,7 +939,7 @@
       this.collapsed = UI.storage.get(COLLAPSE_KEY, {}) || {};
       this.signature = '';
       store.on('change', (d) => this.onChange(d));
-      store.on('select', () => this.rebuild());
+      store.on('select', () => { store.ui.tkey = 0; this.rebuild(); }); // transform key selection is per layer
       this.rebuild();
     }
 

@@ -459,6 +459,10 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .flash-warn { background: rgba(255, 181, 71, 0.08); border: 1px solid rgba(255, 181, 71, 0.45); }
 .flash-warn > svg, .flash-warn b { color: var(--warn); }
 .flash-warn b { display: block; margin-bottom: 2px; font-weight: 650; }
+.flash-warn .fw-foot { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.flash-warn .fw-foot:empty { display: none; }
+.flash-warn .fw-state { color: var(--text-3); font-size: 11px; }
+.flash-warn.stale { opacity: 0.7; }
 .axis-tip { background: var(--accent-soft); border: 1px solid rgba(140, 152, 255, 0.3); }
 .axis-tip > svg { color: var(--accent-fg); }
 .axis-tip b { color: var(--text); font-weight: 650; }
@@ -822,3 +826,48 @@ body.clean .clean-hint.show, body.clean .clean-hint:hover, body.clean .clean-hin
   .brand:hover .logo b { transform: none; }
   .logo.lg b { animation: none; }
 }
+
+/* Text panel: italic switch (disabled when the family has no true italic), OpenType feature chips */
+.ctl-toggle.disabled label { color: var(--text-3); }
+.ctl-toggle.disabled input { opacity: 0.4; cursor: not-allowed; }
+.ctl-feats { align-items: start; }
+.ctl-feats .lbl { padding-top: 5px; }
+.feat-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.feat-chip { font: 600 11px/1 var(--ui); color: var(--text-2); background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 99px; padding: 5px 9px; cursor: pointer; }
+.feat-chip:hover { color: var(--text); border-color: var(--text-3); }
+.feat-chip.on { background: var(--text); color: #000; border-color: var(--text); }
+.feat-chip:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 1px; }
+
+/* Layers: track matte badge on a row, and the toolbar button's on state */
+.matte-badge { display: inline-flex; align-items: center; gap: 4px; margin-right: 6px; vertical-align: -2px; }
+.matte-badge svg { width: 12px; height: 12px; flex: none; }
+.matte-badge.matted { color: var(--accent-fg); }
+.layer-tools .icon-btn.on { color: var(--accent-fg); background: rgba(91, 114, 255, 0.14); }
+
+/* Gallery: starter templates (their own aspect, letterboxed in the card) */
+.card-aspect { position: absolute; right: 6px; bottom: 6px; font: 600 9.5px/1 var(--mono); letter-spacing: .04em; color: #fff; background: rgba(0, 0, 0, 0.55); padding: 3px 5px; border-radius: 4px; pointer-events: none; }
+
+/* Curve editor: Curve / Spring mode */
+.ce-mode { display: block; }
+.ce-mode .seg { width: 100%; }
+.ce-mode .seg button { flex: 1; }
+.ce-spring { display: flex; flex-direction: column; gap: 6px; }
+.ce-spring .hint { margin: 0; }
+.ce-graph.spring { cursor: default; }
+
+/* Transform keys: chips in the panel, diamonds on the selected timeline lane */
+.tk-head { display: flex; flex-direction: column; gap: 8px; }
+.tk-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.tk-list[hidden] { display: none; }
+.tk-chip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px 0 6px; border-radius: 6px; border: 1px solid var(--line-2); background: var(--panel-2); color: var(--text-2); font: 600 11px/1 var(--mono); cursor: pointer; }
+.tk-chip svg { width: 11px; height: 11px; }
+.tk-chip.on { border-color: var(--accent-hi); color: #fff; background: rgba(91, 114, 255, 0.18); }
+.tk-chip.on svg { fill: currentColor; }
+.tk-actions { gap: 6px; }
+.tl-key { position: absolute; top: 50%; width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px; padding: 0; border: 1.5px solid #fff; background: var(--panel); transform: rotate(45deg); border-radius: 2px; cursor: ew-resize; z-index: 3; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6); }
+.tl-key.on { background: var(--accent-hi); }
+.tl-key:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
+
+/* Motion: stagger distribution preview (ticks = start times, hue = order) */
+.spread-row { min-height: 22px; }
+.spread-preview { width: 100%; height: 22px; display: block; border-radius: 5px; background: var(--panel-2); }

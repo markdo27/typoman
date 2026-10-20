@@ -132,11 +132,12 @@
     let transparent = null; // per open: defaults to the scene's own background
     let frameIndex = 0;
     let busy = false, job = null, lastURL = null, raf = 0, negToken = 0, plan = null, prevKey = '';
+    let flashJob = null; // aborts this opening's flash check when the dialog closes
 
     const m = modal({
       id: 'tm-export', title: 'Export', cls: 'tm-export',
       onRequestClose: () => { if (busy) { cancel(); return false; } return true; },
-      onClose: () => { cancelAnimationFrame(raf); raf = 0; },
+      onClose: () => { cancelAnimationFrame(raf); raf = 0; if (flashJob) flashJob.abort(); flashJob = null; flashBox._flashKey = ''; },
     });
 
     // ── preview ──
@@ -301,7 +302,7 @@
       const key = JSON.stringify([s, plan.width, plan.height, plan.transparent, plan.matte, plan.format]);
       if (key !== prevKey) { prevKey = key; pvScene = X.sceneFor(s, plan); pvRenderer.setScene(pvScene); sizePreview(); TM.prepare(pvScene); }
       updateInfo();
-      Studio.flashNote(flashBox, s);
+      Studio.flashNote(flashBox, s, undefined, flashJob && flashJob.signal);
       scheduleCost();
       if (f.still) drawPreview(plan.start);
     }
@@ -523,6 +524,7 @@
     return {
       open() {
         transparent = null;
+        if (!flashJob) flashJob = new AbortController();
         frameIndex = playheadFrame();
         prevKey = '';
         result.hidden = busy ? result.hidden : true;
@@ -537,15 +539,57 @@
   }
 
   /**
-   * Fill `box` (a .tm-info.warn) with the scene's photosensitivity warning, or hide it: every
-   * visible layer above 3 flashes a second (Studio.flashRisks), named, with its rate.
+   * Fill `box` (a .tm-info) with the scene's photosensitivity check: "Checking for flashes…",
+   * then a pass line or a warning naming the rate and when the worst second starts. TM.Safety
+   * decides (through Studio.safety: cached, shared with the Motion panel's background check).
+   * Calling it again for the same scene is free; `signal` aborts the wait (close the dialog).
    */
-  Studio.flashNote = function (box, scene, advice = 'Consider slowing it before you publish; the export still works.') {
+  Studio.flashNote = function (box, scene, advice = 'Consider slowing it before you publish; the export still works.', signal) {
+    const S = Studio.safety;
+    if (S && S.available()) {
+      const key = S.keyOf(scene);
+      if (box._flashKey === key) return;
+      box._flashKey = key;
+      const show = (res) => {
+        if (box._flashKey !== key) return;
+        box.hidden = false;
+        if (!res) { box.hidden = true; return; }
+        if (res.ok) {
+          box.className = 'tm-info tm-flash ok';
+          const most = Math.max(res.flashes, res.red);
+          box.replaceChildren(h('div', { class: 'ttl' }, 'Flash check passed'),
+            h('p', null, (most > 0 ? 'At most ' + (Math.round(most * 10) / 10) + ' flash' + (most === 1 ? '' : 'es') + ' in any second' : 'No flashing found') + ', within the limit of ' + res.limit + ' a second in WCAG 2.3.1.'));
+          return;
+        }
+        const w = Studio.flashWords(res);
+        box.className = 'tm-info warn tm-flash';
+        box.replaceChildren(
+          h('div', { class: 'ttl' }, 'Photosensitivity warning'),
+          h('p', null, w.title + ' at its worst, in the second ' + w.when + ': above the limit of ' + res.limit + ' a second in WCAG 2.3.1.'),
+          h('p', null, 'Rapid flashing can trigger seizures in people with photosensitive epilepsy. ' + advice));
+      };
+      const hit = S.cached(scene);
+      if (hit) return show(hit);
+      box.hidden = false;
+      box.className = 'tm-info tm-flash checking';
+      box.replaceChildren(h('div', { class: 'ttl' }, h('i', { class: 'tm-spin', 'aria-hidden': 'true' }), 'Checking for flashes…'),
+        h('p', null, 'Playing the loop through a WCAG 2.3.1 flash test.'));
+      S.check(scene, { signal }).then(show, (e) => {
+        if (box._flashKey !== key) return;
+        box._flashKey = ''; // aborted or failed: the next call checks again
+        if (e && e.name === 'AbortError') { box.hidden = true; return; }
+        console.warn('[studio] flash check', e);
+        box.className = 'tm-info tm-flash';
+        box.replaceChildren(h('div', { class: 'ttl' }, 'Couldn’t check for flashes'), h('p', null, 'If the animation flashes, keep it under 3 flashes a second (WCAG 2.3.1).'));
+      });
+      return;
+    }
+    // Without TM.Safety: the presets' own estimates.
     const risks = Studio.flashRisks ? Studio.flashRisks(scene) : [];
     box.hidden = !risks.length;
     const key = risks.map((r) => r.index + ':' + r.rate.toFixed(1)).join('|');
-    if (!risks.length || box.dataset.key === key) return;
-    box.dataset.key = key;
+    if (!risks.length || box._flashKey === key) return;
+    box._flashKey = key;
     const who = risks.map((r) => `“${Studio.layerName(r.layer)}” (${(TM.getPreset(r.layer.preset) || {}).name || r.layer.preset}) flashes ${Studio.flashText(r.rate)}`);
     box.replaceChildren(
       h('div', { class: 'ttl' }, 'Photosensitivity warning'),

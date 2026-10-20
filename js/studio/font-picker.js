@@ -115,18 +115,34 @@
       for (const rec of list || []) {
         if (!rec || typeof rec.dataUrl !== 'string' || !/^data:/.test(rec.dataUrl) || dataBytes(rec.dataUrl) > MAX_BYTES) continue;
         try {
-          const name = rec.name || String(rec.family || 'Custom').replace(/ \(custom\)$/, '');
-          const entry = await TM.fonts.addCustom(name, await dataUrlToBuffer(rec.dataUrl), rec.dataUrl);
-          const r = { family: entry.family, name, dataUrl: rec.dataUrl, added: rec.added || Date.now() };
-          records.set(entry.family, r);
+          // Register under the family the project (or this browser) knows it by: TM.fonts names
+          // the file from its own tables and aliases this name to it, so every layer resolves.
+          const known = typeof rec.family === 'string' ? rec.family.replace(/ \(custom\)$/, '') : '';
+          const name = rec.name || known || 'Custom';
+          const entry = await TM.fonts.addCustom(known || name, await dataUrlToBuffer(rec.dataUrl), rec.dataUrl);
+          const key = typeof rec.family === 'string' && TM.fonts.has(rec.family) ? rec.family : entry.family;
+          const r = { family: key, name, dataUrl: rec.dataUrl, added: rec.added || Date.now() };
+          records.set(key, r);
           if (persist) dbPut(r);
         } catch (e) { console.warn('[studio] could not restore font', rec.family, e); }
       }
     },
 
+    /**
+     * The uploaded fonts a scene uses, under the family names its layers use: a scene saved
+     * before fonts were named from their own tables still says "Caladea-Bold (custom)", which
+     * TM.fonts resolves (an alias) to the file's real entry, "Caladea Bold (custom)".
+     */
     forScene(scene) {
-      const fams = new Set((scene.layers || []).map((l) => l.font && l.font.family));
-      return [...records.values()].filter((r) => fams.has(r.family)).map(({ family, name, dataUrl }) => ({ family, name, dataUrl }));
+      const out = new Map();
+      (scene.layers || []).forEach((l) => {
+        const fam = l.font && l.font.family;
+        if (!fam || out.has(fam)) return;
+        const entry = TM.fonts.get(fam);
+        const rec = records.get(fam) || (entry && records.get(entry.family));
+        if (rec) out.set(fam, { family: fam, name: rec.name, dataUrl: rec.dataUrl });
+      });
+      return [...out.values()];
     },
 
     /**
@@ -149,7 +165,8 @@
         if (!used.has(family)) { out.skipped.push({ family, why: 'not used by the project' }); continue; }
         const bytes = dataBytes(rec.dataUrl);
         if (bytes > MAX_BYTES) { out.skipped.push({ family, why: 'larger than 15 MB' }); continue; }
-        const mine = records.get(family);
+        const entry = TM.fonts.get(family);
+        const mine = records.get(family) || (entry && entry.custom && records.get(entry.family));
         if (mine && mine.dataUrl === rec.dataUrl) { out.known.push(rec); continue; }
         if (out.ask.length >= MAX_PROJECT_FONTS) { out.skipped.push({ family, why: 'more than ' + MAX_PROJECT_FONTS + ' fonts' }); continue; }
         out.ask.push({ family, name: typeof rec.name === 'string' ? rec.name.slice(0, 120) : null, dataUrl: rec.dataUrl, bytes });

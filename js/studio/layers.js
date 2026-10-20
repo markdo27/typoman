@@ -28,6 +28,8 @@
     return chip;
   };
 
+  const MATTE_WORDS = { alpha: 'Show inside the layer below', alphaInvert: 'Show outside the layer below' };
+
   class LayersPanel {
     constructor(store, root) {
       this.store = store;
@@ -55,6 +57,7 @@
         vis: tool('eye', 'Hide layer', 'H', () => this.toggleVisible(store.selected)),
         up: tool('arrowUp', 'Bring forward', UI.keys('Alt+↑'), () => this.move(store.selected, 1)),
         down: tool('arrowDown', 'Send backward', UI.keys('Alt+↓'), () => this.move(store.selected, -1)),
+        matte: tool('matte', 'Track matte', null, () => this.matteMenu(this.tools.matte)),
         dup: tool('duplicate', 'Duplicate layer', UI.keys('Mod+D'), () => this.duplicate()),
         del: tool('trash', 'Delete layer', 'Del', () => this.remove(store.selected)),
       };
@@ -62,7 +65,7 @@
       this.root.append(
         h('div', { class: 'panel-head' }, h('h2', { id: 'layersTitle' }, 'Layers'), this.count, h('span', { class: 'grow' }), this.addBtn),
         this.list,
-        h('div', { class: 'layer-tools', role: 'toolbar', 'aria-label': 'Layer actions' }, this.tools.vis, this.tools.up, this.tools.down, h('span', { class: 'grow' }), this.tools.dup, this.tools.del),
+        h('div', { class: 'layer-tools', role: 'toolbar', 'aria-label': 'Layer actions' }, this.tools.vis, this.tools.up, this.tools.down, this.tools.matte, h('span', { class: 'grow' }), this.tools.dup, this.tools.del),
         help,
       );
     }
@@ -165,7 +168,7 @@
 
     signature() {
       const s = this.store.scene;
-      return [this.store.selected, s.bg.color, s.bg.type, ...s.layers.map((l) => [l.id, l.name, l.text, l.visible, l.preset, l.font.family, l.font.weight, l.fill.type, l.fill.color, l.fill.palette[0], l.time.delay, l.time.cycles, l.time.mode].join('\u0001'))].join('\u0002');
+      return [this.store.selected, s.bg.color, s.bg.type, ...s.layers.map((l) => [l.id, l.matte.mode, l.matte.show, l.name, l.text, l.visible, l.preset, l.font.family, l.font.weight, l.fill.type, l.fill.color, l.fill.palette[0], l.time.delay, l.time.cycles, l.time.mode].join('\u0001'))].join('\u0002');
     }
 
     render(force) {
@@ -188,6 +191,13 @@
       this.tools.vis.setAttribute('data-tip', visLabel);
       this.tools.up.disabled = store.selected >= n - 1;
       this.tools.down.disabled = store.selected <= 0;
+      // Track matte: the layer below is the matte, so the bottom layer can't have one.
+      const mm = l.matte ? l.matte.mode : 'none';
+      this.tools.matte.disabled = store.selected <= 0;
+      this.tools.matte.classList.toggle('on', mm !== 'none');
+      const matteTip = store.selected <= 0 ? 'Track matte: the bottom layer has no layer below to show through' : mm === 'none' ? 'Track matte: show this layer only inside or outside the layer below' : 'Track matte: ' + MATTE_WORDS[mm].toLowerCase();
+      this.tools.matte.setAttribute('data-tip', matteTip);
+      this.tools.matte.setAttribute('aria-label', matteTip);
       this.tools.dup.disabled = n >= max;
       this.tools.del.disabled = n <= 1;
       this.tools.del.setAttribute('data-tip', n <= 1 ? 'A scene needs at least one layer' : 'Delete layer');
@@ -206,6 +216,11 @@
       const eye = h('button', { type: 'button', class: 'eye', tabindex: '-1', 'aria-hidden': 'true', 'data-tip': layer.visible === false ? 'Show' : 'Hide' }, UI.icon(layer.visible === false ? 'eyeOff' : 'eye'));
       eye.addEventListener('click', (e) => { e.stopPropagation(); this.toggleVisible(i); });
       const nameEl = h('span', { class: 'layer-name' + (empty ? ' empty' : '') }, name);
+      // Track mattes: a matted layer says where it shows; the layer it uses says it's a matte.
+      const above = s.layers[i + 1];
+      const mm = layer.matte && layer.matte.mode !== 'none' && i > 0 ? layer.matte.mode : null;
+      const isMatte = above && above.matte && above.matte.mode !== 'none';
+      const matteNote = mm ? (mm === 'alpha' ? 'inside ' : 'outside ') + '“' + Studio.layerName(s.layers[i - 1]) + '”' : isMatte ? (above.matte.show ? 'matte, drawn' : 'matte, hidden') : '';
       const row = h('div', {
         class: 'layer-row' + (sel ? ' on' : '') + (layer.visible === false ? ' hidden-layer' : ''),
         role: 'option',
@@ -216,7 +231,9 @@
       },
       h('span', { class: 'grip', 'aria-hidden': 'true' }, UI.icon('grip')),
       chip,
-      h('span', { class: 'layer-text' }, nameEl, h('span', { class: 'layer-meta' }, [(preset ? preset.name : layer.preset), Studio.fontLabel(layer.font.family), Studio.timingNote ? Studio.timingNote(layer, true) : ''].filter(Boolean).join(' · '))),
+      h('span', { class: 'layer-text' }, nameEl, h('span', { class: 'layer-meta' },
+        matteNote ? h('span', { class: 'matte-badge' + (mm ? ' matted' : ''), 'data-tip': mm ? MATTE_WORDS[mm] : 'Used as the track matte of the layer above' + (above.matte.show ? '' : ', so it is not drawn itself') }, UI.icon('matte'), matteNote) : null,
+        [matteNote ? '' : (preset ? preset.name : layer.preset), matteNote ? '' : Studio.fontLabel(layer.font.family), Studio.timingNote ? Studio.timingNote(layer, true) : ''].filter(Boolean).join(' · '))),
       eye);
       row.addEventListener('pointerdown', (e) => this.onPointerDown(e, row, i));
       row.addEventListener('dblclick', (e) => { if (!e.target.closest('.eye')) this.rename(i); });
@@ -226,6 +243,23 @@
     focusRow(i) {
       const row = this.list.querySelector(`[data-i="${i}"]`);
       if (row) row.focus({ preventScroll: false });
+    }
+
+    /** Track matte menu for the selected layer (layer.matte: mode + show). */
+    matteMenu(anchor) {
+      const store = this.store, l = store.layer;
+      if (store.selected <= 0) return;
+      const below = Studio.layerName(store.scene.layers[store.selected - 1]);
+      const set = (patch, label) => store.updateLayer((x) => { x.matte = Object.assign({}, x.matte, patch); }, { reason: 'matte', label });
+      const mode = l.matte.mode;
+      UI.menu(anchor, [
+        { heading: 'Track matte · layer below: ' + below },
+        { label: 'None', icon: mode === 'none' ? 'check' : null, run: () => set({ mode: 'none' }, 'No track matte') },
+        { label: MATTE_WORDS.alpha, hint: 'Only where “' + below + '” has ink', icon: mode === 'alpha' ? 'check' : null, run: () => set({ mode: 'alpha' }, 'Track matte: inside') },
+        { label: MATTE_WORDS.alphaInvert, hint: 'Everywhere except “' + below + '”', icon: mode === 'alphaInvert' ? 'check' : null, run: () => set({ mode: 'alphaInvert' }, 'Track matte: outside') },
+        '-',
+        { label: 'Also draw the layer below', hint: 'Otherwise the matte layer is hidden', checked: !!l.matte.show, disabled: mode === 'none', run: (v) => set({ show: v }, v ? 'Draw matte layer' : 'Hide matte layer') },
+      ], { label: 'Track matte', width: 290 });
     }
 
     // ── actions ──
