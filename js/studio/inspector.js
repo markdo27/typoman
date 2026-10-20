@@ -218,8 +218,10 @@
     SOFT: 'Softness', WONK: 'Wonky', CASL: 'Casual', CRSV: 'Cursive', MONO: 'Monospace', BLED: 'Bleed', SCAN: 'Scanlines', ROND: 'Roundness',
     BNCE: 'Bounce', INFM: 'Informality', SPAC: 'Spacing', CTRS: 'Contrast', ital: 'Italic', slnt: 'Slant axis' };
   // OpenType features (TM.fonts.features): full names, chip labels, and which ones exclude each other.
-  const FEATURE_NAMES = { tnum: 'Tabular figures', pnum: 'Proportional figures', lnum: 'Lining figures', onum: 'Oldstyle figures', smcp: 'Small caps', zero: 'Slashed zero', case: 'Case forms' };
-  const FEATURE_SHORT = { tnum: 'Tabular', pnum: 'Proportional', lnum: 'Lining', onum: 'Oldstyle', smcp: 'Small caps', zero: 'Slashed 0', case: 'Case' };
+  const FEATURE_NAMES = { tnum: 'Tabular figures', pnum: 'Proportional figures', lnum: 'Lining figures', onum: 'Oldstyle figures', smcp: 'Small caps', zero: 'Slashed zero', case: 'Case forms',
+    c2sc: 'Capitals to small caps', ordn: 'Ordinals', sups: 'Superscript', subs: 'Subscript', sinf: 'Scientific inferiors', frac: 'Fractions', salt: 'Stylistic alternates', swsh: 'Swash' };
+  const FEATURE_SHORT = { tnum: 'Tabular', pnum: 'Proportional', lnum: 'Lining', onum: 'Oldstyle', smcp: 'Small caps', zero: 'Slashed 0', case: 'Case',
+    c2sc: 'Caps → sc', ordn: 'Ordinals', sups: 'Sup', subs: 'Sub', sinf: 'Inferiors', frac: 'Fractions', salt: 'Alternates', swsh: 'Swash' };
   const FEATURE_PAIRS = { tnum: ['pnum'], pnum: ['tnum'], lnum: ['onum'], onum: ['lnum'] };
   function featureName(tag) {
     if (FEATURE_NAMES[tag]) return FEATURE_NAMES[tag];
