@@ -267,17 +267,21 @@
         if (li) acc += L.sizePx * 0.3;
         let la = 0;
         first[li] = last[li] = null;
+        // Lines with RTL script are laid out in bidi visual order (reading order runs right to
+        // left): place their letters by where they sit on screen, so the train lands them there.
+        const visual = K.screenOrder(L, line) !== line.glyphs;
         for (const gi of line.glyphs) {
           const g = L.glyphs[gi];
           pos[gi] = acc + g.w / 2;
-          inLine[gi] = la + g.w / 2;
-          if (!g.isSpace) {
-            if (first[li] == null) { first[li] = inLine[gi]; firstW[li] = g.w; }
-            last[li] = inLine[gi];
-            lastW[li] = g.w;
-          }
+          inLine[gi] = visual ? g.x - line.x + g.w / 2 : la + g.w / 2;
           acc += g.w + L.tracking;
           la += g.w + L.tracking;
+        }
+        for (const gi of line.glyphs) {
+          const g = L.glyphs[gi];
+          if (g.isSpace) continue;
+          if (first[li] == null || inLine[gi] < first[li]) { first[li] = inLine[gi]; firstW[li] = g.w; }
+          if (last[li] == null || inLine[gi] > last[li]) { last[li] = inLine[gi]; lastW[li] = g.w; }
         }
       });
       return { pos, inLine, first, last, firstW, lastW };

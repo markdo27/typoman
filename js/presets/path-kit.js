@@ -9,6 +9,7 @@
  *   PathKit.quantWeight(w)               weight snapped to a step, so canvas font strings stay cached
  *   PathKit.keyOf(obj)                   stable small id for an object (cache keys)
  *   PathKit.strokeStyle(f, ...)          shared stroke setup for guides, rings and pens
+ *   PathKit.screenOrder(L, line)         a line's glyph indices left to right on screen
  */
 (function (TM) {
   'use strict';
@@ -76,7 +77,7 @@
     const L = o.layout || f.layout;
     const items = [];
     if (!line || !line.glyphs.length) return { items, unit: length || 1, reps: 0, k: 1 };
-    const x0 = L.glyphs[line.glyphs[0]].x;
+    const x0 = line.x; // the line's left edge: in RTL lines the first glyph in reading order sits at the right
     for (const gi of line.glyphs) {
       const g = L.glyphs[gi];
       items.push({ g, off: g.x - x0 + g.w / 2, w: g.w });
@@ -209,5 +210,17 @@
     return out;
   }
 
-  TM.PathKit = { place, shape, tile, affine, weights, quantWeight, keyOf, strokeStyle, smooth };
+  /**
+   * A line's glyph indices left to right as drawn. Lines with RTL script are laid out in bidi
+   * visual order (g.x), so their reading order (line.glyphs) runs the other way, in part or whole.
+   */
+  function screenOrder(L, line) {
+    const ids = line.glyphs;
+    for (let k = 1; k < ids.length; k++) {
+      if (L.glyphs[ids[k]].x < L.glyphs[ids[k - 1]].x) return ids.slice().sort((a, b) => L.glyphs[a].x - L.glyphs[b].x);
+    }
+    return ids;
+  }
+
+  TM.PathKit = { place, shape, tile, affine, weights, quantWeight, keyOf, strokeStyle, smooth, screenOrder };
 })(window.TM);

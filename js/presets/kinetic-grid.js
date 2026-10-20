@@ -27,15 +27,19 @@
    * The text set in rows of `cols` cells without breaking words: a word that doesn't fit the rest
    * of a row starts the next one, each text line starts a row, and a word longer than a row splits
    * into even parts (MOTION on five cells → MOT / ION). Rows are aligned like the layer's text.
+   * Right-to-left lines fill their rows from the right, one word cluster per cell.
    */
   function wrapRows(L, cols, align) {
     const out = [];
+    let rtl = false;
     const flush = (row) => {
       if (!row.length) return;
+      if (rtl) row = row.slice().reverse();
       const pad = cols - row.length, left = align === 'left' ? 0 : align === 'right' ? pad : Math.floor(pad / 2);
       out.push(Array.from({ length: cols }, (_, i) => (i >= left && i < left + row.length ? row[i - left] : null)));
     };
     for (const line of L.lines) {
+      rtl = !!line.rtl;
       const words = [];
       let cur = [];
       for (const gi of line.glyphs) {
@@ -86,7 +90,7 @@
         for (const gi of line.glyphs) { const g = f.layout.glyphs[gi]; seq.push(g.isSpace ? null : g); }
       });
       if (!seq.some(Boolean)) return { seq: [], wrapped: [] };
-      return { seq, wrapped: f.params.words ? wrapRows(f.layout, gridOf(f).cols, f.layer.type.align) : null };
+      return { seq, rtl: !!(f.layout.lines[0] && f.layout.lines[0].rtl), wrapped: f.params.words ? wrapRows(f.layout, gridOf(f).cols, f.layer.type.align) : null };
     },
 
     render(f) {
@@ -115,7 +119,9 @@
       const step = wr && wr.length ? clamp(Math.ceil(wr.length / B), 1, rows) : 0;
       const content = wr && wr.length
         ? (c, k) => wr[(Math.floor(c / cols) + k * step) % wr.length][c % cols]
-        : (c, k) => seq[(c + k * n) % seq.length];
+        : f.cache.rtl
+          ? (c, k) => seq[(c - (c % cols) + cols - 1 - (c % cols) + k * n) % seq.length] // right to left along each row
+          : (c, k) => seq[(c + k * n) % seq.length];
       const colour = (c, k) => (fill.type === 'palette' ? pal[(c + k) % pal.length] : tint ? tint[(c + k) % 2] : null);
       const rankOf = (i, j, c) => {
         switch (P.order) {

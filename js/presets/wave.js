@@ -180,12 +180,14 @@
       const n = L.count;
       const rows = L.lines.filter((l) => l.glyphs.some((gi) => !L.glyphs[gi].isSpace)).length;
       const across = rows > 1 && (P.order === 'start' || P.order === 'end');
+      const rtl = !!(L.lines[0] && L.lines[0].rtl);
       let x0 = Infinity, x1 = -Infinity;
       for (const g of vis) { x0 = Math.min(x0, g.cx); x1 = Math.max(x1, g.cx); }
       const G = L.glyphs.map((g) => {
         if (g.isSpace) return null;
         let r = f.rank(g, P.order);
-        if (across) r = x1 > x0 ? (P.order === 'end' ? x1 - g.cx : g.cx - x0) / (x1 - x0) : 0;
+        // Right-to-left text starts reading at the right, so the wave sets off from there.
+        if (across) r = x1 > x0 ? ((P.order === 'end') !== rtl ? x1 - g.cx : g.cx - x0) / (x1 - x0) : 0;
         const xi = across ? (r * (x1 - x0)) / adv : r * (n - 1);
         return { xi, r, d: Math.hypot(g.cx, g.cy) / adv, side: g.cx < 0 ? -1 : 1 };
       });
@@ -222,7 +224,9 @@
       for (const line of L.lines) {
         const rows = [];
         let total = 0;
-        for (const gi of line.glyphs) {
+        // Left to right on screen (RTL lines are in bidi visual order, not reading order), so the
+        // re-flow pushes each glyph's right-hand neighbours.
+        for (const gi of K.screenOrder(L, line)) {
           const g = L.glyphs[gi];
           if (g.isSpace) continue;
           let { y, slope, sy, lean, ph } = waveAt(mode, P, C.G[gi], cp, lambda, rise, squash);

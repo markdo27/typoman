@@ -48,7 +48,7 @@
       const gap = P.gap * size;
 
       // One repeat of the run along x (layout px): glyph centres, then a separator.
-      const x0 = L.glyphs[line.glyphs[0]].x;
+      const x0 = line.x; // left edge (RTL lines keep their visual order)
       const items = [];
       for (const gi of line.glyphs) {
         const g = L.glyphs[gi];
