@@ -35,7 +35,7 @@
       // width: wdth % and opsz: 'auto' | number apply to families with those variable axes;
       // axes: { TAG: value } pins any other axis (slnt, XROT, YEAR, MORF, …) a family has.
       // italic: the family's true italic where Google serves one (TM.fonts.get(f).italic).
-      font: { family: 'Anton', weight: 400, width: 100, opsz: 'auto', axes: {}, italic: false },
+      font: { family: 'Anton', weight: 400, width: 100, opsz: 'auto', axes: {}, italic: false, features: {} },
       // wrap: 'auto' re-wraps lines that would otherwise shrink to fit the frame; 'off' keeps them.
       // ligatures: draw the font's ligatures (fi, ffl, Th…) as one glyph (off past ±0.03 em tracking).
       type: { size: 0.16, tracking: 0, leading: 0.95, align: 'center', case: 'upper', slant: 0, wrap: 'auto', ligatures: true },
@@ -103,6 +103,17 @@
       if (!/^[A-Za-z0-9]{4}$/.test(k) || k === 'wght' || k === 'wdth' || k === 'opsz' || UNSAFE_KEY.has(k)) continue;
       const v = num(a[k], NaN, -1e5, 1e5);
       if (Number.isFinite(v) && Object.keys(out).length < 12) out[k] = Math.round(v * 1000) / 1000;
+    }
+    return out;
+  }
+  /** OpenType features pinned on: { tag: 1..99 } for lowercase 4-character tags, at most 12. */
+  function cleanFeatures(a) {
+    const out = {};
+    if (!isObj(a)) return out;
+    for (const k of Object.keys(a).slice(0, 32)) {
+      if (!/^[a-z0-9]{4}$/.test(k) || UNSAFE_KEY.has(k)) continue;
+      const v = Math.round(num(a[k], 0, 0, 99));
+      if (v > 0 && Object.keys(out).length < 12) out[k] = v;
     }
     return out;
   }
@@ -223,6 +234,7 @@
         opsz: opszOf(s.font && s.font.opsz),
         axes: cleanAxes(s.font && s.font.axes),
         italic: !!(s.font && s.font.italic === true),
+        features: cleanFeatures(s.font && s.font.features),
       },
       type: {
         size: num(ty.size, d.type.size, 0.01, 1.5),

@@ -101,6 +101,20 @@
     'Fraunces', 'Roboto Serif', 'Playfair Display', 'Bodoni Moda', 'DM Serif Display', 'Instrument Serif',
     'JetBrains Mono', 'Space Mono', 'Shantell Sans']);
 
+  // OpenType features that work glyph by glyph (presets draw one cluster at a time), so they can
+  // be pinned on an instance. Google serves most families without their optional features; the
+  // ones below were found by drawing each feature on and off (figure styles only). Uploaded
+  // fonts keep everything, and list what their GSUB table has.
+  const PER_GLYPH = /^(smcp|c2sc|tnum|pnum|onum|lnum|zero|case|salt|swsh|titl|sups|subs|sinf|ordn|ss\d\d|cv\d\d)$/;
+  const FEATURES = {
+    tnum: ['Science Gothic', 'Inter Tight', 'Space Grotesk', 'Bricolage Grotesque', 'Archivo', 'Anybody', 'Mona Sans', 'Saira',
+      'Montserrat', 'Outfit', 'Sora', 'Rubik', 'Unbounded', 'Syne', 'Dela Gothic One', 'Exo 2', 'Black Ops One', 'Rubik Glitch',
+      'Bodoni Moda', 'Shantell Sans'],
+    pnum: ['Bebas Neue', 'Roboto Flex', 'Recursive', 'Roboto Serif'],
+    lnum: ['Syne', 'Roboto Serif', 'Playfair Display'],
+  };
+  const featuresOf = (family) => Object.keys(FEATURES).filter((tag) => FEATURES[tag].includes(family));
+
   const FALLBACK = { Serif: 'serif', Mono: 'monospace', Script: 'cursive' };
   const hasDOM = typeof document !== 'undefined';
   // Pinning opsz needs the FontFace variationSettings descriptor. Without it the family is
@@ -122,6 +136,7 @@
       variable: !discrete && max > min,
       axes: Object.keys(ax).length ? ax : null,
       italic: ITALIC.has(family),
+      features: featuresOf(family),
       fallback: FALLBACK[cat] || 'sans-serif',
       custom: false,
     };
@@ -261,21 +276,29 @@
     return out;
   }
 
+  /** The features a font pins that its family has: [[tag, value]] sorted by tag. */
+  function featsFor(f, features) {
+    if (!f || !features || !f.features || !f.features.length) return [];
+    return f.features.filter((tag) => +features[tag] > 0).sort().map((tag) => [tag, Math.min(99, Math.round(+features[tag]))]);
+  }
+
   function resolve(font, designPx) {
     const f = font && byFamily.get(font.family);
     const ital = !!(f && font.italic && f.italic);
-    if (!f || f.custom || (!f.axes && !ital)) return font ? font.family : '';
+    const feats = featsFor(f, font && font.features);
+    if (!f || (!f.axes && !ital && !feats.length)) return font ? font.family : '';
     const wdth = widthFor(f, font.width);
     const opsz = opszFor(f, font.opsz, designPx);
     const custom = customFor(f, font.axes);
     // Nothing to pin (only custom axes, all at their defaults): the family itself draws the same.
-    if (wdth == null && opsz == null && !custom.length && !ital) return f.family;
-    const name = `${f.family} ~${ital ? 'i' : ''}${wdth != null ? 'w' + wdth : ''}${opsz != null ? 'o' + opsz : ''}${custom.map(([t, v]) => '.' + t + v).join('')}`;
+    if (wdth == null && opsz == null && !custom.length && !ital && !feats.length) return f.family;
+    const name = `${f.family} ~${ital ? 'i' : ''}${wdth != null ? 'w' + wdth : ''}${opsz != null ? 'o' + opsz : ''}${custom.map(([t, v]) => '.' + t + v).join('')}${feats.map(([t, v]) => '+' + t + (v === 1 ? '' : v)).join('')}`;
     const inst = instances.get(name);
     if (inst) inst.used = now();
     else {
       // `pins` (not `custom`, which marks uploaded fonts): the instance's pinned axis values.
-      instances.set(name, { ...f, family: name, base: f, instance: true, ital, wdth, opsz, pins: custom, ready: null, faces: [], used: now() });
+      // An instance of an uploaded font keeps `custom` (from the spread) and so draws from its file.
+      instances.set(name, { ...f, family: name, base: f, instance: true, ital, wdth, opsz, pins: custom, feats, ready: null, faces: [], used: now() });
       ensure(name, font.weight);
     }
     // resolve() runs every frame, so it also does the (cheap, throttled) cleanup.
@@ -365,8 +388,10 @@
 
   function addInstanceFaces(inst) {
     if (inst.ready) return inst.ready;
-    inst.ready = baseFaces(inst.base).then((blocks) => {
-      for (const b of blocks) {
+    // Uploaded fonts draw from their own file (one blob URL, shared by every instance).
+    const blocks = inst.base.custom ? Promise.resolve(inst.base.src ? [{ src: inst.base.src, weight: inst.base.faceWeight, format: null }] : []) : baseFaces(inst.base);
+    inst.ready = blocks.then((list) => {
+      for (const b of list) {
         // An italic instance takes the italic files and registers them upright, so it draws
         // italic under a plain font string; other instances take the upright files only.
         if ((b.style === 'italic') !== !!inst.ital) continue;
@@ -376,8 +401,9 @@
         else if (b.stretch) d.stretch = b.stretch;
         const vs = (inst.opsz != null ? [['opsz', inst.opsz]] : []).concat(inst.pins || []);
         if (vs.length) d.variationSettings = vs.map(([t, v]) => `"${t}" ${v}`).join(', ');
+        if (inst.feats && inst.feats.length) d.featureSettings = inst.feats.map(([t, v]) => `"${t}" ${v}`).join(', ');
         try {
-          const face = new FontFace(inst.family, `url(${b.src}) format("woff2")`, d);
+          const face = new FontFace(inst.family, b.format === null ? `url(${b.src})` : `url(${b.src}) format("woff2")`, d);
           if (!instances.has(inst.family)) return; // released while its CSS was loading
           document.fonts.add(face);
           inst.faces.push(face);
@@ -425,7 +451,7 @@
     const sample = text ? 'AaBb09' + String(text).slice(0, 200) : 'AaBb09';
     const key = `${family}|${f.variable ? 'var' : w}|${sample}`;
     if (facePromises.has(key)) return timeout(facePromises.get(key), waitMs, false);
-    const ready = f.custom ? Promise.resolve() : f.instance ? addInstanceFaces(f) : injectStylesheet([family]);
+    const ready = f.instance ? addInstanceFaces(f) : f.custom ? Promise.resolve() : injectStylesheet([family]);
     const loaded = ready
       .then(() => document.fonts.load(`${w} 64px ${cssFamily(family)}`, sample))
       .then((faces) => {
@@ -447,22 +473,65 @@
     return Promise.all(chunks);
   }
 
-  /** Register a user-supplied font file (ArrayBuffer). Returns the catalogue entry. */
+  const cleanName = (s) => String(s || '').replace(/\.(otf|ttf|woff2?)$/i, '').replace(/[^\w \-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+
+  /**
+   * Register a user-supplied font file (ArrayBuffer). Returns its catalogue entry: one per file,
+   * named from the file's own name table ("Caladea Bold (custom)"), at the weight its OS/2 table
+   * gives, with its variable axes and per-glyph OpenType features (TM.sfnt). Files it can't
+   * read (WOFF2) keep the file name. A scene saved under the older file-name family still finds
+   * the font through an alias.
+   */
   async function addCustom(name, buffer, dataUrl) {
     if (!hasDOM || typeof FontFace === 'undefined') throw new Error('Custom fonts need a browser with the FontFace API');
-    const clean = String(name).replace(/\.(otf|ttf|woff2?)$/i, '').replace(/[^\w \-]/g, '').trim().slice(0, 40) || 'Custom';
-    const family = `${clean} (custom)`;
-    const face = new FontFace(family, buffer);
-    await face.load();
-    document.fonts.add(face);
+    const fileName = cleanName(name) || 'Custom';
+    const info = TM.sfnt ? await TM.sfnt.inspect(buffer) : null;
+    const axes = (info && info.axes) || [];
+    const wght = axes.find((a) => a.tag === 'wght');
+    const plainStyle = (st) => !st || /^(regular|normal|roman|book|plain)$/i.test(st);
+    // The style joins the name unless it's regular, variable, or already part of the family name.
+    const fam = info ? cleanName(info.family) : '';
+    const style = info && !wght && !plainStyle(info.subfamily) && !fam.toLowerCase().endsWith(' ' + cleanName(info.subfamily).toLowerCase()) ? ' ' + info.subfamily : '';
+    const named = fam ? cleanName(fam + style) : '';
+    const family = `${named || fileName} (custom)`;
+    const legacy = `${fileName} (custom)`;
+    const weight = wght ? null : Math.round(TM.math.clamp(info && info.weight ? info.weight : 400, 1, 1000));
+    const faceWeight = wght ? `${Math.round(wght.min)} ${Math.round(wght.max)}` : String(weight);
+    // One blob URL per file: the family's face and every instance share its decode.
+    const src = typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(new Blob([buffer])) : null;
+    const register = async (fam) => {
+      const face = src ? new FontFace(fam, `url(${src})`, { weight: faceWeight }) : new FontFace(fam, buffer, { weight: faceWeight });
+      await face.load();
+      document.fonts.add(face);
+    };
+    await register(family);
+    if (legacy !== family && !byFamily.has(legacy)) await register(legacy);
+    const ax = {};
+    for (const a of axes) {
+      if (a.tag === 'wght' || !/^[A-Za-z0-9]{4}$/.test(a.tag)) continue;
+      if (a.tag === 'wdth' || a.tag === 'opsz') ax[a.tag] = [a.min, a.max];
+      else if (OPSZ_OK) ax[a.tag] = [a.min, a.max, TM.math.clamp(a.def, a.min, a.max)];
+    }
+    if (ax.opsz && !OPSZ_OK) delete ax.opsz;
     let entry = byFamily.get(family);
-    if (!entry) {
-      entry = { family, cat: 'Custom', min: 400, max: 400, weights: null, variable: false, fallback: 'sans-serif', custom: true, dataUrl: dataUrl || null };
+    if (!entry || !entry.custom) {
+      entry = { family, cat: 'Custom', fallback: 'sans-serif', custom: true };
       FONTS.push(entry);
       byFamily.set(family, entry);
-    } else if (dataUrl) {
-      entry.dataUrl = dataUrl;
     }
+    Object.assign(entry, {
+      min: wght ? Math.round(wght.min) : weight,
+      max: wght ? Math.round(wght.max) : weight,
+      weights: wght ? null : [weight],
+      variable: !!wght,
+      axes: Object.keys(ax).length ? ax : null,
+      italic: false,
+      features: ((info && info.features) || []).filter((tag) => PER_GLYPH.test(tag)),
+      src,
+      faceWeight,
+      dataUrl: dataUrl || entry.dataUrl || null,
+    });
+    if (legacy !== family && !byFamily.has(legacy)) byFamily.set(legacy, entry);
     bump();
     return entry;
   }
@@ -484,6 +553,8 @@
     opszFor: (family, opsz, designPx) => opszFor(get(family), opsz, designPx),
     /** Variable axes beyond weight by tag ({ wdth?: [min, max], opsz?: [min, max], XROT?: [min, max, def], … }), or null. */
     axes: (family) => { const f = get(family); return f && f.axes ? f.axes : null; },
+    /** Per-glyph OpenType features a family can pin through `font.features` (tnum, ss01, smcp…). */
+    features: (family) => { const f = get(family); return f ? ((f.base || f).features || []).slice() : []; },
     /** True when Google serves the family (or an instance's base) with true italics. */
     hasItalic: (family) => { const f = get(family); return !!(f && (f.base || f).italic); },
     /** A family's axes beyond weight as [{ tag, min, max, def }] (wdth default 100, opsz 'auto'). */

@@ -140,6 +140,18 @@ user's intent.
   Recursive's cursive forms switch on at its full slant. A slant the user pins in `font.axes`
   stays theirs, and a backward slant is always a skew.
 
+**Uploaded fonts** (`TM.fonts.addCustom(fileName, buffer)`) are read by `TM.sfnt.inspect`:
+the family is named from the file's own name table ("Caladea Bold (custom)") at its OS/2 weight,
+and a variable upload gets its weight range and every fvar axis, so the axis sliders and Axis Wave
+work on it. Instances draw from one shared blob URL. WOFF2 can't be read without a Brotli decoder
+and keeps the file name. Scenes saved under the older file-name family still resolve (an alias).
+
+**OpenType features.** `font.features` (`{ tnum: 1, ss01: 1, … }`) pins per-glyph features
+(figure styles, small caps, stylistic sets, character variants…) through the instance's
+`featureSettings`. `TM.fonts.features(family)` lists what a family has. Google serves most
+families without their optional features, so the catalogue lists only the figure styles found by
+drawing them (tnum, pnum, lnum); uploads list their GSUB features.
+
 **Ligatures.** Presets draw clusters one at a time, which would lose the font's ligatures. The
 layout finds, once per font, the sequences that draw differently as a run than letter by letter
 (fi, fl, ff, ffi, ffl, Th, st, a script's joins…), and lays each out as one cluster, since the
