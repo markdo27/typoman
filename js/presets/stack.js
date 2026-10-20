@@ -213,6 +213,8 @@
     if (ls) ctx.letterSpacing = spacing.toFixed(2) + 'px';
     const tk = -Math.tan(skew + f.slant);
     ctx.globalAlpha = f.alpha;
+    // A right-to-left row resolves its edge punctuation as RTL text does (left stays the left edge).
+    ctx.direction = TM.text.isRTL(row.text) ? 'rtl' : 'ltr';
     const ox = -runW / 2, oy = row.oy; // centres the row's ink on (x, y)
     const ex = f.extrude;
     if (ex) {

@@ -46,6 +46,18 @@
       this.ctx.miterLimit = 2;
       this.ctx.textAlign = 'left';
       this.ctx.textBaseline = 'alphabetic';
+      // Lines with a right-to-left base draw their clusters with direction 'rtl', so neutral
+      // characters at a word's edge (punctuation) resolve as they do in the whole line.
+      this._rtl = !!(this.layout && this.layout.lines.some((ln) => ln.rtl));
+    }
+
+    /** Set the context's direction for text in line `li` (contexts are shared, so restore ltr). */
+    _dir(li) {
+      const ctx = this.ctx;
+      if (!this._rtl) { if (ctx.direction === 'rtl') ctx.direction = 'ltr'; return; }
+      const ln = this.layout.lines[li];
+      const dir = ln && ln.rtl ? 'rtl' : 'ltr';
+      if (ctx.direction !== dir) ctx.direction = dir;
     }
 
     // ── determinism helpers ──
@@ -223,6 +235,7 @@
       const oy = o.anchor === 'baseline' ? 0 : this.layout.capH / 2;
       this._setFont(o.family ? TM.fonts.fontString(o.family, o.weight != null ? o.weight : this.layer.font.weight, this.size) : o.weight != null ? this.font(o.weight) : this.layout.font);
       ctx.globalAlpha = alpha;
+      this._dir(g.line);
 
       const ex = this.extrude;
       if (ex) {
@@ -266,6 +279,7 @@
       this._setFont(o.family ? TM.fonts.fontString(o.family, o.weight != null ? o.weight : this.layer.font.weight, this.size) : o.weight != null ? this.font(o.weight) : this.layout.font);
       if ('letterSpacing' in ctx) ctx.letterSpacing = this.layout.tracking.toFixed(2) + 'px';
       ctx.globalAlpha = alpha;
+      this._dir(line.index);
       const ma = cos * sx, mb = sin * sx, mc = (cos * tk - sin) * sy, md = (sin * tk + cos) * sy;
       const ox = -line.width / 2, oy = this.layout.capH / 2;
       const ex = this.extrude;

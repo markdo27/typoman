@@ -370,5 +370,8 @@
     return greedy(hi);
   }
 
-  TM.text = { layout, advance, graphemes, applyCase, wrapToFit };
+  /** True when a string's base direction is right-to-left (its first strong character is RTL). */
+  const isRTL = (text) => clustersFor(String(text || '')).rtl;
+
+  TM.text = { layout, advance, graphemes, applyCase, wrapToFit, isRTL };
 })(typeof window !== 'undefined' ? window : globalThis);
