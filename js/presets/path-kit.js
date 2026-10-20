@@ -145,12 +145,17 @@
     return id;
   }
 
-  /** Common stroke setup in frame space for guides, rings and pen lines. Call inside save/restore. */
+  /**
+   * Common stroke setup in frame space for guides, rings and pen lines. Call inside save/restore
+   * and stroke before drawing glyphs (they re-anchor the shared gradient pattern). Without a
+   * colour, decor is painted like the ink in frame space: a gradient fill runs along a pen line
+   * or round a ring exactly as across the letters beside it.
+   */
   function strokeStyle(f, widthPx, alpha, color) {
     const ctx = f.ctx;
     f.identity();
     ctx.globalAlpha = f.alpha * alpha;
-    ctx.strokeStyle = color || f.colorOf({ vi: 0 });
+    ctx.strokeStyle = color || f.textPaint({ vi: 0 });
     ctx.fillStyle = ctx.strokeStyle;
     ctx.lineWidth = Math.max(0.75, widthPx);
     ctx.lineCap = 'round';
