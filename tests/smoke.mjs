@@ -267,6 +267,25 @@ const results = await page.evaluate(async () => {
     return { ok: hz2.ok && hz2.flashes === 2 && !hz4.ok && hz4.flashes === 4 && spot.ok && bar.flashes === 5 && plain.ok, hz2: hz2.flashes, hz4: hz4.flashes, bar: bar.flashes };
   })();
 
+  // Starter templates: every one builds a valid multi-layer scene that renders the same twice,
+  // stays under the flash limit, and takes the user's text in its headline.
+  const templates = await (async () => {
+    const bad = [];
+    for (const t of TM.Templates.list()) {
+      const s = TM.Templates.build(t.id);
+      await TM.prepare(s, { timeout: 8000 });
+      const same = JSON.stringify(TM.Scene.normalize(s)) === JSON.stringify(s);
+      const c = document.createElement('canvas'); const r = new TM.Renderer(c, { quality: 'full' }); r.setScene(s); r.resize(320, Math.round((320 * s.size.h) / s.size.w));
+      const hash = () => { r.render(s.duration * 0.45); const d = r.ctx.getImageData(0, 0, c.width, c.height).data; let h = 0, ink = 0; for (let i = 0; i < d.length; i += 4) { h = (h * 31 + d[i] + d[i + 1] * 3) | 0; ink += d[i]; } return [h, ink]; };
+      const a = hash(), b = hash();
+      const fl = await TM.Safety.flashes(s, { maxFrames: 240 });
+      const withText = TM.Templates.build(t.id, { text: 'HELLO' });
+      const headline = withText.layers.some((l) => l.text === 'HELLO');
+      if (!same || a[0] !== b[0] || !fl.ok || !headline || s.layers.length < 2) bad.push(`${t.id}${!same ? ' (not normalised)' : ''}${a[0] !== b[0] ? ' (not deterministic)' : ''}${!fl.ok ? ' (flashes ' + fl.flashes + '/s)' : ''}${!headline ? ' (no headline)' : ''}`);
+    }
+    return { count: TM.Templates.list().length, bad };
+  })();
+
   // Sanitiser fuzz: garbage must normalise to a valid scene without throwing.
   const garbage = [null, 42, 'x', [], { layers: 'nope' }, { size: { w: -5, h: 1e9 }, fps: 7, duration: 'abc' },
     { layers: [{ text: 5, preset: '<script>', font: { family: 'Comic Sans' }, fill: { color: 'red' }, path: { nodes: [{ x: 'a' }] } }] },
@@ -285,7 +304,7 @@ const results = await page.evaluate(async () => {
   const close = (a, b) => (typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) < 1e-3
     : a && typeof a === 'object' ? b && typeof b === 'object' && Object.keys({ ...a, ...b }).every((k) => close(a[k], b[k])) : a === b);
   const roundTrip = close(s0, s1);
-  return { presets: out, fuzzOk, roundTrip, lineBands, timing, axes, fontLoads, kerning, safety, styles };
+  return { presets: out, fuzzOk, roundTrip, lineBands, timing, axes, fontLoads, kerning, safety, styles, templates };
 });
 
 await browser.close();
@@ -317,6 +336,9 @@ const kern = Object.entries(results.kerning);
 const kernOk = kern.every(([, v]) => v < 0.03);
 console.log(`kerning + ligatures (per-glyph vs native run): ${kernOk ? 'ok' : 'FAIL'} (${kern.map(([f, v]) => f + ' ' + (v * 100).toFixed(2) + '%').join(' · ')} of ink differs)`);
 if (!kernOk) fails.push('per-glyph layout loses kerning');
+const tp = results.templates;
+console.log(`starter templates: ${tp.bad.length ? 'FAIL ' + tp.bad.join(', ') : 'ok'} (${tp.count} build, render deterministically, flash-safe, take the user's text)`);
+if (tp.bad.length || tp.count < 6) fails.push('starter templates broken: ' + tp.bad.join(', '));
 const st = results.styles;
 console.log(`italics + obliques: true italic ${st.italic ? 'ok' : 'FAIL'} · slant onto slnt axis ${st.slnt ? 'ok' : 'FAIL'}`);
 if (!st.italic || !st.slnt) fails.push('italic instances or slnt slant broken');

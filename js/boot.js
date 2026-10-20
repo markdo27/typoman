@@ -113,12 +113,18 @@
     'js/studio/share-dialog.js',
   ];
 
+  // ── Starter templates: curated multi-layer scenes (owner: lead) ──
+  var TEMPLATES = [
+    'js/templates/templates.js',
+  ];
+
   var GROUPS = {
     engine: ENGINE,
     presets: PRESETS_CORE.concat(PRESETS_A, PRESETS_B),
     export: EXPORT,
+    templates: TEMPLATES,
     // Studio panels register themselves; app.js must come last so it can find them.
-    studio: STUDIO_UI.slice(0, -1).concat(STUDIO_PATH, STUDIO_EXPORT, STUDIO_UI.slice(-1)),
+    studio: TEMPLATES.concat(STUDIO_UI.slice(0, -1), STUDIO_PATH, STUDIO_EXPORT, STUDIO_UI.slice(-1)),
   };
 
   var me = document.currentScript;

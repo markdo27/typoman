@@ -291,6 +291,24 @@ per second, and when that window starts. Fast motion counts too, so a bar sweepi
 five times a second is five flashes. Await `TM.prepare(scene)` first. It takes about 0.2–1 s
 for a 4 s loop, and yields to the page as it goes.
 
+## Starter templates
+
+`js/templates/templates.js` (manifest group `templates`, loaded with the studio) holds curated
+multi-layer scenes: Title Window, Lyric Morph, Logo Sting, Kinetic Poster, Editorial Quote,
+Departure Board, Glitch Drop and Signature. Each one names its frame, length and background,
+and builds every layer from a preset, one of that preset's looks (by name) and a few
+overrides: text, size, position, timing, mattes and transform keys. Building through looks
+keeps templates in step with their presets.
+
+- `TM.Templates.list()` returns `[{ id, name, description, aspect, duration }]`.
+- `TM.Templates.build(id, { text })` returns a normalised scene. `text` replaces the
+  headline layer's text.
+
+Sub-layers are sequenced with `time: { delay, cycles: 2, mode: 'once' }`: one pass in half
+the loop, from `delay`. They are hidden before and after it, so nothing wraps across the loop
+seam. Smoke builds every template and checks that it renders deterministically, stays under
+the flash limit and takes the user's text.
+
 ## Studio API (for panels, editors and dialogs)
 
 - `TM.Studio.store`: `scene`, `layer`, `preset`, `selected`, `ui` and `setUI(patch)`.
