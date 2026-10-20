@@ -173,11 +173,9 @@
       hb = Math.max(hb, m.bottom + amp);
     });
     const k = comfort(P.cornerSmooth);
-    const carrier = base.rounded(T > 0 ? T + HARD * ht : 0, B > 0 ? B + HARD * hb : 0, {
-      prefer: [T > 0 ? T + k * ht : 0, B > 0 ? B + k * hb : 0],
-      reach: reach(P.cornerSmooth) * size,
-      limit: LIMIT * size,
-    });
+    const left = T > 0 ? T + HARD * ht : 0, right = B > 0 ? B + HARD * hb : 0;
+    const opts = { prefer: [T > 0 ? T + k * ht : 0, B > 0 ? B + k * hb : 0], reach: reach(P.cornerSmooth) * size, limit: LIMIT * size };
+    const carrier = carrierFor(f, base, left, right, opts);
     const lanes = offs.map((d, li) => {
       const m = lines[li];
       return carrier.lane(d).tracked({
@@ -192,6 +190,36 @@
     const G = { key, carrier, lanes, waveLen };
     built.set(base, G);
     return G;
+  }
+
+  /**
+   * The carrier for this frame. With path keyframes, every key shape is rounded once (cached on
+   * its sampled path) and the rounded shapes are morphed exactly as the renderer morphs the keys
+   * into f.path (TM.Path.sequence), so the carrier deforms smoothly from frame to frame instead
+   * of being re-rounded, and cheaply. An in-between shape tighter than the block allows (a
+   * cusp forming mid-morph) is rounded itself.
+   */
+  function carrierFor(f, base, left, right, opts) {
+    const L = f.layer, pm = L.pathMorph;
+    const keys = pm && pm.enabled && L.path ? TM.Path.morphKeys(pm) : [];
+    if (!keys.length) return base.rounded(left, right, opts);
+    const shapes = [L.path].concat(keys).map((d) => TM.Path.sample(d, f.W, f.H).rounded(left, right, opts));
+    const c = TM.Path.sequence(shapes, pm, f.p);
+    if (!c || c.n < 4) return base.rounded(left, right, opts);
+    return shapes.includes(c) || !tighter(c, left, right) ? c : c.rounded(left, right, { limit: opts.limit });
+  }
+
+  /** Does the curve turn tighter than radius `left` toward −normal or `right` toward +normal? */
+  function tighter(c, left, right) {
+    const kl = left > 0 ? 1.15 / left : Infinity, kr = right > 0 ? 1.15 / right : Infinity;
+    const n = c.n, last = c.closed ? n : n - 1;
+    for (let i = 1; i < last; i++) {
+      const a = (i - 1 + n) % n, b = (i + 1) % n, ds = (c.cum[i + 1] - c.cum[i - 1]) / 2;
+      if (!(ds > 1e-6)) continue;
+      const turn = (c.tx[a] * c.ty[b] - c.ty[a] * c.tx[b]) / (2 * ds); // ≈ signed curvature
+      if (turn > kr || -turn > kl) return true;
+    }
+    return false;
   }
 
   function place(f, G, path, g, s, ch) {
