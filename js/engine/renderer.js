@@ -11,7 +11,7 @@
 (function (root) {
   'use strict';
   const TM = root.TM;
-  const { clamp, mod, TAU } = TM.math;
+  const { clamp, mod } = TM.math;
   const DEG = Math.PI / 180;
   // Canvas text kerning control (all current engines; guarded for old ones).
   const KERN = typeof CanvasRenderingContext2D !== 'undefined' && 'fontKerning' in CanvasRenderingContext2D.prototype;
@@ -38,7 +38,8 @@
       this._path = undefined;
       this._noise = null;
       const L = this.layer;
-      this.slant = (L.type.slant || 0) * DEG;
+      // Slant the font's own slnt axis already drew (typeset) isn't skewed again.
+      this.slant = ((L.type.slant || 0) - (L.font.autoSlnt || 0)) * DEG;
       this.strokeMode = L.stroke.mode;
       this.strokeW = L.stroke.width * this.size;
       this.ctx.lineJoin = 'round';
@@ -81,7 +82,20 @@
     /** Local 0..1 progress of an item at rank r when global progress is p (window shrinks with stagger). */
     stagger(p, r, stagger = this.params.stagger || 0) {
       const d = Math.max(1e-4, 1 - stagger);
-      return clamp((p - r * stagger) / d);
+      return clamp((p - this.spread(r) * stagger) / d);
+    }
+
+    /**
+     * A rank as the layer's stagger distribution places it: through the Stagger curve (an ease
+     * spec), then mixed with a seeded random rank by Jitter. Items sharing a rank (a word in
+     * 'words' order) keep sharing it. f.stagger applies it; presets timing items another way
+     * can call it on their own ranks.
+     */
+    spread(r) {
+      const P = this.params, c = P.staggerCurve, j = P.jitter || 0;
+      let u = c != null && c !== 'linear' ? clamp(TM.ease(c, 'linear')(r)) : r;
+      if (j > 0) u = u * (1 - j) + j * this.rand(Math.round(r * 65536), 5113);
+      return u;
     }
 
     /**
@@ -184,6 +198,8 @@
      *   ch        draw a different character in g's slot (scramble, slot machine)
      *   anchor    'center' (default) or 'baseline' (sit the baseline on (x, y), for paths)
      *   size      font size override in pixels
+     *   family    draw in another family / instance (e.g. TM.fonts.resolve() for an animated axis)
+     *   w         advance width to centre on (pass it with `family` when widths change)
      */
     drawGlyph(g, o = {}) {
       if (g.isSpace && o.ch == null) return;
@@ -202,10 +218,10 @@
       const a = cos * sx * scaleSize, b = sin * sx * scaleSize;
       const c = (cos * tk - sin) * sy * scaleSize, d = (sin * tk + cos) * sy * scaleSize;
       const ch = o.ch != null ? o.ch : g.ch;
-      const w = o.ch != null && o.ch !== g.ch ? this.renderer._advance(ch, this.layer, this.size) : g.w;
+      const w = o.w != null ? o.w : o.ch != null && o.ch !== g.ch ? this.renderer._advance(ch, this.layer, this.size) : g.w;
       const ox = -w / 2;
       const oy = o.anchor === 'baseline' ? 0 : this.layout.capH / 2;
-      this._setFont(o.weight != null ? this.font(o.weight) : this.layout.font);
+      this._setFont(o.family ? TM.fonts.fontString(o.family, o.weight != null ? o.weight : this.layer.font.weight, this.size) : o.weight != null ? this.font(o.weight) : this.layout.font);
       ctx.globalAlpha = alpha;
 
       const ex = this.extrude;
@@ -247,7 +263,7 @@
       const rot = o.rot || 0, lean = (o.skew || 0) + this.slant;
       const cos = Math.cos(rot), sin = Math.sin(rot), tk = -Math.tan(lean);
       const ctx = this.ctx;
-      this._setFont(o.weight != null ? this.font(o.weight) : this.layout.font);
+      this._setFont(o.family ? TM.fonts.fontString(o.family, o.weight != null ? o.weight : this.layer.font.weight, this.size) : o.weight != null ? this.font(o.weight) : this.layout.font);
       if ('letterSpacing' in ctx) ctx.letterSpacing = this.layout.tracking.toFixed(2) + 'px';
       ctx.globalAlpha = alpha;
       const ma = cos * sx, mb = sin * sx, mc = (cos * tk - sin) * sy, md = (sin * tk + cos) * sy;
@@ -355,7 +371,7 @@
     _layout(layer, W, H, preset) {
       const unit = Math.min(W, H);
       const opts = {
-        text: layer.text,
+        text: wrapFor(layer, W, H, preset),
         family: layer.font.family,
         weight: layer.font.weight,
         sizePx: Math.max(1, layer.type.size * unit),
@@ -363,6 +379,7 @@
         leading: layer.type.leading,
         align: layer.type.align,
         case: layer.type.case,
+        ligatures: layer.type.ligatures,
       };
       let L = TM.text.layout(opts);
       if (preset.fit && L.width > 0) {
@@ -463,6 +480,9 @@
       const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
       const W = this.canvas.width, H = this.canvas.height;
       this._buffers(W, H);
+      // True after a render whose preview caps (blur samples, extrude steps) cut quality, so the
+      // studio can label the stage as a draft; exports never set it.
+      this.simplified = false;
       const ctx = this.ctx;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalAlpha = 1;
@@ -470,9 +490,35 @@
       ctx.shadowColor = 'rgba(0,0,0,0)';
       ctx.shadowBlur = 0;
       this._background(ctx, scene.bg, W, H);
-      scene.layers.forEach((layer, i) => {
-        if (layer.visible !== false) this._renderLayer(typeset(layer, scene), i, t, W, H);
-      });
+      // Track mattes: a layer whose upper neighbour uses it as a matte renders offscreen (shown
+      // only if that matte asks for it; still usable when hidden, as in After Effects), and the
+      // matted layer is cut by it. Two buffers ping-pong, so a layer can be both cut and a matte.
+      const layers = scene.layers;
+      let matte = null; // { canvas, index, slot }: pixels of the layer the next one is matted by
+      for (let i = 0; i < layers.length; i++) {
+        const layer = layers[i], next = layers[i + 1];
+        const feeds = !!(next && next.visible !== false && next.matte && next.matte.mode !== 'none');
+        if (layer.visible === false && !feeds) { matte = null; continue; }
+        const L = typeset(layer, scene);
+        const own = layer.matte && layer.matte.mode !== 'none' && matte && matte.index === i - 1 ? matte : null;
+        if (!own && !feeds) {
+          this._renderLayer(L, i, t, W, H, ctx);
+          matte = null;
+          continue;
+        }
+        const slot = own ? own.slot ^ 1 : 0;
+        const tgt = this._matteBuffer(slot, W, H);
+        this._renderLayer(L, i, t, W, H, tgt.ctx);
+        if (own) {
+          tgt.ctx.setTransform(1, 0, 0, 1, 0, 0);
+          tgt.ctx.globalAlpha = 1;
+          tgt.ctx.globalCompositeOperation = layer.matte.mode === 'alphaInvert' ? 'destination-out' : 'destination-in';
+          tgt.ctx.drawImage(own.canvas, 0, 0);
+          tgt.ctx.globalCompositeOperation = 'source-over';
+        }
+        if (layer.visible !== false && (!feeds || next.matte.show)) ctx.drawImage(tgt.canvas, 0, 0);
+        matte = feeds ? { canvas: tgt.canvas, index: i, slot } : null;
+      }
       this._post(ctx, scene, t, W, H);
       this.stats.renders++;
       if (t0) this.stats.lastMs = performance.now() - t0;
@@ -501,14 +547,65 @@
       ctx.fillRect(0, 0, W, H);
     }
 
+    /**
+     * A layer's own loop time at scene time t. Delay shifts its start, cycles speed it up by
+     * whole loops (so the scene still loops seamlessly), and 'once' plays a single pass then
+     * holds its end.
+     */
+    _layerTime(layer, t) {
+      const dur = this.scene.duration;
+      const tm = layer.time;
+      const lt = tm ? (t - tm.delay) * tm.cycles : t;
+      return tm && tm.mode === 'once' ? clamp(lt, 0, dur * (1 - 1e-6)) : mod(lt, dur);
+    }
+
+    /**
+     * The layer's transform keyframes at time t: { a, b, c, d, e, f, opacity } (a matrix about
+     * its anchor, in frame px) or null. Each key eases into the next; outside the first and last
+     * keys their values hold.
+     */
+    _transformAt(layer, t, W, H) {
+      const tr = layer.transform;
+      if (!tr || !tr.enabled || !tr.keys.length) return null;
+      const p = this._layerTime(layer, t) / this.scene.duration;
+      const ks = tr.keys;
+      let v;
+      if (p <= ks[0].t) v = ks[0];
+      else if (p >= ks[ks.length - 1].t) v = ks[ks.length - 1];
+      else {
+        let k = 0;
+        while (k < ks.length - 2 && p > ks[k + 1].t) k++;
+        const A = ks[k], B = ks[k + 1];
+        const u = B.t > A.t ? TM.ease(A.ease)((p - A.t) / (B.t - A.t)) : 1;
+        const lerp = (key) => A[key] + (B[key] - A[key]) * u;
+        v = { x: lerp('x'), y: lerp('y'), scale: lerp('scale'), rot: lerp('rot'), opacity: clamp(lerp('opacity'), 0, 1) };
+      }
+      const ax = layer.anchor.x * W, ay = layer.anchor.y * H;
+      const r = v.rot * DEG, c = Math.cos(r) * v.scale, sn = Math.sin(r) * v.scale;
+      // translate(anchor + offset) · rotate · scale · translate(-anchor)
+      const tx = ax + v.x * W, ty = ay + v.y * H;
+      return { a: c, b: sn, c: -sn, d: c, e: tx - (c * ax - sn * ay), f: ty - (sn * ax + c * ay), opacity: v.opacity };
+    }
+
+    /** One of two offscreen frame buffers for track mattes (allocated on first use). */
+    _matteBuffer(slot, W, H) {
+      if (!this._mattes) this._mattes = [null, null];
+      let m = this._mattes[slot];
+      if (!m || m.canvas.width !== W || m.canvas.height !== H) {
+        const canvas = makeCanvas(W, H);
+        m = this._mattes[slot] = { canvas, ctx: canvas.getContext('2d') };
+      }
+      m.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      m.ctx.globalAlpha = 1;
+      m.ctx.globalCompositeOperation = 'source-over';
+      m.ctx.clearRect(0, 0, W, H);
+      return m;
+    }
+
     _drawPreset(lctx, layer, index, preset, t, W, H, echo, alpha, colorOverride) {
       const scene = this.scene;
       const dur = scene.duration;
-      // Layer timing: delay shifts the layer's start, cycles speeds it up by whole loops (so
-      // the scene still loops seamlessly), and 'once' plays a single pass then holds its end.
-      const tm = layer.time;
-      const lt = tm ? (t - tm.delay) * tm.cycles : t;
-      const tl = tm && tm.mode === 'once' ? clamp(lt, 0, dur * (1 - 1e-6)) : mod(lt, dur);
+      const tl = this._layerTime(layer, t);
       const L = this._layout(layer, W, H, preset);
       const f = this.frame;
       const seed = (scene.seed + index * 1013) | 0;
@@ -561,6 +658,7 @@
       const px = Math.max(1, Math.min(W, H) / 900);
       const cap = this.quality === 'preview' ? clamp(Math.floor(28 / Math.sqrt(this._passes || 1)), 6, 28) : 64;
       const steps = clamp(Math.ceil(length / px), 2, cap);
+      if (steps < clamp(Math.ceil(length / px), 2, 64)) this.simplified = true;
       const a = ex.angle * DEG;
       const key = ex.color + steps;
       if (!this._exColors || this._exColors.key !== key) {
@@ -584,10 +682,10 @@
       }
     }
 
-    _renderLayer(layer, index, t, W, H) {
+    _renderLayer(layer, index, t, W, H, target = this.ctx) {
       const preset = TM.getPreset(layer.preset);
       if (!preset) return;
-      const ctx = this.ctx, lctx = this._lctx;
+      const ctx = target, lctx = this._lctx;
       lctx.setTransform(1, 0, 0, 1, 0, 0);
       lctx.clearRect(0, 0, W, H);
 
@@ -595,6 +693,7 @@
       // Preview keeps blur × echo passes bounded; exports always render at full quality.
       const echoN = (layer.fx.echo.count | 0) + 1;
       const samples = blur > 0 ? (this.quality === 'preview' ? clamp(Math.floor(16 / echoN), 2, 4) : Math.round(4 + blur * 12)) : 1;
+      if (blur > 0 && samples < Math.round(4 + blur * 12)) this.simplified = true;
       this._passes = samples * echoN;
       if (samples > 1) {
         // Trailing motion blur: average `samples` sub-frames across the shutter interval.
@@ -619,6 +718,14 @@
 
       const unit = Math.min(W, H);
       const fx = layer.fx;
+      // Transform keyframes move the finished layer (with its shadow and glow) as one piece.
+      const xf = this._transformAt(layer, t, W, H);
+      if (xf) {
+        if (!(xf.opacity > 0.001) || Math.abs(xf.a * xf.d - xf.b * xf.c) < 1e-9) return;
+        ctx.save();
+        ctx.setTransform(xf.a, xf.b, xf.c, xf.d, xf.e, xf.f);
+        ctx.globalAlpha = xf.opacity;
+      }
       if (fx.shadow.amount > 0) {
         const a = fx.shadow.angle * DEG, dist = fx.shadow.distance * unit;
         this._softPass(ctx, TM.color.rgba(fx.shadow.color, 0.25 + 0.75 * fx.shadow.amount), Math.max(1, fx.shadow.amount * unit * 0.035), Math.cos(a) * dist, Math.sin(a) * dist);
@@ -628,6 +735,7 @@
         for (let k = 0; k < passes; k++) this._softPass(ctx, fx.glow.color, unit * (0.012 + fx.glow.amount * 0.05) * (k + 1), 0, 0);
       }
       ctx.drawImage(this._layer, 0, 0);
+      if (xf) ctx.restore();
     }
 
     /**
@@ -712,19 +820,58 @@
    */
   function familyFor(layer, scene) {
     const side = scene && scene.size ? Math.min(scene.size.w, scene.size.h) : 1080;
-    return TM.fonts.resolve(layer.font, layer.type.size * side);
+    return TM.fonts.resolve(fontFor(layer), layer.type.size * side);
   }
 
-  /** The layer as presets see it: font.family already names the instance to draw with. */
+  /**
+   * The font a layer draws with: its own, plus a forward slant moved onto the family's slnt axis
+   * (a drawn oblique) as far as the axis goes, unless the layer pins slnt itself. `autoSlnt`
+   * records the degrees the axis covers; the renderer skews only the rest.
+   */
+  function fontFor(layer) {
+    const font = layer.font, slant = layer.type.slant || 0;
+    if (font.autoSlnt != null || !(slant > 0) || (font.axes && font.axes.slnt != null)) return font;
+    const ax = TM.fonts.axes(font.family);
+    if (!ax || !ax.slnt) return font;
+    const deg = Math.min(slant, -ax.slnt[0]);
+    return Object.assign({}, font, { axes: Object.assign({}, font.axes, { slnt: -deg }), autoSlnt: deg });
+  }
+
+  /**
+   * The text a layer lays out with: for presets that fit their block to the frame, lines that
+   * would shrink are re-wrapped into balanced lines when that lets the type grow (type.wrap
+   * 'auto'). Depends only on the text, font and frame aspect, so every render size agrees.
+   */
+  function wrapFor(layer, W, H, preset) {
+    if (!preset || !preset.fit || layer.type.wrap === 'off' || !/\s/.test(layer.text || '')) return layer.text;
+    const unit = Math.min(W, H), size = Math.max(1e-6, layer.type.size * unit);
+    const key = [layer.text, layer.font.family, layer.font.weight, layer.type.tracking, layer.type.leading, layer.type.case, layer.type.size, (W / H).toFixed(4), preset.fitWidth, preset.fitHeight, TM.fonts.version()].join('\u0001');
+    const hit = wrapCache.get(key);
+    if (hit !== undefined) return hit;
+    const out = TM.text.wrapToFit({ text: layer.text, family: layer.font.family, weight: layer.font.weight, tracking: layer.type.tracking, leading: layer.type.leading, case: layer.type.case },
+      (W * (preset.fitWidth || 0.9)) / size, (H * (preset.fitHeight || 0.86)) / size);
+    if (wrapCache.size > 200) wrapCache.clear();
+    wrapCache.set(key, out);
+    return out;
+  }
+  const wrapCache = new Map();
+
+  /**
+   * The layer as presets see it: font.family already names the instance to draw with, and
+   * font.axes carries any slant moved onto the slnt axis (so instances a preset derives from
+   * layer.font, like Axis Wave's ladder, keep it).
+   */
   function typeset(layer, scene) {
+    const font = fontFor(layer);
     const family = familyFor(layer, scene);
-    return family === layer.font.family ? layer : Object.assign({}, layer, { font: Object.assign({}, layer.font, { family }) });
+    return family === layer.font.family && font === layer.font ? layer : Object.assign({}, layer, { font: Object.assign({}, font, { family }) });
   }
 
   TM.Renderer = Renderer;
   TM.Frame = Frame;
   Renderer.familyFor = familyFor;
   Renderer.typeset = typeset;
+  Renderer.wrapFor = wrapFor;
 
   /**
    * Resolve once every font a scene uses is ready (never rejects): each layer's instance, the
@@ -742,7 +889,7 @@
       const preset = TM.getPreset(l.preset);
       if (preset && typeof preset.fonts === 'function') {
         let extra = [];
-        try { extra = preset.fonts(l, scene) || []; } catch (e) { console.warn('[TM] preset.fonts failed:', e); }
+        try { extra = preset.fonts(typeset(l, scene), scene) || []; } catch (e) { console.warn('[TM] preset.fonts failed:', e); }
         new Set(extra).forEach((fam) => {
           if (fam === main) return;
           const job = TM.fonts.ensure(fam, l.font.weight, l.text, opts.timeout);

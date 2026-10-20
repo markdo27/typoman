@@ -42,8 +42,11 @@ vendor/*          pinned third-party code (MIT), served locally
   bg:{ type:'solid'|'linear'|'radial'|'transparent', color, color2, angle },
   post:{ grain 0..1, vignette 0..1 },
   layers:[{ id, name, visible, text /*\n = new line*/, preset, params:{…per preset schema…},
-    font:{ family, weight, width /*wdth %, default 100*/, opsz /*'auto' | number*/ },
-    type:{ size /*× unit*/, tracking /*em*/, leading, align, case, slant /*deg*/ },
+    font:{ family, weight, width /*wdth %, default 100*/, opsz /*'auto' | number*/,
+           axes /*{ TAG: value } for any other axis the family has: slnt, XROT, YEAR, MORF…*/,
+           italic /*true italic where the family has one*/ },
+    type:{ size /*× unit*/, tracking /*em*/, leading, align, case, slant /*deg*/, wrap:'auto'|'off',
+           ligatures /*default true*/ },
     fill:{ type:'solid'|'gradient'|'palette', color, color2, angle, palette:[hex…] },
     stroke:{ mode:'none'|'outline'|'both', width /*em*/, color },
     path:{ closed, preset?, nodes:[{x,y,ix,iy,ox,oy,k}] } | null,   // normalised 0..1, handles relative
@@ -52,14 +55,33 @@ vendor/*          pinned third-party code (MIT), served locally
     fx:{ echo:{count,spacing,fade,palette}, blur 0..1, glow:{amount,color},
          shadow:{amount,angle,distance,color}, extrude:{depth,angle,color} },
     anchor:{ x, y },
-    time:{ delay /*s*/, cycles /*1..8 whole loops*/, mode:'loop'|'once' /*once = play a pass, hold its end*/ } }] }
+    time:{ delay /*s*/, cycles /*1..8 whole loops*/, mode:'loop'|'once' /*once = play a pass, hold its end*/ },
+    matte:{ mode:'none'|'alpha'|'alphaInvert', show /*also draw the matte layer*/ },
+    transform:{ enabled, keys:[{ t /*0..1 of the layer's loop*/, x, y /*frame fractions*/, scale, rot /*deg*/, opacity, ease }] /*≤ 16*/ } }] }
 ```
+
+**Auto-wrap.** For presets that fit their block to the frame (`fit: true`), `type.wrap:
+'auto'` re-wraps lines that would otherwise shrink. It tries up to 8 balanced lines, broken at
+spaces, and keeps the arrangement with the largest type (the fewest lines within 10 % of it).
+It decides at a fixed reference size against the frame's aspect, so every render size wraps
+the same way (`TM.Renderer.wrapFor(layer, W, H, preset)`).
+
+**Track mattes.** A layer whose `matte.mode` isn't `'none'` shows only inside
+(`'alpha'`) or outside (`'alphaInvert'`) the ink of the layer directly below it. That layer
+renders offscreen as the matte. As in After Effects, it isn't drawn itself unless
+`matte.show` is set, and it still works when its eye toggle is off. Chains (a matted layer
+acting as the matte for the next one) work too.
+
+**Transform keyframes** move a finished layer, with its shadow and glow, on top of whatever
+its preset does. Position offsets are in frame fractions, rotation turns about the layer's
+anchor, and opacity fades. Keys follow the layer's own timing (`time`), each eases into the
+next, and values hold before the first key and after the last.
 
 `path.preset` is set while the path is an untouched preset shape. Editors **must delete
 it** when the user edits the path, which marks it as custom so it survives preset and
 aspect switches.
 
-### Variable fonts: width and optical size
+### Variable fonts: width, optical size and any other axis
 
 Canvas text can only set weight, so `font.width` (the `wdth` axis) and `font.opsz` are
 drawn through **instances**. These are aliases such as `"Roboto Flex ~w75o144"` whose faces
@@ -82,12 +104,48 @@ user's intent.
   family until then. `TM.fonts.ladder(family, 'wdth')` gives up to 49 evenly spaced widths
   for presets that sweep the axis, and `TM.fonts.baseOf(instance)` the catalogue family
   behind an instance.
+- **Any axis.** Catalogue entries declare their axes by tag: `wdth: [min, max]`,
+  `opsz: [min, max]`, and every other registered or custom axis as `[min, max, default]`.
+  Examples are `slnt`, `GRAD`, Tilt Warp's `XROT`/`YROT`, Climate Crisis' `YEAR`, Kablammo's
+  `MORF`, Fraunces' `SOFT`/`WONK`, Shantell Sans' `BNCE` and Recursive's `CASL`/`MONO`.
+  `font.axes` pins them, and values snap to 1/200 of the range.
+  `TM.fonts.axisList(family)` describes them for UI. `TM.fonts.ladder(family, tag)` gives 49
+  evenly spaced stops for presets that sweep an axis. A family whose axes all sit at their
+  defaults resolves to itself, not an instance.
+- **Per-glyph instances.** `drawGlyph(g, { family, w })` draws one glyph in another family or
+  instance, centred on advance `w` (`TM.text.advance(ch, family, weight, size)`). Axis Wave
+  sweeps any axis this way, letter by letter.
 - **`preset.fonts(layer, scene)`** (optional) lists the extra instance families a preset
   draws with. `TM.prepare` loads them before frame 0, so exports never catch an instance
   mid-load. Stack returns its width ladder this way.
+  `TM.prepare(scene, { extras: 'background' })` starts them without waiting, so a cold embed
+  shows its first frame sooner.
+- **Fail-safe loading:** every font wait is bounded, by default 15 s or by
+  `TM.prepare(scene, { timeout })`. Only the wait stops; the load continues, and a late font
+  re-renders through `TM.fonts.onChange`. Instances unused for 5 s are released beyond a soft
+  cap of 64 and re-created on their next use. `TM.fonts.axesFailed(family)` reports a family
+  whose font CSS couldn't be read, in which case width and optical size fall back to the
+  regular design, and exports add a note.
 - Without the `FontFace` `variationSettings` descriptor, a family is requested without its
   `opsz` axis. Google then serves it pinned at the default, so it is still stable, just not
   size-aware.
+- **True italics.** `font.italic` draws the family's real italic where Google serves one
+  (`TM.fonts.hasItalic(family)`: 17 families, among them Playfair Display, Fraunces, Inter Tight,
+  Montserrat, Bodoni Moda and JetBrains Mono). The instance (`"Playfair Display ~i"`) registers
+  the italic files as its upright faces, so font strings, layout and every preset are
+  unchanged. Families without italics ignore it.
+- **Drawn obliques.** A forward `type.slant` on a family with a `slnt` axis (Roboto Flex,
+  Recursive, Science Gothic) moves onto the axis as far as it goes. The renderer skews only the
+  rest (`f.slant`), and the typeset layer's `font.autoSlnt` records the degrees the axis covers.
+  Recursive's cursive forms switch on at its full slant. A slant the user pins in `font.axes`
+  stays theirs, and a backward slant is always a skew.
+
+**Ligatures.** Presets draw clusters one at a time, which would lose the font's ligatures. The
+layout finds, once per font, the sequences that draw differently as a run than letter by letter
+(fi, fl, ff, ffi, ffl, Th, st, a script's joins…), and lays each out as one cluster, since the
+ligature is one glyph in the font. `type.ligatures: false` turns this off, and tracking beyond
+±0.03 em does too, as CSS does. Per-cluster drawing then matches a native run: Playfair's
+"office fluffy staff" differs by 0.00% of ink, against 8.5% letter by letter.
 
 ## Preset contract
 
@@ -122,6 +180,15 @@ standard in→hold→out timing set: `timing, inDur, outDur, stagger, order, eas
 Any param may take `group: 'Name'` (inspector sub-heading), `hint` and
 `showIf: { otherKey: value | [values] }`.
 
+**Stagger distribution.** A preset whose params include the shared `TM.P.stagger()` control
+(every `TM.P.sequence()` preset) also gets `staggerCurve` (an ease spec, default `'linear'`)
+and `jitter` (0..1) right after it, added by `registerPreset`. `f.stagger` passes each rank
+through `f.spread(r)`: the curve shapes how start times spread along the order (ease-in bunches
+the first letters, ease-out the last), and jitter mixes in a seeded random rank (1 shuffles the
+order). Items sharing a rank keep sharing it. A preset that times items itself can call
+`f.spread(r)` on its own ranks (Phrase Morph does); one that redefines or drops `stagger`
+(Fly In, Typewriter) gets neither control.
+
 ### The frame `f`
 
 | field | meaning |
@@ -140,15 +207,18 @@ isSpace, x /*left*/, w /*advance*/, y /*baseline*/, cx, cy /*centre*/ }`, all re
 the block centre. `L.lines[j] = { text, width, x, y, glyphs:[indices] }`, plus `L.capH`,
 `L.lineGap`, `L.count` (visible glyphs), `L.words` and `L.font`. Lines that are mostly
 right-to-left script (Arabic, Hebrew, …) lay out as **word clusters**: each word is one
-shaped run, so Arabic keeps its joined forms. They are placed right to left and marked
-`line.rtl`, and presets animate them word by word.
+shaped run, so Arabic keeps its joined forms. Clusters are placed in bidi visual order, so an
+LTR phrase inside an RTL line keeps reading left to right. A glyph's `x` is always its visual
+position. The base direction comes from the first strong character, as with `dir="auto"`, and
+RTL lines are marked `line.rtl`. Presets animate them word by word.
 
 **Helpers.**
-- `f.drawGlyph(g, { x, y, rot, sx, sy, scale, skew, alpha, color, weight, ch, anchor:'center'|'baseline', size })`
+- `f.drawGlyph(g, { x, y, rot, sx, sy, scale, skew, alpha, color, weight, ch, anchor:'center'|'baseline', size, family, w })`
   centres the glyph on (x, y) by default.
 - `f.drawLine(line, opts)` draws a whole line as one shaped run.
-- `f.rank(g, order)` gives 0..1, `f.stagger(p, r, amount)` gives 0..1, and `f.seq(g)`
-  gives `{ kin, kout, vin, vout, visible, r }`.
+- `f.rank(g, order)` gives 0..1, `f.stagger(p, r, amount)` gives 0..1 (through
+  `f.spread(r)`, the stagger curve and jitter), and `f.seq(g)` gives
+  `{ kin, kout, vin, vout, visible, r }`.
 - `f.colorOf(g)`, `f.font(weight)` and `f.ease(spec)`.
 - **Fills paint glyph ink only.** `drawGlyph` and `drawLine` fill with `f.textPaint(g)`. That
   is the layer colour, or, for gradient fills, a pattern that keeps the gradient fixed in
@@ -188,22 +258,56 @@ loop progress at which shape i is reached.
 - Lay glyph centres out on `path.offset(centreOffset).spaced(capH / 2)` and letters stop
   colliding on concave curves and at sharp corners (Path Flow does this).
 
-**Easing.** `TM.ease(spec)` takes a name from `TM.EASINGS` or a cubic-bézier
-`[x1, y1, x2, y2]`. Signature curves include `glide`, `smooth`, `snap`, `overshoot`,
-`anticipate`, `spring`, `springSoft` and `springSnappy`.
+**Easing.** `TM.ease(spec)` takes a name from `TM.EASINGS`, a cubic-bézier
+`[x1, y1, x2, y2]`, or a custom spring `'spring(stiffness, damping)'` (stiffness 10–1000,
+damping 1–100, unit mass; `TM.springSpec(k, c)` builds one and `TM.springParams(spec)` reads
+it back). Springs are normalised to end at exactly 1. A loose spring that would still be
+ringing at the end of its window is sped up until it settles (under 0.5% by t = 1), and
+over-damped springs creep in on their slow pole. Signature curves include `glide`, `smooth`,
+`snap`, `overshoot`, `anticipate`, `spring` (= `spring(180,12)`), `springSoft` and
+`springSnappy`. Any ease param, path key or transform key accepts all three forms.
 
 ## Rendering API
 
 ```js
 const r = new TM.Renderer(canvas, { quality: 'preview' | 'full' });
 r.setScene(TM.Scene.normalize(json)); r.resize(w, h);
-await TM.prepare(r.scene);   // loads fonts
+await TM.prepare(r.scene);   // loads fonts; { timeout: ms, extras: 'background' } for embeds
 r.render(seconds);           // background → layers (echo, blur, gradient, shadow, glow) → grain/vignette
 ```
 
 `TM.Scene.encode(scene)` and `decode(str)` produce a compact, URL-safe string ('z' +
 deflate-raw base64url). It goes in `#c=…` on `index.html` (to remix) and on `embed.html`
 (to play).
+
+**Photosensitivity.** `await TM.Safety.flashes(scene, { maxFrames, signal })` (loaded with
+the export group, so in the studio but not in embeds or standalone files) renders the loop at
+192 px, at the scene's frame rate, and counts flashes as WCAG 2.3.1 defines them. A general
+flash is a pair of opposing luminance changes of at least 10% where the darker state is below
+0.80; a red flash involves saturated red. A change counts only when it covers a quarter of
+some 10° field (a third of the frame by a third, the full-screen case). It resolves
+`{ ok, flashes, red, worstAt, frames, limit: 3 }`: the worst one-second window's flashes
+per second, and when that window starts. Fast motion counts too, so a bar sweeping the frame
+five times a second is five flashes. Await `TM.prepare(scene)` first. It takes about 0.2–1 s
+for a 4 s loop, and yields to the page as it goes.
+
+## Starter templates
+
+`js/templates/templates.js` (manifest group `templates`, loaded with the studio) holds curated
+multi-layer scenes: Title Window, Lyric Morph, Logo Sting, Kinetic Poster, Editorial Quote,
+Departure Board, Glitch Drop and Signature. Each one names its frame, length and background,
+and builds every layer from a preset, one of that preset's looks (by name) and a few
+overrides: text, size, position, timing, mattes and transform keys. Building through looks
+keeps templates in step with their presets.
+
+- `TM.Templates.list()` returns `[{ id, name, description, aspect, duration }]`.
+- `TM.Templates.build(id, { text })` returns a normalised scene. `text` replaces the
+  headline layer's text.
+
+Sub-layers are sequenced with `time: { delay, cycles: 2, mode: 'once' }`: one pass in half
+the loop, from `delay`. They are hidden before and after it, so nothing wraps across the loop
+seam. Smoke builds every template and checks that it renders deterministically, stays under
+the flash limit and takes the user's text.
 
 ## Studio API (for panels, editors and dialogs)
 
