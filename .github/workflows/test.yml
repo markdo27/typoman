@@ -12,6 +12,7 @@ permissions:
 #   export  the files users download (WebM, MP4, GIF, PNG, ZIP), checked with ffprobe/ffmpeg
 #   embed   iframe, <typoman-player> and standalone HTML on a foreign origin
 #   sweep   every curated look and every select/toggle option of every preset
+#   studio  the studio's user flows in index.html, desktop and phone (touch)
 jobs:
   smoke:
     runs-on: ubuntu-latest
@@ -72,3 +73,15 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - run: npm run test:sweep
+
+  studio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:studio
