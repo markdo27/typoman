@@ -86,15 +86,16 @@ const playerPixels = (target, id) => target.evaluate((id) => {
   const c = el.shadowRoot.querySelector('canvas');
   const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
   const bg = [d[0], d[1], d[2]];
-  let ink = 0;
+  let ink = 0, clear = 0;
   const colors = new Set();
   for (let i = 0; i < d.length; i += 4) {
     if (Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > 48) ink++;
+    if (d[i + 3] === 0) clear++;
     if (i % 64 === 0) colors.add((d[i] << 16) | (d[i + 1] << 8) | d[i + 2]);
   }
   let s = '';
   for (let i = 0; i < d.length; i += 0x8000) s += String.fromCharCode.apply(null, d.subarray(i, i + 0x8000));
-  return { w: c.width, h: c.height, b64: btoa(s), ink: ink / (d.length / 4), colors: colors.size };
+  return { w: c.width, h: c.height, b64: btoa(s), ink: ink / (d.length / 4), clear: clear / (d.length / 4), colors: colors.size };
 }, id);
 
 /** Pause, seek and wait until the player has drawn that frame (two of its animation frames). */
@@ -145,10 +146,11 @@ await run(async (cleanup) => {
   await harness.evaluate(async (s) => {
     const scene = TM.Scene.normalize(s);
     await TM.prepare(scene);
-    window.__qaRef = (w, h, t, quality) => {
+    const clear = TM.Scene.normalize(Object.assign(TM.Scene.clone(scene), { bg: Object.assign({}, scene.bg, { type: 'transparent' }) }));
+    window.__qaRef = (w, h, t, quality, transparent) => {
       const c = document.createElement('canvas');
       const r = new TM.Renderer(c, { quality: quality || 'full' });
-      r.setScene(scene);
+      r.setScene(transparent ? clear : scene);
       r.resize(w, h);
       r.render(t);
       const d = c.getContext('2d').getImageData(0, 0, w, h).data;
@@ -157,12 +159,12 @@ await run(async (cleanup) => {
       return btoa(out);
     };
   }, SCENE);
-  const reference = async (w, h, t, quality) => new Uint8Array(Buffer.from(await harness.evaluate(({ w, h, t, quality }) => window.__qaRef(w, h, t, quality), { w, h, t, quality }), 'base64'));
+  const reference = async (w, h, t, quality, transparent) => new Uint8Array(Buffer.from(await harness.evaluate(({ w, h, t, quality, transparent }) => window.__qaRef(w, h, t, quality, transparent), { w, h, t, quality, transparent }), 'base64'));
   /** Compare what a player shows with render(t) at the player's own canvas size. */
-  async function matches(label, target, id, t) {
+  async function matches(label, target, id, t, { transparent = false } = {}) {
     const st = await playerState(target, id);
     const px = await playerPixels(target, id);
-    const ref = await reference(px.w, px.h, t, st.quality);
+    const ref = await reference(px.w, px.h, t, st.quality, transparent);
     const d = diffStats(new Uint8Array(Buffer.from(px.b64, 'base64')), ref);
     R.check(`${label}: frame at t=${t} matches render(${t}) (${px.w}×${px.h})`, d.fraction <= MAX_DIFF_FRACTION && d.maxDiff <= MAX_LEVEL_DIFF,
       `${d.differing} of ${d.pixels} px differ, max ${d.maxDiff} level(s)${st.quality !== 'full' ? `, player dropped to ${st.quality} quality` : ''}`);
@@ -177,24 +179,27 @@ await run(async (cleanup) => {
     R.section('iframe: embed.html#c=… on a foreign page');
     const mark = log.mark();
     host.routes['/iframe.html'] = `<!doctype html><html><head><meta charset="utf-8"><title>iframe host</title>
-<style>body{margin:0;background:#ddd} iframe{display:block;width:${W}px;height:${H}px;border:0;margin:0 0 8px}</style></head><body>
+<style>body{margin:0;background:#ddd;display:flex;flex-wrap:wrap;gap:8px;width:${2 * W + 8}px} iframe{display:block;width:${W}px;height:${H}px;border:0}</style></head><body>
 <iframe id="auto" src="${app.url(`/embed.html#c=${code}&autoplay=1&loop=1&controls=0`)}" title="autoplay"></iframe>
 <iframe id="manual" src="${app.url(`/embed.html#c=${code}&autoplay=0&controls=1&start=${T_START}`)}" title="manual"></iframe>
+<iframe id="clear" src="${app.url(`/embed.html#c=${code}&autoplay=0&bg=transparent&start=${T_START}`)}" title="transparent"></iframe>
+<iframe id="broken" src="${app.url('/embed.html#c=zTHIS-IS-NOT-A-SCENE')}" title="damaged code"></iframe>
 <script>
 window.__msgs = [];
 addEventListener('message', (e) => {
   if (!e.data || typeof e.data.typoman !== 'string') return;
-  const from = ['auto', 'manual'].find((id) => document.getElementById(id).contentWindow === e.source) || '?';
+  const from = ['auto', 'manual', 'clear', 'broken'].find((id) => document.getElementById(id).contentWindow === e.source) || '?';
   __msgs.push({ from, type: e.data.typoman, origin: e.origin, duration: e.data.duration, time: e.data.time });
 });
 window.__send = (id, msg) => document.getElementById(id).contentWindow.postMessage(msg, '*');
 </script></body></html>`;
     const page = log.watch(await ctx.newPage(), 'iframe host');
     await page.goto(host.url('/iframe.html'), { waitUntil: 'load' });
-    await page.waitForFunction(() => ['auto', 'manual'].every((id) => window.__msgs.some((m) => m.from === id && m.type === 'ready')), null, { timeout: 30000 });
+    await page.waitForFunction(() => ['auto', 'manual', 'clear'].every((id) => window.__msgs.some((m) => m.from === id && m.type === 'ready')) &&
+      window.__msgs.some((m) => m.from === 'broken' && m.type === 'error'), null, { timeout: 30000 }).catch(() => {});
     const msgs = await page.evaluate(() => window.__msgs);
     const ready = msgs.filter((m) => m.type === 'ready');
-    R.check('iframe: both players post "ready" to the parent from the app origin', ready.length === 2 && ready.every((m) => m.origin === app.origin), ready.map((m) => `${m.from}@${m.origin}`).join(', '));
+    R.check('iframe: every valid player posts "ready" to the parent from the app origin', ready.length === 3 && ready.every((m) => m.origin === app.origin), ready.map((m) => `${m.from}@${m.origin}`).join(', '));
     R.check('iframe: "ready" carries the scene duration', ready.every((m) => Math.abs(m.duration - SCENE.duration) < 1e-9), ready.map((m) => m.duration).join(', '));
     const fAuto = await (await page.$('#auto')).contentFrame();
     const fManual = await (await page.$('#manual')).contentFrame();
@@ -218,6 +223,20 @@ window.__send = (id, msg) => document.getElementById(id).contentWindow.postMessa
     R.check(`iframe start=${T_START}: currentTime starts there`, Math.abs(m.time - T_START) < 1e-9, `${m.time}`);
     await matches('iframe poster (start)', fManual, 'player', T_START);
 
+    // bg=transparent: the host page shows through wherever there's no type.
+    const fClear = await (await page.$('#clear')).contentFrame();
+    const clearPx = await playerPixels(fClear, 'player');
+    const pageBg = await fClear.evaluate(() => [getComputedStyle(document.documentElement).backgroundColor, getComputedStyle(document.body).backgroundColor]);
+    R.check('iframe bg=transparent: the canvas is transparent around the type', clearPx.clear > 0.5 && clearPx.clear < 0.999, `${(clearPx.clear * 100).toFixed(1)}% fully transparent`);
+    R.check('iframe bg=transparent: the embed page itself is transparent', pageBg.every((c) => c === 'rgba(0, 0, 0, 0)' || c === 'transparent'), pageBg.join(', '));
+    await matches('iframe bg=transparent', fClear, 'player', T_START, { transparent: true });
+
+    // A damaged embed code: a friendly error in the player, "error" to the parent, nothing thrown.
+    const fBroken = await (await page.$('#broken')).contentFrame();
+    const b = await playerState(fBroken, 'player');
+    R.check('iframe with a damaged code: shows the error panel and posts "error"', b.error && msgs.some((m) => m.from === 'broken' && m.type === 'error') && !msgs.some((m) => m.from === 'broken' && m.type === 'ready'),
+      `error panel ${b.error ? 'shown' : 'missing'}, messages: ${msgs.filter((m) => m.from === 'broken').map((m) => m.type).join(',') || 'none'}`);
+
     // postMessage control from the host page.
     await page.evaluate(() => window.__send('auto', { typoman: 'pause' }));
     await page.waitForFunction(() => window.__msgs.some((m) => m.from === 'auto' && m.type === 'pause'), null, { timeout: 5000 }).catch(() => {});
@@ -230,8 +249,9 @@ window.__send = (id, msg) => document.getElementById(id).contentWindow.postMessa
     await page.waitForFunction(() => window.__msgs.some((m) => m.from === 'auto' && m.type === 'play'), null, { timeout: 5000 }).catch(() => {});
     R.check('iframe postMessage play: playing again, and "play" posted back', (await playerState(fAuto, 'player')).paused === false && (await page.evaluate(() => window.__msgs.some((m) => m.from === 'auto' && m.type === 'play'))));
     // Make sure console capture reaches into the cross-origin frame, or "no errors" means nothing.
+    const seen = page.waitForEvent('console', { predicate: (msg) => msg.text().includes('qa-probe'), timeout: 5000 }).then(() => true, () => false);
     await fAuto.evaluate(() => console.error('qa-probe: console capture works in the iframe'));
-    const probe = log.errors.some((e) => e.includes('qa-probe'));
+    const probe = (await seen) && log.errors.some((e) => e.includes('qa-probe'));
     log.errors = log.errors.filter((e) => !e.includes('qa-probe'));
     R.check('iframe: console errors inside the cross-origin frame are captured', probe);
     noErrors('iframe', mark);
