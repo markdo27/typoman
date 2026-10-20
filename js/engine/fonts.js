@@ -21,7 +21,9 @@
 
   // [family, category, minWeight, maxWeight, discreteWeights?, axes?]
   // min < max with no discrete list means a variable font with a continuous weight axis.
-  // axes: the other variable axes TYPOMAN drives, { wdth: [min, max] (%), opsz: [min, max] }.
+  // axes: the other variable axes TYPOMAN drives, by tag: wdth: [min, max] (%), opsz: [min, max],
+  // and any other registered or custom axis (slnt, GRAD, XROT, YEAR, MORF, …) as
+  // [min, max, default]. All of them draw through instances (see resolve).
   const CATALOGUE = [
     // Condensed
     ['Anton', 'Condensed', 400, 400],
@@ -30,7 +32,7 @@
     ['League Gothic', 'Condensed', 400, 400, null, { wdth: [75, 100] }],
     // No opsz here: Google serves the optical-size version as the separate family "Big Shoulders".
     ['Big Shoulders Display', 'Condensed', 100, 900],
-    ['Science Gothic', 'Condensed', 100, 900, null, { wdth: [50, 200] }],
+    ['Science Gothic', 'Condensed', 100, 900, null, { wdth: [50, 200], slnt: [-10, 0, 0], CTRS: [0, 85, 0] }],
     ['Six Caps', 'Condensed', 400, 400],
     // Grotesk
     ['Inter Tight', 'Grotesk', 100, 900],
@@ -38,7 +40,7 @@
     ['Bricolage Grotesque', 'Grotesk', 200, 800, null, { opsz: [12, 96], wdth: [75, 100] }],
     ['Archivo', 'Grotesk', 100, 900, null, { wdth: [62, 125] }],
     ['Archivo Black', 'Grotesk', 400, 400],
-    ['Roboto Flex', 'Grotesk', 100, 1000, null, { opsz: [8, 144], wdth: [25, 151] }],
+    ['Roboto Flex', 'Grotesk', 100, 1000, null, { opsz: [8, 144], wdth: [25, 151], slnt: [-10, 0, 0], GRAD: [-200, 150, 0], XTRA: [323, 603, 468], YOPQ: [25, 135, 79] }],
     ['Anybody', 'Grotesk', 100, 900, null, { wdth: [50, 150] }],
     ['Mona Sans', 'Grotesk', 200, 900, null, { wdth: [75, 125] }],
     ['Saira', 'Grotesk', 100, 900, null, { wdth: [50, 125] }],
@@ -53,8 +55,8 @@
     ['Dela Gothic One', 'Display', 400, 400],
     ['Rubik Mono One', 'Display', 400, 400],
     ['Bungee', 'Display', 400, 400],
-    ['Climate Crisis', 'Display', 400, 400],
-    ['Tilt Warp', 'Display', 400, 400],
+    ['Climate Crisis', 'Display', 400, 400, null, { YEAR: [1979, 2050, 1979] }],
+    ['Tilt Warp', 'Display', 400, 400, null, { XROT: [-45, 45, 0], YROT: [-45, 45, 0] }],
     ['Titan One', 'Display', 400, 400],
     ['Bowlby One', 'Display', 400, 400],
     ['Righteous', 'Display', 400, 400],
@@ -64,8 +66,10 @@
     ['Black Ops One', 'Display', 400, 400],
     ['Monoton', 'Display', 400, 400],
     ['Rubik Glitch', 'Display', 400, 400],
+    ['Kablammo', 'Display', 400, 400, null, { MORF: [0, 60, 0] }],
+    ['Agu Display', 'Display', 400, 400, null, { MORF: [0, 60, 0] }],
     // Serif
-    ['Fraunces', 'Serif', 100, 900, null, { opsz: [9, 144] }],
+    ['Fraunces', 'Serif', 100, 900, null, { opsz: [9, 144], SOFT: [0, 100, 0], WONK: [0, 1, 0] }],
     ['Roboto Serif', 'Serif', 100, 900, null, { opsz: [8, 144], wdth: [50, 150] }],
     ['Playfair Display', 'Serif', 400, 900],
     ['Bodoni Moda', 'Serif', 400, 900, null, { opsz: [6, 96] }],
@@ -80,10 +84,14 @@
     ['Major Mono Display', 'Mono', 400, 400],
     ['Silkscreen', 'Mono', 400, 700, [400, 700]],
     ['Press Start 2P', 'Mono', 400, 400],
+    ['Recursive', 'Mono', 300, 1000, null, { slnt: [-15, 0, 0], CASL: [0, 1, 0], CRSV: [0, 1, 0.5], MONO: [0, 1, 0] }],
+    ['Sixtyfour', 'Mono', 400, 400, null, { BLED: [0, 100, 0], SCAN: [-53, 100, 0] }],
+    ['Doto', 'Mono', 100, 900, null, { ROND: [0, 100, 0] }],
     // Script & hand
     ['Pacifico', 'Script', 400, 400],
     ['Permanent Marker', 'Script', 400, 400],
     ['Caveat', 'Script', 400, 700],
+    ['Shantell Sans', 'Script', 300, 800, null, { BNCE: [-100, 100, 0], INFM: [0, 100, 0], SPAC: [0, 100, 0] }],
   ];
 
   const FALLBACK = { Serif: 'serif', Mono: 'monospace', Script: 'cursive' };
@@ -93,8 +101,11 @@
   const OPSZ_OK = hasDOM && typeof FontFace !== 'undefined' && 'variationSettings' in FontFace.prototype;
   const FONTS = CATALOGUE.map(([family, cat, min, max, discrete, axes]) => {
     const ax = {};
-    if (axes && axes.wdth) ax.wdth = axes.wdth.slice();
-    if (axes && axes.opsz && OPSZ_OK) ax.opsz = axes.opsz.slice();
+    for (const [tag, range] of Object.entries(axes || {})) {
+      // wdth pins through the stretch descriptor everywhere; opsz and the rest need the
+      // FontFace variationSettings descriptor.
+      if (tag === 'wdth' || OPSZ_OK) ax[tag] = range.slice();
+    }
     return {
       family,
       cat,
@@ -102,7 +113,7 @@
       max,
       weights: discrete || null,
       variable: !discrete && max > min,
-      axes: ax.wdth || ax.opsz ? ax : null,
+      axes: Object.keys(ax).length ? ax : null,
       fallback: FALLBACK[cat] || 'sans-serif',
       custom: false,
     };
@@ -147,13 +158,12 @@
     f = f.base || f;
     const name = f.family.replace(/ /g, '+');
     if (f.weights) return `${name}:wght@${f.weights.join(';')}`;
-    // css2 wants axis tags in alphabetical order: opsz, wdth, wght.
-    const tags = [], ranges = [];
-    const add = (tag, lo, hi) => { tags.push(tag); ranges.push(lo + '..' + hi); };
-    if (f.axes && f.axes.opsz) add('opsz', f.axes.opsz[0], f.axes.opsz[1]);
-    if (f.axes && f.axes.wdth) add('wdth', f.axes.wdth[0], f.axes.wdth[1]);
-    if (f.max > f.min) add('wght', f.min, f.max);
-    return tags.length ? `${name}:${tags.join(',')}@${ranges.join(',')}` : name;
+    // css2 wants axis tags sorted alphabetically, registered (lowercase) before custom (uppercase).
+    const list = Object.entries(f.axes || {}).map(([tag, r]) => [tag, r[0], r[1]]);
+    if (f.max > f.min) list.push(['wght', f.min, f.max]);
+    const custom = (tag) => (tag === tag.toUpperCase() ? 1 : 0);
+    list.sort((a, b) => custom(a[0]) - custom(b[0]) || (a[0] < b[0] ? -1 : 1));
+    return list.length ? `${name}:${list.map((x) => x[0]).join(',')}@${list.map((x) => x[1] + '..' + x[2]).join(',')}` : name;
   }
 
   function injectStylesheet(families) {
@@ -215,16 +225,39 @@
    * at the scene's resolution: the family itself, or a variable-axis instance of it (created
    * and loaded on first use; it draws in the base family until then).
    */
+  /**
+   * Pinned values of a family's other axes (slnt, GRAD, XROT, YEAR, …): [[tag, value]] for the
+   * ones that differ from the axis default, sorted by tag. Values clamp to the family's range
+   * and snap to 1/200 of it, so a slider drag reuses a bounded set of instances.
+   */
+  function customFor(f, axes) {
+    const out = [];
+    if (!f || !f.axes) return out;
+    for (const tag of Object.keys(f.axes).sort()) {
+      if (tag === 'wdth' || tag === 'opsz') continue;
+      const [lo, hi, def] = f.axes[tag];
+      const want = axes && Number.isFinite(+axes[tag]) ? +axes[tag] : def;
+      const grid = (hi - lo) / 200;
+      const v = +(lo + Math.round((TM.math.clamp(want, lo, hi) - lo) / grid) * grid).toFixed(3);
+      if (Math.abs(v - def) > 1e-9) out.push([tag, v]);
+    }
+    return out;
+  }
+
   function resolve(font, designPx) {
     const f = font && byFamily.get(font.family);
     if (!f || f.custom || !f.axes) return font ? font.family : '';
     const wdth = widthFor(f, font.width);
     const opsz = opszFor(f, font.opsz, designPx);
-    const name = `${f.family} ~${wdth != null ? 'w' + wdth : ''}${opsz != null ? 'o' + opsz : ''}`;
+    const custom = customFor(f, font.axes);
+    // Nothing to pin (only custom axes, all at their defaults): the family itself draws the same.
+    if (wdth == null && opsz == null && !custom.length) return f.family;
+    const name = `${f.family} ~${wdth != null ? 'w' + wdth : ''}${opsz != null ? 'o' + opsz : ''}${custom.map(([t, v]) => '.' + t + v).join('')}`;
     const inst = instances.get(name);
     if (inst) inst.used = now();
     else {
-      instances.set(name, { ...f, family: name, base: f, instance: true, wdth, opsz, ready: null, faces: [], used: now() });
+      // `pins` (not `custom`, which marks uploaded fonts): the instance's pinned axis values.
+      instances.set(name, { ...f, family: name, base: f, instance: true, wdth, opsz, pins: custom, ready: null, faces: [], used: now() });
       ensure(name, font.weight);
     }
     // resolve() runs every frame, so it also does the (cheap, throttled) cleanup.
@@ -253,15 +286,16 @@
   // Families whose variable axes couldn't be applied (font CSS unreadable): exports report it.
   const axesFailed = new Set();
 
-  /** The values of `axis` a preset sweeping it should draw with (resolve() each with width: v). */
-  function ladder(family, axis = 'wdth') {
+  /**
+   * The values of `axis` a preset sweeping it should draw with: 49 evenly spaced stops across the
+   * family's range (resolve() each, as width: v, opsz: v or axes: { [axis]: v }).
+   */
+  function ladder(family, axis = 'wdth', steps = 48) {
     const f = get(family);
     const ax = f && f.axes && f.axes[axis];
     if (!ax) return [];
-    const step = Math.max(1, Math.round((ax[1] - ax[0]) / 48));
     const out = [];
-    for (let v = ax[0]; v < ax[1]; v += step) out.push(v);
-    out.push(ax[1]);
+    for (let i = 0; i <= steps; i++) out.push(+(ax[0] + ((ax[1] - ax[0]) * i) / steps).toFixed(3));
     return out;
   }
 
@@ -319,7 +353,8 @@
         if (b.unicodeRange) d.unicodeRange = b.unicodeRange;
         if (inst.wdth != null) d.stretch = inst.wdth + '%';
         else if (b.stretch) d.stretch = b.stretch;
-        if (inst.opsz != null) d.variationSettings = `"opsz" ${inst.opsz}`;
+        const vs = (inst.opsz != null ? [['opsz', inst.opsz]] : []).concat(inst.pins || []);
+        if (vs.length) d.variationSettings = vs.map(([t, v]) => `"${t}" ${v}`).join(', ');
         try {
           const face = new FontFace(inst.family, `url(${b.src}) format("woff2")`, d);
           if (!instances.has(inst.family)) return; // released while its CSS was loading
@@ -426,8 +461,14 @@
     /** The width / optical size a font draws at (null when the family has no such axis). */
     widthFor: (family, width) => widthFor(get(family), width),
     opszFor: (family, opsz, designPx) => opszFor(get(family), opsz, designPx),
-    /** Variable axes beyond weight, { wdth?: [min, max], opsz?: [min, max] }, or null. */
+    /** Variable axes beyond weight by tag ({ wdth?: [min, max], opsz?: [min, max], XROT?: [min, max, def], … }), or null. */
     axes: (family) => { const f = get(family); return f && f.axes ? f.axes : null; },
+    /** A family's axes beyond weight as [{ tag, min, max, def }] (wdth default 100, opsz 'auto'). */
+    axisList: (family) => {
+      const f = get(family);
+      if (!f || !f.axes) return [];
+      return Object.entries(f.axes).map(([tag, r]) => ({ tag, min: r[0], max: r[1], def: tag === 'wdth' ? 100 : tag === 'opsz' ? 'auto' : r[2] }));
+    },
     cssFamily,
     fontString,
     ensure,

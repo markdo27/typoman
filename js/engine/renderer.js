@@ -184,6 +184,8 @@
      *   ch        draw a different character in g's slot (scramble, slot machine)
      *   anchor    'center' (default) or 'baseline' (sit the baseline on (x, y), for paths)
      *   size      font size override in pixels
+     *   family    draw in another family / instance (e.g. TM.fonts.resolve() for an animated axis)
+     *   w         advance width to centre on (pass it with `family` when widths change)
      */
     drawGlyph(g, o = {}) {
       if (g.isSpace && o.ch == null) return;
@@ -202,10 +204,10 @@
       const a = cos * sx * scaleSize, b = sin * sx * scaleSize;
       const c = (cos * tk - sin) * sy * scaleSize, d = (sin * tk + cos) * sy * scaleSize;
       const ch = o.ch != null ? o.ch : g.ch;
-      const w = o.ch != null && o.ch !== g.ch ? this.renderer._advance(ch, this.layer, this.size) : g.w;
+      const w = o.w != null ? o.w : o.ch != null && o.ch !== g.ch ? this.renderer._advance(ch, this.layer, this.size) : g.w;
       const ox = -w / 2;
       const oy = o.anchor === 'baseline' ? 0 : this.layout.capH / 2;
-      this._setFont(o.weight != null ? this.font(o.weight) : this.layout.font);
+      this._setFont(o.family ? TM.fonts.fontString(o.family, o.weight != null ? o.weight : this.layer.font.weight, this.size) : o.weight != null ? this.font(o.weight) : this.layout.font);
       ctx.globalAlpha = alpha;
 
       const ex = this.extrude;
@@ -247,7 +249,7 @@
       const rot = o.rot || 0, lean = (o.skew || 0) + this.slant;
       const cos = Math.cos(rot), sin = Math.sin(rot), tk = -Math.tan(lean);
       const ctx = this.ctx;
-      this._setFont(o.weight != null ? this.font(o.weight) : this.layout.font);
+      this._setFont(o.family ? TM.fonts.fontString(o.family, o.weight != null ? o.weight : this.layer.font.weight, this.size) : o.weight != null ? this.font(o.weight) : this.layout.font);
       if ('letterSpacing' in ctx) ctx.letterSpacing = this.layout.tracking.toFixed(2) + 'px';
       ctx.globalAlpha = alpha;
       const ma = cos * sx, mb = sin * sx, mc = (cos * tk - sin) * sy, md = (sin * tk + cos) * sy;

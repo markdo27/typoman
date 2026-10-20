@@ -42,7 +42,8 @@ vendor/*          pinned third-party code (MIT), served locally
   bg:{ type:'solid'|'linear'|'radial'|'transparent', color, color2, angle },
   post:{ grain 0..1, vignette 0..1 },
   layers:[{ id, name, visible, text /*\n = new line*/, preset, params:{…per preset schema…},
-    font:{ family, weight, width /*wdth %, default 100*/, opsz /*'auto' | number*/ },
+    font:{ family, weight, width /*wdth %, default 100*/, opsz /*'auto' | number*/,
+           axes /*{ TAG: value } for any other axis the family has: slnt, XROT, YEAR, MORF…*/ },
     type:{ size /*× unit*/, tracking /*em*/, leading, align, case, slant /*deg*/ },
     fill:{ type:'solid'|'gradient'|'palette', color, color2, angle, palette:[hex…] },
     stroke:{ mode:'none'|'outline'|'both', width /*em*/, color },
@@ -59,7 +60,7 @@ vendor/*          pinned third-party code (MIT), served locally
 it** when the user edits the path, which marks it as custom so it survives preset and
 aspect switches.
 
-### Variable fonts: width and optical size
+### Variable fonts: width, optical size and any other axis
 
 Canvas text can only set weight, so `font.width` (the `wdth` axis) and `font.opsz` are
 drawn through **instances**. These are aliases such as `"Roboto Flex ~w75o144"` whose faces
@@ -82,6 +83,17 @@ user's intent.
   family until then. `TM.fonts.ladder(family, 'wdth')` gives up to 49 evenly spaced widths
   for presets that sweep the axis, and `TM.fonts.baseOf(instance)` the catalogue family
   behind an instance.
+- **Any axis.** Catalogue entries declare their axes by tag: `wdth: [min, max]`,
+  `opsz: [min, max]`, and every other registered or custom axis as `[min, max, default]`.
+  Examples are `slnt`, `GRAD`, Tilt Warp's `XROT`/`YROT`, Climate Crisis' `YEAR`, Kablammo's
+  `MORF`, Fraunces' `SOFT`/`WONK`, Shantell Sans' `BNCE` and Recursive's `CASL`/`MONO`.
+  `font.axes` pins them, and values snap to 1/200 of the range.
+  `TM.fonts.axisList(family)` describes them for UI. `TM.fonts.ladder(family, tag)` gives 49
+  evenly spaced stops for presets that sweep an axis. A family whose axes all sit at their
+  defaults resolves to itself, not an instance.
+- **Per-glyph instances.** `drawGlyph(g, { family, w })` draws one glyph in another family or
+  instance, centred on advance `w` (`TM.text.advance(ch, family, weight, size)`). Axis Wave
+  sweeps any axis this way, letter by letter.
 - **`preset.fonts(layer, scene)`** (optional) lists the extra instance families a preset
   draws with. `TM.prepare` loads them before frame 0, so exports never catch an instance
   mid-load. Stack returns its width ladder this way.
@@ -154,7 +166,7 @@ position. The base direction comes from the first strong character, as with `dir
 RTL lines are marked `line.rtl`. Presets animate them word by word.
 
 **Helpers.**
-- `f.drawGlyph(g, { x, y, rot, sx, sy, scale, skew, alpha, color, weight, ch, anchor:'center'|'baseline', size })`
+- `f.drawGlyph(g, { x, y, rot, sx, sy, scale, skew, alpha, color, weight, ch, anchor:'center'|'baseline', size, family, w })`
   centres the glyph on (x, y) by default.
 - `f.drawLine(line, opts)` draws a whole line as one shaped run.
 - `f.rank(g, order)` gives 0..1, `f.stagger(p, r, amount)` gives 0..1, and `f.seq(g)`

@@ -32,8 +32,9 @@
       text: 'TYPE IN\nMOTION',
       preset: 'path-flow',
       params: {},
-      // width: wdth % and opsz: 'auto' | number apply to families with those variable axes.
-      font: { family: 'Anton', weight: 400, width: 100, opsz: 'auto' },
+      // width: wdth % and opsz: 'auto' | number apply to families with those variable axes;
+      // axes: { TAG: value } pins any other axis (slnt, XROT, YEAR, MORF, …) a family has.
+      font: { family: 'Anton', weight: 400, width: 100, opsz: 'auto', axes: {} },
       type: { size: 0.16, tracking: 0, leading: 0.95, align: 'center', case: 'upper', slant: 0 },
       fill: { type: 'solid', color: '#ffffff', color2: '#00e5ff', angle: 90, palette: ['#ffffff', '#a3a2ff', '#00e5ff'] },
       stroke: { mode: 'none', width: 0.035, color: '#000000' },
@@ -85,6 +86,17 @@
     return Number.isFinite(n) ? clamp(n, lo, hi) : d;
   };
   const int = (v, d, lo, hi) => Math.round(num(v, d, lo, hi));
+  /** Pinned variable-axis values { TAG: number }: four-letter tags, at most 12 (families clamp). */
+  function cleanAxes(a) {
+    const out = {};
+    if (!isObj(a)) return out;
+    for (const k of Object.keys(a).slice(0, 32)) {
+      if (!/^[A-Za-z0-9]{4}$/.test(k) || k === 'wght' || k === 'wdth' || k === 'opsz' || UNSAFE_KEY.has(k)) continue;
+      const v = num(a[k], NaN, -1e5, 1e5);
+      if (Number.isFinite(v) && Object.keys(out).length < 12) out[k] = Math.round(v * 1000) / 1000;
+    }
+    return out;
+  }
   /** Optical size: a pinned number, or 'auto' (follow the text size) for anything else. */
   const opszOf = (v) => ((typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && /^\s*\d+(\.\d+)?\s*$/.test(v)) ? int(v, 14, 1, 1000) : 'auto');
   const bool = (v, d) => (typeof v === 'boolean' ? v : d);
@@ -200,6 +212,7 @@
         // each family clamps it to its own axis when drawing.
         width: Math.round(num(s.font && s.font.width, 100, 25, 200)),
         opsz: opszOf(s.font && s.font.opsz),
+        axes: cleanAxes(s.font && s.font.axes),
       },
       type: {
         size: num(ty.size, d.type.size, 0.01, 1.5),

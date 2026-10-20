@@ -10,11 +10,12 @@ No install, no account, no build step. It's static files on GitHub Pages.
 
 ## What you can do
 
-- **Animate type with 29 motion presets**, grouped as path, kinetic, reveal, glitch,
+- **Animate type with 30 motion presets**, grouped as path, kinetic, reveal, glitch,
   dimensional and generative: from Path Flow, Ribbon and Orbit to Split Flap, Focus Pull,
-  Kaleido and Melt. Every preset staggers by letter, word or line, with easing curves you
+  Kaleido, Melt and **Axis Wave**, which sweeps a font's own variable axes letter by letter
+  (Tilt Warp's 3D tilt, Climate Crisis melting through the years, Kablammo's morph). Every preset staggers by letter, word or line, with easing curves you
   can edit (signature curves, springs, or your own cubic-bézier).
-- **Start from a look.** 87 curated looks (colour, font, motion and timing, designed per
+- **Start from a look.** 95 curated looks (colour, font, motion and timing, designed per
   preset) are one click away in the **Inspiration** view. Applying a look never touches
   your text, and **Remix** mixes curated looks with fresh rolls.
 - **Shape the motion path.** Pick one of 22 shapes (wave, arc, circle, spiral, infinity,
@@ -24,9 +25,9 @@ No install, no account, no build step. It's static files on GitHub Pages.
   shapes, A → B → C → D → E, in a cycle or ping-pong, with an ease per step.
 - **Time each layer.** Up to six text layers, each with its own motion, on timeline lanes.
   Drag a lane to delay it, play it up to 8× per loop, or play it once and hold.
-- **Use real typography.** There are 54 curated Google Fonts, and you can upload your own.
-  Variable fonts animate their weight smoothly, and fonts with **width** and **optical
-  size** axes (Roboto Flex, Science Gothic, Fraunces, …) expose them as controls. Optical
+- **Use real typography.** There are 60 curated Google Fonts, and you can upload your own.
+  Variable fonts animate their weight smoothly, and fonts with **width**, **optical size**
+  or custom axes (Roboto Flex, Science Gothic, Fraunces, Tilt Warp, Recursive, …) expose them. Optical
   size follows the text's size in the scene, so previews and exports draw identical
   letterforms. **Stack** fills the frame through the width axis, condensing tall rows and
   expanding short ones instead of stretching letters. Kerning is preserved, emoji are

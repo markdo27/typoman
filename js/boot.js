@@ -27,6 +27,7 @@
     'js/presets/path-flow.js',
     'js/presets/rise.js',
     'js/presets/stack.js',
+    'js/presets/axis-wave.js',
   ];
 
   // ── Presets: path & loop family (owner: preset team A) ──
