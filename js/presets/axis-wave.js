@@ -129,8 +129,9 @@
       L.lines.forEach((line) => {
         const ids = line.glyphs;
         if (!ids.length) return;
+        // RTL lines are drawn in visual order without the logical-order kerns, so measure them so.
         let width = 0;
-        ids.forEach((gi, j) => { width += items[gi].w + (j ? L.tracking + C.kern[gi] : 0); });
+        ids.forEach((gi, j) => { width += items[gi].w + (j ? L.tracking + (line.rtl ? 0 : C.kern[gi]) : 0); });
         const align = f.layer.type.align;
         let x = f.cx + (align === 'left' ? -L.width / 2 : align === 'right' ? L.width / 2 - width : -width / 2);
         if (line.rtl) {

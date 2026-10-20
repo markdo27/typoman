@@ -44,7 +44,9 @@
 
     setup(f) {
       const ly = f.layer;
-      const phrases = String(ly.text || '').split('\n').map((t) => t.trim()).filter(Boolean);
+      let phrases = String(ly.text || '').split('\n').map((t) => t.trim()).filter(Boolean);
+      // One line of several words morphs word to word ("SUMMER SALE" → SUMMER → SALE).
+      if (phrases.length === 1 && /\s/.test(phrases[0])) phrases = phrases[0].split(/\s+/);
       if (!phrases.length) phrases.push(' ');
       const at = (t, sizePx) => TM.text.layout({
         text: t, family: ly.font.family, weight: ly.font.weight, sizePx, tracking: ly.type.tracking,
@@ -59,7 +61,7 @@
       const keyOf = (g) => (g.isSpace ? '' : f.params.caseless ? g.ch.toLowerCase() : g.ch);
       const seqs = lay.map((L) => L.glyphs.map((g) => ({ g, key: keyOf(g) })));
       const links = seqs.map((s, k) => match(s, seqs[(k + 1) % seqs.length]));
-      return { lay, seqs, links, capH: lay[0].capH };
+      return { lay, seqs, links, capH: lay[0].capH, size };
     },
 
     render(f) {
@@ -73,7 +75,7 @@
       const raw = clamp((local - P.hold) / Math.max(1e-4, 1 - P.hold));
       const ease = f.ease(P.ease);
       if (n === 1 || raw <= 0) {
-        A.forEach((it) => { if (!it.g.isSpace) f.drawGlyph(it.g, { x: f.cx + it.g.cx, y: f.cy + it.g.cy }); });
+        A.forEach((it) => { if (!it.g.isSpace) draw(f, it.g, { x: f.cx + it.g.cx, y: f.cy + it.g.cy }); });
         return;
       }
       const pairs = C.links[k];
@@ -96,7 +98,7 @@
         const x = f.cx + it.g.cx + (b.g.cx - it.g.cx) * u;
         const y = f.cy + it.g.cy + (b.g.cy - it.g.cy) * u - P.arc * capH * Math.sin(Math.PI * u);
         const g = u < 0.5 ? it.g : b.g;
-        f.drawGlyph(g, { x, y });
+        draw(f, g, { x, y });
       });
       B.forEach((it, j) => {
         if (it.g.isSpace || toB.has(j)) return;
@@ -112,16 +114,25 @@
     ],
   });
 
+  /**
+   * drawGlyph at the phrases' fitted size: the renderer lays the layer out at its own size, so
+   * glyphs from the smaller fitted layouts pass that size and their advance in its units.
+   */
+  function draw(f, g, o) {
+    const k = f.cache.size / f.size;
+    f.drawGlyph(g, Object.assign({ size: f.cache.size, w: g.w / k }, o));
+  }
+
   /** A letter leaving (u: 1 → 0) or arriving (u: 0 → 1) on its own. */
   function dissolve(f, g, x, y, u, P, capH, arriving) {
     if (u <= 0.001) return;
     const dir = arriving ? -1 : 1;
     switch (P.dissolve) {
       // Leaving letters fall away; arriving ones drop in from above.
-      case 'drop': f.drawGlyph(g, { x, y: y + (arriving ? -1 : 1) * (1 - u) * capH * 0.8, alpha: u, rot: (1 - u) * 0.3 * dir }); break;
-      case 'scale': f.drawGlyph(g, { x, y, scale: 0.2 + 0.8 * u, alpha: u }); break;
-      case 'blur': f.drawGlyph(g, { x, y, alpha: u * u, scale: 1 + (1 - u) * 0.25 }); break;
-      default: f.drawGlyph(g, { x, y, alpha: u });
+      case 'drop': draw(f, g, { x, y: y + (arriving ? -1 : 1) * (1 - u) * capH * 0.8, alpha: u, rot: (1 - u) * 0.3 * dir }); break;
+      case 'scale': draw(f, g, { x, y, scale: 0.2 + 0.8 * u, alpha: u }); break;
+      case 'blur': draw(f, g, { x, y, alpha: u * u, scale: 1 + (1 - u) * 0.25 }); break;
+      default: draw(f, g, { x, y, alpha: u });
     }
   }
 })(window.TM);
