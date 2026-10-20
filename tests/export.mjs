@@ -15,6 +15,7 @@
  *   npm run test:export
  *   PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node tests/export.mjs
  *   TYPOMAN_KEEP=1 keeps the exported files (path printed at the end)
+ *   TYPOMAN_EXPORT_DIR=dir writes them to dir and keeps them (CI uploads it when the job fails)
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -155,8 +156,10 @@ await run(async (cleanup) => {
     if (needFF) R.check('ffmpeg and ffprobe are on PATH (required in CI)', false, 'install ffmpeg');
     else R.warn('ffmpeg/ffprobe not on PATH', 'video decoding, frame-count and fidelity checks for WebM, MP4, GIF are skipped');
   }
-  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'typoman-export-'));
-  if (process.env.TYPOMAN_KEEP !== '1') cleanup(() => fs.rmSync(outDir, { recursive: true, force: true }));
+  const keep = process.env.TYPOMAN_KEEP === '1' || !!process.env.TYPOMAN_EXPORT_DIR;
+  const outDir = process.env.TYPOMAN_EXPORT_DIR ? path.resolve(process.env.TYPOMAN_EXPORT_DIR) : fs.mkdtempSync(path.join(os.tmpdir(), 'typoman-export-'));
+  fs.mkdirSync(outDir, { recursive: true });
+  if (!keep) cleanup(() => fs.rmSync(outDir, { recursive: true, force: true }));
 
   const server = await serve();
   cleanup(() => server.close());
@@ -213,7 +216,7 @@ await run(async (cleanup) => {
 
   const errs = log.since();
   R.check('no console errors during exports', errs.length === 0, errs.slice(0, 5).join(' | '));
-  if (process.env.TYPOMAN_KEEP === '1') R.info('exports kept in ' + outDir);
+  if (keep) R.info('exports kept in ' + outDir);
   R.finish();
 });
 

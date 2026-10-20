@@ -4,9 +4,18 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
+# One job per suite, run in parallel, so a red check names what broke:
+#   smoke   every preset: determinism, loop seam, edge cases, sanitiser, fonts
+#   export  the files users download (WebM, MP4, GIF, PNG, ZIP), checked with ffprobe/ffmpeg
+#   embed   iframe, <typoman-player> and standalone HTML on a foreign origin
+#   sweep   every curated look and every select/toggle option of every preset
 jobs:
   smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -14,4 +23,52 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
-      - run: npm test
+      - run: npm run test:smoke
+
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: Install ffmpeg (ffprobe frame counts, decoding for the fidelity checks)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: npm run test:export
+        env:
+          TYPOMAN_EXPORT_DIR: ${{ runner.temp }}/exports
+      - name: Upload the exported files when the job fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exports
+          path: ${{ runner.temp }}/exports
+          if-no-files-found: ignore
+          retention-days: 7
+
+  embed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:embed
+
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:sweep
