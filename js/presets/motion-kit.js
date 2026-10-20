@@ -309,8 +309,9 @@
   /**
    * What the renderer hands render(f), rebuilt for code that runs outside a frame (a preset's
    * flashes(layer, scene)): the layer as drawn (font instance), its layout (fitted as the
-   * renderer fits it), frame size, seed, seeded randoms, and how long one pass lasts in real
-   * seconds (the loop over the layer's cycles).
+   * renderer fits it), frame size, seed, and how long one pass lasts in real seconds (the loop
+   * over the layer's cycles). It inherits TM.Frame, so f.rand, f.srand, f.rank, f.stagger and
+   * f.seq(g, p) behave exactly as in render; nothing that draws is set up.
    */
   function frameOf(layer, scene, preset) {
     const W = scene.size.w, H = scene.size.h, unit = Math.min(W, H);
@@ -325,11 +326,12 @@
     if (index < 0) index = Math.max(0, scene.layers.findIndex((l) => l.id === layer.id));
     const seed = (scene.seed + index * 1013) | 0;
     const cycles = layer.time && layer.time.cycles > 0 ? layer.time.cycles : 1;
-    return {
-      layer: lay, params: layer.params, layout: L, W, H, unit, seed, dur: scene.duration, bg: scene.bg,
+    const fr = Object.create(TM.Frame.prototype);
+    return Object.assign(fr, {
+      layer: lay, params: layer.params, layout: L, glyphs: L.glyphs, lines: L.lines, size: L.sizePx,
+      W, H, unit, seed, dur: scene.duration, bg: scene.bg, p: 0, t: 0, alpha: 1, echo: 0,
       cx: layer.anchor.x * W, cy: layer.anchor.y * H, pass: scene.duration / cycles,
-      rand: (a, b) => TM.rand(seed, a, b), srand: (a, b) => TM.srand(seed, a, b),
-    };
+    });
   }
 
   /** The real length of one pass of the layer being rendered (the loop over its cycles), from a frame. */

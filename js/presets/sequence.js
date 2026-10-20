@@ -43,12 +43,12 @@
       TM.P.range('fill', 'Fill the frame', 0, 1, 0.01, 0.75, { group: 'Framing' }),
       TM.P.range('drift', 'Camera drift', 0, 1, 0.01, 0.5, { group: 'Framing' }),
       TM.P.toggle('blur', 'Whip blur', true, { group: 'Framing' }),
+      TM.P.toggle('fastFlash', 'Allow fast flashing', false, { group: 'Safety', hint: 'A zoom-through sweeps big strokes across the frame. Off keeps it to 3 flashes per second or fewer (WCAG 2.3.1): zooms that come too fast become pushes' }),
     ],
 
     setup(f) {
       const L = f.layout, P = f.params;
-      const by = P.split === 'auto' ? (L.lines.filter((l) => l.glyphs.length).length > 1 ? 'lines' : 'words') : P.split;
-      const shots = K.units(L, by).map((u) => {
+      const shots = K.units(L, splitOf(P, L)).map((u) => {
         // Framing: grow each shot toward filling the frame (capped so one-letter shots stay sane).
         const fit = Math.min((f.W * 0.84) / Math.max(1, u.w), (f.H * 0.58) / Math.max(1, L.capH), 4.5);
         const scale = Math.max(1, 1 + (fit - 1) * P.fill);
@@ -61,7 +61,7 @@
         const ranks = u.glyphs.map((gi, j) => K.rankOf(f, j, n, P.order));
         return Object.assign(u, { scale, portal, ratio: clamp(need * 1.4, 8, 240), ranks });
       });
-      return { shots };
+      return { shots, plans: new Map() };
     },
 
     render(f) {
@@ -72,7 +72,8 @@
       const ease = TM.ease(P.ease, 'snap');
       const st = P.stagger;
       const cx = f.cx, cy = f.cy;
-      const moveAt = (b) => (P.move === 'mix' ? MOVES[((b % N) + N) % N % MOVES.length] : P.move);
+      const moves = planFor(C, f); // moves[k]: the move into shot k
+      const moveAt = (b) => moves[((b % N) + N) % N];
       // The build-in: letter windows of length w, spread so the last one ends with the move.
       const w = Math.max(0.12, (1 - st) * 0.5), spread = st > 0 ? Math.min(st, 1 - w) : 0;
 
@@ -130,7 +131,50 @@
         }
       }
     },
+
+    /** Large-area luminance flashes per second this layer makes (0 when it cannot flash). */
+    flashes(layer, scene) {
+      const fr = K.frameOf(layer, scene, TM.getPreset('sequence'));
+      const N = K.units(fr.layout, splitOf(layer.params, fr.layout)).length;
+      return N ? movesPlan(layer.params, N, fr.pass, flashy(layer, scene.bg)).rate : 0;
+    },
   });
+
+  function splitOf(P, L) {
+    return P.split === 'auto' ? (L.lines.filter((l) => l.glyphs.length).length > 1 ? 'lines' : 'words') : P.split;
+  }
+
+  // ── photosensitivity ──
+  // A zoom-through sweeps the portal letter's strokes across the frame: measured, up to two or
+  // three large luminance transitions in the middle of the move (see MotionKit.FLASH), so it is
+  // modelled as three. Push, roll and whip measure none. Low-contrast type cannot flash.
+  const flashy = (layer, bg) => K.swing(0.5, K.inkColors(layer), K.backdrops(bg));
+  /** The move into each shot; with fast flashing off, a zoom that would break three flashes a second becomes a push. */
+  function movesPlan(P, N, pass, canFlash) {
+    const slot = 1 / N, T = P.trans * slot;
+    const moves = [];
+    for (let k = 0; k < N; k++) moves.push(P.move === 'mix' ? MOVES[k % MOVES.length] : P.move);
+    let times = [];
+    if (canFlash) {
+      for (let k = 0; k < N; k++) {
+        if (moves[k] !== 'zoom') continue;
+        const dive = [0.4, 0.6, 0.8].map((u) => ((k - 0.5) * slot - T / 2 + u * T) * pass);
+        if (!P.fastFlash && K.flashRate(times.concat(dive), pass) > K.FLASH.perSec) { moves[k] = 'push'; continue; }
+        times = times.concat(dive);
+      }
+    }
+    return { moves, rate: K.flashRate(times, pass) };
+  }
+  function planFor(C, f) {
+    const key = JSON.stringify([f.layer.fill, f.bg, f.layer.time, f.dur]);
+    let moves = C.plans.get(key);
+    if (!moves) {
+      moves = movesPlan(f.params, C.shots.length, K.passOf(f), flashy(f.layer, f.bg)).moves;
+      if (C.plans.size > 12) C.plans.clear();
+      C.plans.set(key, moves);
+    }
+    return moves;
+  }
 
   /**
    * Camera move for one shot: role 'in' (e 0 → 1 arriving), 'out' (e 0 → 1 leaving) or 'hold'.

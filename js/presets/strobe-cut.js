@@ -112,7 +112,8 @@
   /** Everything the plan reads, from a frame or from frameOf(layer, scene). */
   function envOf(fr, layer, bg) {
     return {
-      L: fr.layout, W: fr.W, H: fr.H, unit: fr.unit, cx: fr.cx, cy: fr.cy, rand: fr.rand, srand: fr.srand,
+      L: fr.layout, W: fr.W, H: fr.H, unit: fr.unit, cx: fr.cx, cy: fr.cy,
+      rand: (a, b) => fr.rand(a, b), srand: (a, b) => fr.srand(a, b),
       pass: fr.pass, dur: fr.dur, inks: K.inkColors(layer), backs: K.backdrops(bg), echo: layer.fx.echo,
       pal: layer.fill.palette, fam: fr.layer.font.family, wt: fr.layer.font.weight, spread: K.inkSpread(layer),
     };

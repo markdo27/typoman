@@ -35,27 +35,17 @@
       TM.P.range('twist', 'Twist', -1, 1, 0.01, 0.25, { group: 'Flight' }),
       TM.P.toggle('counters', 'Aim for counters', true, { group: 'Flight', hint: 'Dive through the hole of an O, D, A… when the word has one' }),
       TM.P.range('fill', 'Fill the frame', 0, 1, 0.01, 0.55, { group: 'Framing' }),
+      TM.P.toggle('fastFlash', 'Allow fast flashing', false, { group: 'Safety', hint: 'Each dive sweeps big strokes across the frame. Off keeps it to 3 flashes per second or fewer (WCAG 2.3.1) by merging words into fewer stops when they come fast' }),
     ],
 
     setup(f) {
-      const L = f.layout, P = f.params;
-      const by = P.split === 'auto' ? (L.lines.filter((l) => l.glyphs.length).length > 1 ? 'lines' : 'words') : P.split;
-      const units = K.units(L, by).map((u) => {
-        const fit = Math.min((f.W * 0.8) / Math.max(1, u.w), (f.H * 0.5) / Math.max(1, L.capH), 4);
-        // Portal: the biggest counter near the middle, else a gap between letters.
-        const portal = K.portal(f, L, u, P.counters);
-        const scale = 1 + (fit - 1) * P.fill;
-        // Zoom for the dive: just enough for the hole (an ellipse) to contain the whole frame.
-        const need = Math.hypot(f.W / (portal.cw * scale), portal.ch === Infinity ? 0 : f.H / (portal.ch * scale));
-        return Object.assign(u, { scale, portal, ratio: clamp(need * 1.4 * P.dive, 6, 200) }); // counters aren't ellipses: margin
-      });
-      return { units };
+      return { base: K.units(f.layout, splitOf(f.params, f.layout)), plans: new Map() };
     },
 
     render(f) {
       const P = f.params, L = f.layout, C = f.cache;
-      if (!C || !C.units.length) return;
-      const units = C.units, N = units.length;
+      if (!C || !C.base.length) return;
+      const units = planFor(C, f), N = units.length;
       const at = (m) => units[((m % N) + N) % N];
       // Camera position in "words": a reading pause, then an eased dive to the next word.
       const x = f.p * N, k = Math.floor(x), u = fract(x);
@@ -100,5 +90,73 @@
         }
       }
     },
+
+    /** Large-area luminance flashes per second this layer makes (0 when it cannot flash). */
+    flashes(layer, scene) {
+      const fr = K.frameOf(layer, scene, TM.getPreset('zoom-through'));
+      const N = K.units(fr.layout, splitOf(layer.params, fr.layout)).length;
+      return N ? stops(layer.params, N, fr.pass, flashy(layer, scene.bg)).rate : 0;
+    },
   });
+
+  function splitOf(P, L) {
+    return P.split === 'auto' ? (L.lines.filter((l) => l.glyphs.length).length > 1 ? 'lines' : 'words') : P.split;
+  }
+
+  // ── photosensitivity ──
+  // A dive sweeps the portal letter's strokes across the frame: measured, up to two or three
+  // large luminance transitions in its bright phase (see MotionKit.FLASH), so a dive is modelled
+  // as three. Low-contrast type cannot flash.
+  const flashy = (layer, bg) => K.swing(0.5, K.inkColors(layer), K.backdrops(bg));
+  function diveTimes(M, P, pass) {
+    const out = [];
+    for (let m = 0; m < M; m++) for (const q of [0.4, 0.6, 0.8]) out.push(((m + P.hold + (1 - P.hold) * q) / M) * pass);
+    return out;
+  }
+  /** How many stops the camera makes: one per unit or, with fast flashing off, as many as keep the dives under three flashes a second. */
+  function stops(P, N, pass, canFlash) {
+    if (!canFlash) return { M: N, rate: 0 };
+    let M = N;
+    if (!P.fastFlash) while (M > 1 && K.flashRate(diveTimes(M, P, pass), pass) > K.FLASH.perSec) M--;
+    return { M, rate: K.flashRate(diveTimes(M, P, pass), pass) };
+  }
+
+  /** The units the camera stops at, for this frame's colours, background and timing (none of them re-run setup), framed for the dive. */
+  function planFor(C, f) {
+    const key = JSON.stringify([f.layer.fill, f.bg, f.layer.time, f.dur]);
+    let units = C.plans.get(key);
+    if (!units) {
+      const P = f.params, L = f.layout;
+      const { M } = stops(P, C.base.length, K.passOf(f), flashy(f.layer, f.bg));
+      units = group(L, C.base, M).map((u) => {
+        const h = u.h || L.capH;
+        const fit = Math.min((f.W * 0.8) / Math.max(1, u.w), (f.H * 0.5) / Math.max(1, h), 4);
+        // Portal: the biggest counter near the middle, else a gap between letters.
+        const portal = K.portal(f, L, u, P.counters);
+        const scale = 1 + (fit - 1) * P.fill;
+        // Zoom for the dive: just enough for the hole (an ellipse) to contain the whole frame.
+        const need = Math.hypot(f.W / (portal.cw * scale), portal.ch === Infinity ? 0 : f.H / (portal.ch * scale));
+        return Object.assign(u, { scale, portal, ratio: clamp(need * 1.4 * P.dive, 6, 200) }); // counters aren't ellipses: margin
+      });
+      if (C.plans.size > 12) C.plans.clear();
+      C.plans.set(key, units);
+    }
+    return units;
+  }
+
+  /** M stops from the units, merging neighbours as evenly as possible (M ≥ count: the units as they are). */
+  function group(L, base, M) {
+    const N = base.length;
+    if (M >= N) return base;
+    const out = [];
+    for (let g = 0; g < M; g++) {
+      const parts = base.slice(Math.floor((g * N) / M), Math.floor(((g + 1) * N) / M));
+      const glyphs = [].concat(...parts.map((u) => u.glyphs));
+      const x0 = Math.min(...parts.map((u) => u.x0)), x1 = Math.max(...parts.map((u) => u.x1));
+      const ys = glyphs.map((gi) => L.glyphs[gi].y);
+      const cy = glyphs.reduce((s, gi) => s + L.glyphs[gi].cy, 0) / glyphs.length;
+      out.push({ glyphs, x0, x1, cx: (x0 + x1) / 2, cy, w: x1 - x0, line: parts[0].line, h: L.capH + Math.max(...ys) - Math.min(...ys) });
+    }
+    return out;
+  }
 })(window.TM);

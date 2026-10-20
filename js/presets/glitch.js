@@ -13,6 +13,7 @@
  */
 (function (TM) {
   'use strict';
+  const K = TM.MotionKit;
   const { smoothstep, fract } = TM.math;
   const NOISE = '#%&@$¥§01/\\|=+<>?!';
 
@@ -66,6 +67,7 @@
       TM.P.toggle('slices', 'Slice shift', true, { group: 'Layers' }),
       TM.P.toggle('swap', 'Glyph swap', true, { group: 'Layers' }),
       TM.P.toggle('blocks', 'Block dropouts', true, { group: 'Layers' }),
+      TM.P.toggle('fastFlash', 'Allow fast flashing', false, { group: 'Safety', hint: 'Big type flickering on and off is a flash. Off keeps it to 3 flashes per second or fewer (WCAG 2.3.1) by slowing the flicker, never the glitch' }),
     ],
 
     setup(f) {
@@ -79,14 +81,15 @@
         const near = set.filter((c) => c.w > g.w * 0.6 && c.w < g.w * 1.45);
         return near.length >= 3 ? near : set;
       });
-      return { pools, buf: null };
+      return { pools, buf: null, clocks: new Map() };
     },
 
     render(f) {
       const P = f.params, L = f.layout, C = f.cache;
       if (!C || !L.count) return;
       const em = L.sizePx;
-      const steps = Math.max(1, Math.round(P.rate * f.dur));
+      // Glitch frames per second: the param, or slower for type big enough to flash.
+      const steps = Math.max(1, Math.round(clockFor(C, f) * f.dur));
       const step = Math.floor(f.p * steps);
       const rnd = (salt) => f.rand(salt, step);
       const srnd = (salt) => f.srand(salt, step);
@@ -249,5 +252,62 @@
         main.globalAlpha = f.alpha;
       }
     },
+
+    /** Large-area luminance flashes per second this layer makes (0 when it cannot flash). */
+    flashes(layer, scene) {
+      return clock(K.frameOf(layer, scene, TM.getPreset('glitch')), layer, scene.bg).rate;
+    },
   });
+
+  // ── photosensitivity ──
+  // Every glitch frame redraws the damage (flicker, slices, smear, split, block dropouts), all
+  // sized by the type. When half the text's ink is a large area (MotionKit.FLASH), any glitch
+  // frame inside a burst or a flicker window can be a large luminance transition, so with fast
+  // flashing off the glitch clock slows until no second holds more than three flashes.
+  // Normal-sized type keeps its rate: one glitch frame changes too little of the frame.
+  function clockFor(C, f) {
+    const key = JSON.stringify([f.layer.fill, f.bg, f.layer.time, f.dur]);
+    let hz = C.clocks.get(key);
+    if (hz === undefined) {
+      const fr = { params: f.params, layout: f.layout, layer: f.layer, W: f.W, H: f.H, dur: f.dur, pass: K.passOf(f), rand: (a, b) => f.rand(a, b), srand: (a, b) => f.srand(a, b) };
+      hz = clock(fr, f.layer, f.bg).hz;
+      if (C.clocks.size > 12) C.clocks.clear();
+      C.clocks.set(key, hz);
+    }
+    return hz;
+  }
+
+  /** { hz: glitch frames per second to run at, rate: flashes per second } for a frame-like fr. */
+  function clock(fr, layer, bg) {
+    const P = fr.params, L = fr.layout;
+    const inks = K.inkColors(layer), backs = K.backdrops(bg);
+    let ink = 0;
+    for (const g of L.glyphs) if (!g.isSpace) ink += K.inkOf(fr.layer.font.family, fr.layer.font.weight, g.ch, L.sizePx);
+    ink *= K.inkSpread(layer) / (fr.W * fr.H);
+    if (!K.swing(ink * 0.5, inks, backs)) return { hz: P.rate, rate: 0 }; // too little ink to flash
+    // Where the glitch runs: the bursts (timed as render times them) and the flicker windows.
+    const { inDur, outDur } = K.windows(P);
+    const flickers = P.timing !== 'loop';
+    const bursts = [];
+    for (let b = 0; b < P.bursts; b++) {
+      const centre = fract(0.42 + b / P.bursts + (b ? fr.srand(b, 902) * 0.3 / P.bursts : 0));
+      const len = (P.burstLen * (b ? 0.7 + 0.6 * fr.rand(b, 903) : 1)) / fr.dur;
+      bursts.push({ start: centre - len * 0.3, len });
+    }
+    const active = (p) => P.mode === 'constant' || (flickers && (p < inDur * 1.05 || p > 1 - outDur * 1.05)) ||
+      bursts.some((b) => fract(p - b.start) / b.len < 1);
+    const rateAt = (hz) => {
+      const steps = Math.max(1, Math.round(hz * fr.dur)), times = [];
+      let was = active((steps - 0.5) / steps);
+      for (let s = 0; s < steps; s++) {
+        const now = active((s + 0.5) / steps);
+        if (now || was) times.push((s / steps) * fr.pass); // a glitch frame starts or ends here
+        was = now;
+      }
+      return K.flashRate(times, fr.pass);
+    };
+    let hz = P.rate, rate = rateAt(hz);
+    if (!P.fastFlash) while (rate > K.FLASH.perSec && hz > 1) { hz = Math.max(1, Math.floor(hz * 0.8)); rate = rateAt(hz); }
+    return { hz, rate };
+  }
 })(window.TM);
