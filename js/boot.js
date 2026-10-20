@@ -48,6 +48,7 @@
     'js/presets/kaleido.js',
     'js/presets/kinetic-grid.js',
     'js/presets/melt.js',
+    'js/presets/gravity.js',
   ];
 
   // ── Presets: reveal, glitch & dimensional family (owner: preset team B) ──
