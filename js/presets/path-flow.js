@@ -161,7 +161,8 @@
     const amp = P.wave > 0 ? P.wave * size * 0.5 : 0;
     const lift = P.align === 'baseline' ? -L.capH / 2 : 0;
     const win = rotWin(P.cornerSmooth) * size; // atSmooth window used when drawing
-    const key = [n, L.lineGap, L.capH, size, lift, amp, P.cornerSmooth, P.bendSpacing, P.rotate, P.waveLength, lines.map((m) => m.top + ',' + m.bottom + ',' + m.wMin).join(';')].join('|');
+    const wl = Math.max(1, P.waveLength * size);
+    const key = [n, L.lineGap, L.capH, size, lift, amp, wl, P.cornerSmooth, P.bendSpacing, P.rotate, lines.map((m) => [m.top, m.bottom, m.wMin, m.wMax].join(',')).join(';')].join('|');
     const hit = built.get(base);
     if (hit && hit.key === key) return hit;
 
@@ -171,7 +172,7 @@
     // by however much more that relative bounce, 2·amp·sin(k·w/2), needs than it has.
     let gap = L.lineGap;
     if (amp > 0 && n > 1) {
-      const wl = Math.max(1, P.waveLength * size), wMax = Math.max(...lines.map((m) => m.wMax));
+      const wMax = Math.max(...lines.map((m) => m.wMax));
       const bounce = 2 * amp * Math.sin(Math.min(Math.PI / 2, (Math.PI * wMax) / wl));
       let clear = Infinity;
       for (let j = 0; j + 1 < n; j++) clear = Math.min(clear, L.lineGap - lines[j].bottom - lines[j + 1].top);
@@ -200,7 +201,6 @@
     });
     // The wave rides the carrier, so every lane shares its phase and the block moves as one.
     // On a closed path it fits a whole number of waves round the loop.
-    const wl = Math.max(1, P.waveLength * size);
     const waveLen = carrier.closed ? carrier.length / Math.max(1, Math.round(carrier.length / wl)) : wl;
     const G = { key, carrier, lanes, waveLen };
     built.set(base, G);
