@@ -291,7 +291,9 @@ window.__send = (id, msg) => document.getElementById(id).contentWindow.postMessa
     // autoplay without loop: plays once, fires "ended", holds the last frame.
     await page.waitForFunction(() => window.__qaEvents.some((e) => e.id === 'once' && e.type === 'ended'), null, { timeout: WAIT }).catch(() => {});
     const once = await playerState(page, 'once');
-    R.check('autoplay without loop: "ended" fires, then paused with a play button', once.events.includes('ended') && once.paused && once.playButton, once.events.join(','));
+    // A play-once hero holds its last frame cleanly: no overlay (Round 2 studio decision); with
+    // controls the corner button turns into Replay.
+    R.check('autoplay without loop: "ended" fires, then holds paused with no play overlay', once.events.includes('ended') && once.paused && !once.playButton, once.events.join(','));
     R.check('autoplay without loop: stops at the duration', Math.abs(once.time - SCENE.duration) < 1e-9, `${once.time}`);
     await matches('ended (holds the last frame)', page, 'once', SCENE.duration - 1 / SCENE.fps);
 

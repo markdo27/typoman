@@ -58,8 +58,13 @@
     const lengthMode = opts.lengthMode === 'seconds' ? 'seconds' : 'loops';
     const loops = clamp(Math.round(+opts.loops || 1), 1, 100);
     const seconds = clamp(Number.isFinite(+opts.seconds) && +opts.seconds > 0 ? +opts.seconds : scene.duration, 1 / fps, 600);
-    let frames = f.still ? 1 : Math.max(1, Math.round((lengthMode === 'loops' ? loops * scene.duration : seconds) * fps));
-    frames = Math.min(frames, X.MAX_FRAMES);
+    const want = f.still ? 1 : Math.max(1, Math.round((lengthMode === 'loops' ? loops * scene.duration : seconds) * fps));
+    const frames = Math.min(want, X.MAX_FRAMES);
+    // Scene time the frames cover. A loop export spans exactly loops × duration even when that
+    // isn't a whole number of frames at this rate (2.7 s at 24 fps): its frames are spaced
+    // span / frames apart, so the file loops without a hitch and plays within half a frame of
+    // the scene's speed (0.3% at worst). Other lengths keep the scene's own timing.
+    const span = f.still ? 0 : lengthMode === 'loops' && frames === want ? loops * scene.duration : frames / fps;
     const quality = X.QUALITIES.some((q) => q[0] === opts.quality) ? opts.quality : 'high';
     const time = Number.isFinite(+opts.time) ? Math.max(0, +opts.time) : 0;
     return {
@@ -74,6 +79,7 @@
       loops,
       seconds,
       duration: f.still ? 0 : frames / fps,
+      span,
       start: f.still ? time : 0,
       quality,
       transparent: !!(f.alpha && opts.transparent),
