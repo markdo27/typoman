@@ -21,12 +21,14 @@
   }
 
   let mctx = null;
+  /** Run metrics at the reference size: advance width and ink ascent / descent. */
   function measure(family, weight, text) {
     if (!mctx) mctx = (typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(8, 8) : document.createElement('canvas')).getContext('2d');
     mctx.font = TM.fonts.fontString(family, weight, REF);
     if ('fontKerning' in mctx) mctx.fontKerning = 'normal';
     if ('letterSpacing' in mctx) mctx.letterSpacing = '0px';
-    return mctx.measureText(text).width;
+    const m = mctx.measureText(text);
+    return { width: m.width, asc: m.actualBoundingBoxAscent || 0, desc: m.actualBoundingBoxDescent || 0 };
   }
 
   TM.registerPreset({
@@ -74,8 +76,12 @@
       const rows = L.lines.filter((l) => l.width > 0).map((line) => {
         const gaps = Math.max(0, line.glyphs.length - 1);
         // Natural run width of this row at each width instance, including the user's tracking.
-        const widths = fams.map((x) => measure(x.family, weight, line.text) + gaps * L.tracking);
-        return { text: line.text, gaps, widths, min: Math.min.apply(null, widths), max: Math.max.apply(null, widths) };
+        const widths = fams.map((x) => measure(x.family, weight, line.text).width + gaps * L.tracking);
+        // Rows fill their bands by ink, not by the Latin cap height, so descenders ("big") and
+        // Arabic forms never reach into the next row. Uppercase rows come out as before.
+        const ink = measure(mid.family, weight, line.text);
+        const asc = Math.max(ink.asc, L.capH * 0.5), desc = Math.max(0, ink.desc);
+        return { text: line.text, gaps, widths, min: Math.min.apply(null, widths), max: Math.max.apply(null, widths), inkH: asc + desc, oy: (asc - desc) / 2 };
       });
       return { L, rows, fams };
     },
@@ -89,61 +95,87 @@
       const gap = P.gap * f.unit;
 
       // Row weights → heights. Integer cycles keep the loop seamless.
+      const vs = [];
       const w = rows.map((_, i) => {
         const ph = f.p * P.cycles;
         let v;
         switch (P.motion) {
           case 'cascade': {
-            // A bulge travels down the stack.
-            const pos = (ph % 1) * (n + 1) - 0.5;
-            v = Math.exp(-Math.pow((i - pos) / 0.7, 2)) * 2 - 0.4;
+            // A bulge travels down the stack on a circle of n + 1 rows, so it leaves the bottom
+            // while it re-enters the top: periodic, hence seamless at the loop.
+            const C = n + 1;
+            const dd = (((i - (ph % 1) * C) % C) + C) % C;
+            const d = Math.min(dd, C - dd);
+            v = Math.exp(-Math.pow(d / 0.7, 2)) * 2 - 0.4;
             break;
           }
           case 'pulse': v = Math.sin(TAU * ph) * (i % 2 ? -1 : 1); break;
           case 'noise': v = f.loopNoise(i * 3.1, P.cycles) * 1.6; break;
           default: v = Math.sin(TAU * (ph + i / n));
         }
+        vs.push(v);
         return Math.max(0.08, 1 + v * P.intensity * 0.85);
       });
+      const maxT = P.maxTrack * REF;
       const sum = w.reduce((a, b) => a + b, 0);
       const usable = availH - gap * (n - 1);
-      const desired = w.map((x) => (usable * x) / sum);
+      // One row can't trade height with its neighbours, so the motion sweeps it through the
+      // heights at which it still fills the width: tall on its narrowest instance, short on
+      // its widest (plus half the tracking allowance). The width axis breathes with it.
+      let desired;
+      if (n === 1) {
+        const r0 = rows[0];
+        const hMax = Math.min(usable, (availW * r0.inkH) / r0.min);
+        const hMin = Math.min(hMax, (availW * r0.inkH) / (r0.max + r0.gaps * maxT * 0.5));
+        const u = Math.max(-1, Math.min(1, (vs[0] || 0) * P.intensity * 1.3));
+        desired = [(hMin + hMax) / 2 + ((hMax - hMin) / 2) * u];
+      } else {
+        desired = w.map((x) => (usable * x) / sum);
+      }
+      const total = desired.reduce((a, b) => a + b, 0) + gap * (n - 1);
+      let y = m + (availH - total) / 2;
 
       if (P.fill === 'stretch') {
         // The poster look: scale each run unevenly to its band.
-        let y = m;
         rows.forEach((row, i) => {
           const h = desired[i];
-          drawRow(f, fams[0].family, row, f.W / 2, y + h / 2, availW / row.widths[0], h / L.capH, skewOf(P, w, i), i, L.tracking, row.widths[0], L.capH);
+          drawRow(f, fams[0].family, row, f.W / 2, y + h / 2, availW / row.widths[0], h / row.inkH, skewOf(P, w, i), i, L.tracking, row.widths[0]);
           y += h + gap;
         });
         return;
       }
 
-      // Even scale from the band height (the motion always drives it), then the widest instance
-      // that still fits the frame width, then tracking up to the limit. A row that still can't
-      // reach both edges sits ragged, aligned like the layer's text; one that is too wide even
-      // at its narrowest shrinks evenly. Letterforms are never distorted.
-      const maxT = P.maxTrack * REF;
+      // Even scale from the band height (the motion always drives it). Between the narrowest and
+      // widest instance the row takes the nearest one and a sub-step horizontal scale (at most
+      // half a ladder step, ~±1.5 %, below perception), so glyph positions move continuously as
+      // instances change instead of jumping. Past the widest instance tracking opens up to the
+      // limit; a row that still can't reach both edges sits ragged, aligned like the layer's
+      // text, and one too wide even at its narrowest shrinks evenly.
       const align = f.layer.type.align;
-      let y = m;
       rows.forEach((row, i) => {
         const h = desired[i];
-        const s = h / L.capH;
+        const s = h / row.inkH;
         const target = availW / s;
-        let k = -1;
-        row.widths.forEach((wk, j) => { if (wk <= target * 1.0001 && (k < 0 || wk > row.widths[k])) k = j; });
-        let scale = s, extra = 0;
-        if (k < 0) {
+        let k, sx = s, sy = s, extra = 0;
+        if (target <= row.min) {
           k = row.widths.indexOf(row.min);
-          scale = availW / row.min;
-        } else if (row.gaps > 0) {
-          extra = Math.min(maxT, (target - row.widths[k]) / row.gaps);
+          sx = sy = availW / row.min;
+        } else if (target >= row.max) {
+          k = row.widths.indexOf(row.max);
+          // Soft cap: the hand-off from filling to ragged eases in, so edge letters don't
+          // change direction in a single frame.
+          if (row.gaps > 0) extra = softCap((target - row.max) / row.gaps, maxT, maxT * 0.3);
+        } else {
+          k = 0;
+          for (let j = 1; j < row.widths.length; j++) {
+            if (Math.abs(Math.log(row.widths[j] / target)) < Math.abs(Math.log(row.widths[k] / target))) k = j;
+          }
+          sx = s * (target / row.widths[k]);
         }
         const runW = row.widths[k] + extra * row.gaps;
-        const half = (runW * scale) / 2;
+        const half = (runW * sx) / 2;
         const x = align === 'left' ? m + half : align === 'right' ? f.W - m - half : f.W / 2;
-        drawRow(f, fams[k].family, row, x, y + h / 2, scale, scale, skewOf(P, w, i), i, L.tracking + extra, runW, L.capH);
+        drawRow(f, fams[k].family, row, x, y + h / 2, sx, sy, skewOf(P, w, i), i, L.tracking + extra, runW);
         y += h + gap;
       });
     },
@@ -156,13 +188,21 @@
     ],
   });
 
+  /** min(x, cap) with a C1 blend of half-width w around the cap (no kink when it starts to bite). */
+  function softCap(x, cap, w) {
+    if (!(w > 0) || x <= cap - w) return Math.min(x, cap);
+    if (x >= cap + w) return cap;
+    const d = x - (cap - w);
+    return x - (d * d) / (4 * w);
+  }
+
   /** Alternate rows lean opposite ways, more as they grow. */
   function skewOf(P, w, i) {
     return P.alternate ? (i % 2 ? 1 : -1) * (w[i] - 1) * 0.25 : 0;
   }
 
   // Draw a row as one run (native kerning) in its own family; letterSpacing carries the tracking.
-  function drawRow(f, family, row, x, y, sx, sy, skew, i, spacing, runW, capH) {
+  function drawRow(f, family, row, x, y, sx, sy, skew, i, spacing, runW) {
     const ctx = f.ctx;
     ctx.font = TM.fonts.fontString(family, f.layer.font.weight, REF);
     if ('fontKerning' in ctx) ctx.fontKerning = 'normal'; // as measured
@@ -170,10 +210,23 @@
     const ls = 'letterSpacing' in ctx;
     if (ls) ctx.letterSpacing = spacing.toFixed(2) + 'px';
     const tk = -Math.tan(skew + f.slant);
-    ctx.setTransform(sx, 0, tk * sy, sy, x, y);
     ctx.globalAlpha = f.alpha;
+    const ox = -runW / 2, oy = row.oy; // centres the row's ink on (x, y)
+    const ex = f.extrude;
+    if (ex) {
+      // Extrude in proportion to the row's real size (rows are far bigger than the layer's
+      // font size the engine sized the extrusion for), with enough steps to stay solid.
+      const k = Math.max(1, (REF * sy) / f.size);
+      const steps = Math.min(64, Math.ceil(ex.steps * k));
+      for (let j = steps; j >= 1; j--) {
+        const t = (j / steps) * ex.steps * k;
+        ctx.setTransform(sx, 0, tk * sy, sy, x + ex.dx * t, y + ex.dy * t);
+        ctx.fillStyle = ex.colors[Math.min(ex.steps - 1, Math.max(0, Math.ceil((j / steps) * ex.steps) - 1))];
+        ctx.fillText(row.text, ox, oy);
+      }
+    }
+    ctx.setTransform(sx, 0, tk * sy, sy, x, y);
     const color = f.textPaint({ vi: i, cx: x - f.cx, cy: y - f.cy });
-    const ox = -runW / 2, oy = capH / 2;
     if (f.strokeMode === 'outline') {
       ctx.strokeStyle = color;
       ctx.lineWidth = (f.strokeW / Math.max(sx, sy)) * (REF / f.size);
