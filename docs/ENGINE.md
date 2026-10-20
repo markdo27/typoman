@@ -85,6 +85,14 @@ user's intent.
 - **`preset.fonts(layer, scene)`** (optional) lists the extra instance families a preset
   draws with. `TM.prepare` loads them before frame 0, so exports never catch an instance
   mid-load. Stack returns its width ladder this way.
+  `TM.prepare(scene, { extras: 'background' })` starts them without waiting, so a cold embed
+  shows its first frame sooner.
+- **Fail-safe loading:** every font wait is bounded, by default 15 s or by
+  `TM.prepare(scene, { timeout })`. Only the wait stops; the load continues, and a late font
+  re-renders through `TM.fonts.onChange`. Instances unused for 5 s are released beyond a soft
+  cap of 64 and re-created on their next use. `TM.fonts.axesFailed(family)` reports a family
+  whose font CSS couldn't be read, in which case width and optical size fall back to the
+  regular design, and exports add a note.
 - Without the `FontFace` `variationSettings` descriptor, a family is requested without its
   `opsz` axis. Google then serves it pinned at the default, so it is still stable, just not
   size-aware.
@@ -140,8 +148,10 @@ isSpace, x /*left*/, w /*advance*/, y /*baseline*/, cx, cy /*centre*/ }`, all re
 the block centre. `L.lines[j] = { text, width, x, y, glyphs:[indices] }`, plus `L.capH`,
 `L.lineGap`, `L.count` (visible glyphs), `L.words` and `L.font`. Lines that are mostly
 right-to-left script (Arabic, Hebrew, …) lay out as **word clusters**: each word is one
-shaped run, so Arabic keeps its joined forms. They are placed right to left and marked
-`line.rtl`, and presets animate them word by word.
+shaped run, so Arabic keeps its joined forms. Clusters are placed in bidi visual order, so an
+LTR phrase inside an RTL line keeps reading left to right. A glyph's `x` is always its visual
+position. The base direction comes from the first strong character, as with `dir="auto"`, and
+RTL lines are marked `line.rtl`. Presets animate them word by word.
 
 **Helpers.**
 - `f.drawGlyph(g, { x, y, rot, sx, sy, scale, skew, alpha, color, weight, ch, anchor:'center'|'baseline', size })`
@@ -197,7 +207,7 @@ loop progress at which shape i is reached.
 ```js
 const r = new TM.Renderer(canvas, { quality: 'preview' | 'full' });
 r.setScene(TM.Scene.normalize(json)); r.resize(w, h);
-await TM.prepare(r.scene);   // loads fonts
+await TM.prepare(r.scene);   // loads fonts; { timeout: ms, extras: 'background' } for embeds
 r.render(seconds);           // background → layers (echo, blur, gradient, shadow, glow) → grain/vignette
 ```
 

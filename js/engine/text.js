@@ -17,16 +17,49 @@
 
   // Right-to-left scripts (Hebrew, Arabic, Syriac, Thaana, N'Ko and presentation forms).
   const RTL_CHAR = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/u;
-  const RTL_ALL = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/gu;
-  const LTR_ALL = /[A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF]/gu;
   /**
    * Split a line into the clusters presets animate. Lines containing RTL script use whole
    * words (shaped runs, so Arabic keeps its joined forms); everything else uses graphemes.
    */
   function clustersFor(line) {
     if (!RTL_CHAR.test(line)) return { parts: graphemes(line), rtl: false };
-    const rtl = (line.match(RTL_ALL) || []).length >= (line.match(LTR_ALL) || []).length;
+    // Base direction from the first strong character, as the bidi algorithm (P2) and dir="auto" do.
+    const first = line.match(/[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]|[A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF]/u);
+    const rtl = !!first && RTL_CHAR.test(first[0]);
     return { parts: line.match(/\s+|\S+/gu) || [], rtl };
+  }
+
+  /**
+   * Visual left-to-right order of a mixed-direction line's word clusters: the Unicode bidi
+   * algorithm's rule L2 applied at word level. Each word is shaped by fillText on its own, so
+   * only the words' order needs resolving. RTL words sit at level 1; LTR words and numbers at
+   * the next even level above the base (0 in an LTR line, 2 in an RTL one); whitespace and
+   * punctuation take their neighbours' level when both agree, else the base. Runs are then
+   * reversed from the highest level down, so "שלום Type in Motion עולם" keeps "Type in
+   * Motion" reading left to right.
+   */
+  function visualOrder(parts, rtl) {
+    const base = rtl ? 1 : 0, ltrLevel = rtl ? 2 : 0;
+    const strong = parts.map((p) => (RTL_CHAR.test(p) ? 1 : /[\p{L}\p{N}]/u.test(p) ? ltrLevel : -1));
+    const level = strong.map((v, k) => {
+      if (v >= 0) return v;
+      let a = base, b = base;
+      for (let j = k - 1; j >= 0; j--) if (strong[j] >= 0) { a = strong[j]; break; }
+      for (let j = k + 1; j < parts.length; j++) if (strong[j] >= 0) { b = strong[j]; break; }
+      return a === b ? a : base;
+    });
+    const order = parts.map((_, k) => k);
+    for (let L = Math.max(0, ...level); L >= 1; L--) {
+      for (let k = 0; k < order.length;) {
+        if (level[order[k]] < L) { k++; continue; }
+        let e = k;
+        while (e < order.length && level[order[e]] >= L) e++;
+        const run = order.slice(k, e).reverse();
+        for (let j = 0; j < run.length; j++) order[k + j] = run[j];
+        k = e;
+      }
+    }
+    return order;
   }
 
   // Title case keeps short articles, conjunctions and prepositions lowercase unless they open or
@@ -115,6 +148,17 @@
       const lineW = prefix[parts.length] + Math.max(0, parts.length - 1) * track;
       maxW = Math.max(maxW, lineW);
       const line = { index: li, text: lineText, width: lineW, x: 0, y: 0, glyphs: [], rtl };
+      // Mixed-direction lines (any RTL script) place word clusters in bidi visual order; each
+      // cluster's own advance plus tracking, spread to the measured line width.
+      let visX = null;
+      if (RTL_CHAR.test(lineText)) {
+        const order = visualOrder(parts, rtl);
+        visX = new Float64Array(parts.length);
+        const sum = adv.reduce((a, b) => a + b, 0);
+        const scale = sum > 0 ? prefix[parts.length] / sum : 1;
+        let x = 0;
+        order.forEach((k, n) => { visX[k] = x; x += adv[k] * scale + track; void n; });
+      }
       let inWord = false;
       parts.forEach((ch, k) => {
         const isSpace = /^\s+$/u.test(ch);
@@ -127,8 +171,9 @@
           li: k,
           word: wordIndex,
           isSpace,
-          // RTL lines read right to left: mirror each cluster's slot within the line.
-          x: rtl ? lineW - (prefix[k + 1] + k * track) : prefix[k + 1] - adv[k] + k * track,
+          // Lines with RTL script use bidi visual order (RTL words right to left, LTR runs inside
+          // them left to right); others the kerned pen position.
+          x: visX ? visX[k] : prefix[k + 1] - adv[k] + k * track,
           w: adv[k],
           y: 0,
           cx: 0,

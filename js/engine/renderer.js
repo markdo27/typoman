@@ -11,7 +11,7 @@
 (function (root) {
   'use strict';
   const TM = root.TM;
-  const { clamp, mod, TAU } = TM.math;
+  const { clamp, mod } = TM.math;
   const DEG = Math.PI / 180;
   // Canvas text kerning control (all current engines; guarded for old ones).
   const KERN = typeof CanvasRenderingContext2D !== 'undefined' && 'fontKerning' in CanvasRenderingContext2D.prototype;
@@ -463,6 +463,9 @@
       const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
       const W = this.canvas.width, H = this.canvas.height;
       this._buffers(W, H);
+      // True after a render whose preview caps (blur samples, extrude steps) cut quality, so the
+      // studio can label the stage as a draft; exports never set it.
+      this.simplified = false;
       const ctx = this.ctx;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalAlpha = 1;
@@ -561,6 +564,7 @@
       const px = Math.max(1, Math.min(W, H) / 900);
       const cap = this.quality === 'preview' ? clamp(Math.floor(28 / Math.sqrt(this._passes || 1)), 6, 28) : 64;
       const steps = clamp(Math.ceil(length / px), 2, cap);
+      if (steps < clamp(Math.ceil(length / px), 2, 64)) this.simplified = true;
       const a = ex.angle * DEG;
       const key = ex.color + steps;
       if (!this._exColors || this._exColors.key !== key) {
@@ -595,6 +599,7 @@
       // Preview keeps blur × echo passes bounded; exports always render at full quality.
       const echoN = (layer.fx.echo.count | 0) + 1;
       const samples = blur > 0 ? (this.quality === 'preview' ? clamp(Math.floor(16 / echoN), 2, 4) : Math.round(4 + blur * 12)) : 1;
+      if (blur > 0 && samples < Math.round(4 + blur * 12)) this.simplified = true;
       this._passes = samples * echoN;
       if (samples > 1) {
         // Trailing motion blur: average `samples` sub-frames across the shutter interval.

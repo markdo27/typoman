@@ -99,7 +99,7 @@ js/presets/      one file per motion preset
 js/export/       MP4 / WebM / GIF / PNG / ZIP encoders, standalone HTML
 js/studio/       store · controls · inspector · panels · dialogs · app
 vendor/          pinned MIT libraries (mp4-muxer, webm-muxer)
-labs/            earlier experiments (V3 demo, Flash engine, Cavalry study)
+labs/            earlier experiments (V3 demo, Flash engine, Cavalry study), not deployed
 ```
 
 ## Develop

@@ -23,9 +23,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
-      # Plain static site — publish the repo root as-is, no Jekyll.
+      # Plain static site, no Jekyll and no build. Publish only what the app serves: docs,
+      # tests and the legacy labs/ stay in the repository.
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          cp -r index.html embed.html player.js .nojekyll js css vendor _site/
+          for f in index.html embed.html player.js js/boot.js css/studio.css vendor/mp4-muxer.min.js; do
+            test -f "_site/$f" || { echo "missing $f"; exit 1; }
+          done
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          path: '_site'
       - id: deployment
         uses: actions/deploy-pages@v4
