@@ -12,7 +12,7 @@
 (function (TM) {
   'use strict';
   const K = TM.MotionKit;
-  const { clamp, smoothstep, fract } = TM.math;
+  const { smoothstep, fract } = TM.math;
 
   TM.registerPreset({
     id: 'strobe-cut',

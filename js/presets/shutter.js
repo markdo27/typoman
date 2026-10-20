@@ -13,7 +13,6 @@
 (function (TM) {
   'use strict';
   const K = TM.MotionKit;
-  const { clamp } = TM.math;
 
   const makeCanvas = (w, h) => TM.MotionKit.canvas(w, h);
 
@@ -106,7 +105,7 @@
       const ctx = f.ctx;
       f.identity();
       for (const sl of slats) {
-        const a = start + sl.j * t, b = a + t;
+        const a = start + sl.j * t;
         const k = Math.abs(sl.c);
         const widen = 1 + P.persp * 0.08 * Math.abs(sl.sn);
         let dx, dy, dw, dh, sx, sy, sw2, sh2;

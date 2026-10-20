@@ -264,7 +264,6 @@
    * flap uncovers), so the flip also reads correctly with tiles hidden.
    */
   function drawFlip(f, geo, a, b, q, bounce) {
-    const ctx = f.ctx;
     const { MID, top, bottom, left, right, radius } = geo;
     if (!(bounce > 0) && q <= 0) return drawChar(f, geo, a, 1, null);
     if (!(bounce > 0) && q >= 1) return drawChar(f, geo, b, 1, null);
