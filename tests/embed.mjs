@@ -302,7 +302,9 @@ window.__send = (id, msg) => document.getElementById(id).contentWindow.postMessa
     // Offscreen players stop rendering; back on screen they resume.
     await page.evaluate(() => document.getElementById('loop').play());
     await page.evaluate(() => window.scrollTo(0, 2500));
-    await frames(page, 4); // let the IntersectionObserver report
+    // Wait for the IntersectionObserver to report the player hidden, then one more frame.
+    await page.waitForFunction(() => document.getElementById('loop')._visible === false, null, { timeout: WAIT }).catch(() => {});
+    await frames(page, 1);
     const r0 = await page.evaluate(() => ({ t: document.getElementById('loop').currentTime, n: document.getElementById('loop')._renderer.stats.renders }));
     await frames(page, 20);
     const r1 = await page.evaluate(() => ({ t: document.getElementById('loop').currentTime, n: document.getElementById('loop')._renderer.stats.renders }));
