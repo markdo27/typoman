@@ -153,6 +153,20 @@ fieldset.tm-field::after { content: ""; display: table; clear: both; }
 .tm-row-head span { color: var(--d-text3); font-size: 11.5px; }
 .tm-note { margin: 0; color: var(--d-text3); font-size: 11.5px; }
 .tm-note.warn { color: #ffb547; }
+/* preview caption + Replay (play-once scenes stop on their last frame) */
+.tm-pv-bar { display: flex; align-items: center; justify-content: center; gap: 4px 12px; flex-wrap: wrap; }
+.tm-replay { font-size: 12px; }
+/* per-tab notes: does this way of sharing carry the uploaded font? */
+.tm-fontnote { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--d-line2); border-radius: var(--d-r); background: var(--d-bg2); color: var(--d-text2); font-size: 12px; line-height: 1.5; }
+.tm-fontnote[hidden] { display: none; }
+.tm-fontnote > svg { width: 16px; height: 16px; flex: none; margin-top: 1px; }
+.tm-fontnote p { margin: 0; }
+.tm-fontnote b { color: var(--d-text); font-weight: 650; }
+.tm-fontnote .btn { margin-top: 8px; }
+.tm-fontnote.warn { border-color: color-mix(in srgb, #ffb547 55%, var(--d-line2)); background: color-mix(in srgb, #ffb547 6%, var(--d-bg2)); }
+.tm-fontnote.warn > svg { color: #ffb547; }
+.tm-fontnote.ok { border-color: color-mix(in srgb, var(--d-ok) 45%, var(--d-line2)); background: color-mix(in srgb, var(--d-ok) 6%, var(--d-bg2)); }
+.tm-fontnote.ok > svg { color: var(--d-ok); }
 
 /* ── small screens: full-screen sheet, preview on top ── */
 @media (max-width: 760px) {
