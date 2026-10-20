@@ -47,6 +47,8 @@
     id: 'axis-wave',
     name: 'Axis Wave',
     category: 'Kinetic',
+    // The default font has no axis to move; Tilt Warp's 3D tilt shows the idea at once.
+    prefers: { family: 'Tilt Warp', weight: 400 },
     description: 'Letters ride a wave through a variable-font axis: 3D tilt, melting, morphing, weight, width…',
     params: [
       TM.P.select('axis', 'Axis', [['auto', 'Most expressive'], ['wght', 'Weight'], ['wdth', 'Width'], ['opsz', 'Optical size'], ['slnt', 'Slant'], ['c1', 'Custom axis 1'], ['c2', 'Custom axis 2'], ['c3', 'Custom axis 3']], 'auto', { group: 'Axis', hint: 'Fonts tagged with axes in the font picker (Tilt Warp, Climate Crisis, Kablammo, Fraunces, Shantell Sans, Recursive…) have the most to move' }),

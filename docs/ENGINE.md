@@ -174,6 +174,11 @@ their defaults, then take the look's values. Font, type, fill, background, ancho
 change only where the look names them. It never touches the user's text, and never replaces
 a hand-drawn path (one without `path.preset`).
 
+A preset designed around a particular kind of font can name one with
+`prefers: { family, weight }` (Stack wants a wide width axis, Axis Wave an expressive axis).
+When the user picks the preset while the layer still has the untouched default font, the studio
+swaps the preferred font in; a font the user chose is never replaced.
+
 Param builders (`js/engine/core.js`): `TM.P.range | select | toggle | color | ease`,
 `TM.P.stagger()`, `TM.P.order()`, and `TM.P.sequence(opts)`. The last one gives the
 standard in→hold→out timing set: `timing, inDur, outDur, stagger, order, easeIn, easeOut`.

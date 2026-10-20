@@ -35,6 +35,8 @@
     id: 'stack',
     name: 'Stack',
     category: 'Kinetic',
+    // Designed around a wide width axis: the studio swaps this in for the untouched default font.
+    prefers: { family: 'Science Gothic', weight: 700 },
     description: 'Words fill the frame edge to edge, rows flexing like an accordion through the font’s width axis.',
     fit: false,
     params: [
