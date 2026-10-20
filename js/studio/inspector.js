@@ -501,6 +501,7 @@
       this.headSub.textContent = 'Layer ' + (n - store.selected) + ' of ' + n + (store.preset ? ' · ' + store.preset.name : '') + (l.visible === false ? ' · hidden' : '');
       this.headChip.textContent = (String(l.text || '').trim()[0] || 'T').toUpperCase();
       this.headChip.style.fontFamily = TM.fonts.cssFamily(l.font.family);
+      this.headChip.style.fontWeight = String(TM.fonts.clampWeight(l.font.family, l.font.weight));
       this.headChip.style.color = l.fill.type === 'palette' ? l.fill.palette[0] : l.fill.color;
       this.headChip.style.background = store.scene.bg.type === 'transparent' ? '' : store.scene.bg.color;
       this.headChip.classList.toggle('transparent', store.scene.bg.type === 'transparent');

@@ -36,6 +36,43 @@
     return { inDur, outDur };
   }
 
+  /**
+   * The pieces of one layer's lane inside a scene loop of D seconds: wait, pass segments (with
+   * In / Hold / Out bands for In → Hold → Out looks), the hatched hold of a play-once layer and
+   * the start marker. Positioned in % of the loop, so any bar can host them (the timeline lanes,
+   * the phone's Layers → Timing chart).
+   */
+  Studio.laneParts = function (layer, D) {
+    const { delay, cycles, mode: m } = layer.time;
+    const pass = D / cycles;
+    const ph = phases(layer);
+    const pct = (t) => (clamp(t / D, 0, 1) * 100).toFixed(3) + '%';
+    const seg = (from, to, cls, first) => {
+      const a = Math.max(0, from), b = Math.min(D, to);
+      if (b - a <= 1e-6) return null;
+      const el = h('div', { class: 'tl-pass' + (cls ? ' ' + cls : '') + (first ? ' first' : ''), style: { left: pct(a), width: (((b - a) / D) * 100).toFixed(3) + '%' } });
+      if (ph) {
+        // Phase bands are laid out against the whole pass, then clipped by the segment.
+        const off = ((a - from) / (b - a)) * 100, scale = ((to - from) / (b - a)) * 100;
+        const band = (cls2, u0, u1) => h('i', { class: 'tl-ph ' + cls2, style: { left: (u0 * scale - off).toFixed(3) + '%', width: ((u1 - u0) * scale).toFixed(3) + '%' } });
+        el.append(band('in', 0, ph.inDur), band('hold', ph.inDur, 1 - ph.outDur));
+        if (ph.outDur > 0) el.append(band('out', 1 - ph.outDur, 1));
+      }
+      return el;
+    };
+    const parts = [];
+    if (m === 'once') {
+      if (delay > 0) parts.push(h('div', { class: 'tl-wait', style: { left: '0%', width: pct(delay) } }));
+      parts.push(seg(delay, delay + pass, '', true));
+      if (delay + pass < D) parts.push(h('div', { class: 'tl-hold', style: { left: pct(delay + pass), width: (((D - delay - pass) / D) * 100).toFixed(3) + '%' } }, h('span', null, 'hold')));
+    } else {
+      const start = mod(delay, pass);
+      for (let k = -1; k <= cycles; k++) parts.push(seg(start + k * pass, start + (k + 1) * pass, '', Math.abs(start + k * pass - mod(delay, D)) < 1e-6));
+    }
+    parts.push(h('i', { class: 'tl-start', style: { left: pct(m === 'once' ? delay : mod(delay, D)) } }));
+    return parts.filter(Boolean);
+  };
+
   /** Short human summary of a layer's timing, e.g. "starts 0.8s · ×2 · once". */
   Studio.timingNote = function (layer, short) {
     const t = layer.time || {};
@@ -201,7 +238,7 @@
     renderLanes(force) {
       if (!this.lanesEl) return;
       const s = this.store.scene;
-      const key = [this.store.selected, s.layers.map((l) => [l.id, l.name, l.text, l.visible, l.preset, l.font.family, l.time.cycles, l.time.mode].join('\u0001')).join('\u0002')].join('|');
+      const key = [this.store.selected, s.layers.map((l) => [l.id, l.name, l.text, l.visible, l.preset, l.font.family, l.font.weight, l.time.cycles, l.time.mode].join('\u0001')).join('\u0002')].join('|');
       if (this.drag || (!force && key === this._laneKey)) { this.layoutLanes(); return; }
       this._laneKey = key;
       const n = s.layers.length;
@@ -217,8 +254,7 @@
       const store = this.store, layer = store.scene.layers[i];
       const sel = i === store.selected;
       const name = Studio.layerName(layer);
-      const chip = h('span', { class: 'layer-chip sm', 'aria-hidden': 'true' }, (String(layer.text || '').trim()[0] || 'T').toUpperCase());
-      chip.style.fontFamily = TM.fonts.cssFamily(layer.font.family);
+      const chip = Studio.layerChip(layer, 'sm');
       const label = h('button', { type: 'button', class: 'tl-lane-label', 'data-tip': name, onclick: () => store.select(i) }, chip, h('span', null, name));
       const bar = h('div', { class: 'tl-lane-bar' });
       const lane = h('div', {
@@ -255,29 +291,7 @@
         const ph = phases(layer);
         const sel = i === this.store.selected;
         const pct = (t) => (clamp(t / D, 0, 1) * 100).toFixed(3) + '%';
-        const seg = (from, to, cls, first) => {
-          const a = Math.max(0, from), b = Math.min(D, to);
-          if (b - a <= 1e-6) return null;
-          const el = h('div', { class: 'tl-pass' + (cls ? ' ' + cls : '') + (first ? ' first' : ''), style: { left: pct(a), width: (((b - a) / D) * 100).toFixed(3) + '%' } });
-          if (ph) {
-            // Phase bands are laid out against the whole pass, then clipped by the segment.
-            const off = ((a - from) / (b - a)) * 100, scale = ((to - from) / (b - a)) * 100;
-            const band = (cls2, u0, u1) => h('i', { class: 'tl-ph ' + cls2, style: { left: (u0 * scale - off).toFixed(3) + '%', width: ((u1 - u0) * scale).toFixed(3) + '%' } });
-            el.append(band('in', 0, ph.inDur), band('hold', ph.inDur, 1 - ph.outDur));
-            if (ph.outDur > 0) el.append(band('out', 1 - ph.outDur, 1));
-          }
-          return el;
-        };
-        const parts = [];
-        if (m === 'once') {
-          if (delay > 0) parts.push(h('div', { class: 'tl-wait', style: { left: '0%', width: pct(delay) } }));
-          parts.push(seg(delay, delay + pass, '', true));
-          if (delay + pass < D) parts.push(h('div', { class: 'tl-hold', style: { left: pct(delay + pass), width: (((D - delay - pass) / D) * 100).toFixed(3) + '%' } }, h('span', null, 'hold')));
-        } else {
-          const start = mod(delay, pass);
-          for (let k = -1; k <= cycles; k++) parts.push(seg(start + k * pass, start + (k + 1) * pass, '', Math.abs(start + k * pass - mod(delay, D)) < 1e-6));
-        }
-        parts.push(h('i', { class: 'tl-start', style: { left: pct(m === 'once' ? delay : mod(delay, D)) } }));
+        const parts = Studio.laneParts(layer, D);
         if (sel && ph) {
           const base = m === 'once' ? delay : mod(delay, D);
           const edge = (which, at) => {

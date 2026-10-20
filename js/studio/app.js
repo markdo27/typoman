@@ -244,6 +244,7 @@
         this.stage.dirty = false;
       }
       this.transport.tick();
+      this.layers.tick();
       this.gallery.tick(now);
       this.raf = requestAnimationFrame((t) => this.frame(t));
     }
