@@ -9,7 +9,8 @@
  *                                        and keep the file in IndexedDB so the font survives reloads
  *     restore()      → Promise           re-register saved fonts before a saved scene is normalised
  *     forScene(scene)→ [{family, name, dataUrl}]  fonts a scene uses (for project files / exports)
- *     register(list) → Promise           register fonts from a project file
+ *     screen(list, scene) → { ask, known, skipped }  vet a project file's fonts before installing
+ *     register(list) → Promise           register fonts (from a project file, once vetted and agreed)
  *
  * Custom fonts never travel in share links (links only carry catalogue font names); the UI says so.
  */
@@ -20,6 +21,9 @@
   const UI = Studio.ui;
   const ACCEPT = '.ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2';
   const MAX_BYTES = 15 * 1024 * 1024;
+  const MAX_PROJECT_FONTS = 8; // a project file may bring at most this many fonts
+  /** Decoded size of a base64 data: URL, in bytes. */
+  const dataBytes = (url) => { const i = url.indexOf(','); return i < 0 ? 0 : Math.floor(((url.length - i - 1) * 3) / 4); };
   const LINK_NOTE = 'Custom fonts are saved in this browser and included in project files, but share links can’t carry them.';
 
   // ───────────────────────────── persistence (IndexedDB) ─────────────────────────────
@@ -109,7 +113,7 @@
 
     async register(list, persist = true) {
       for (const rec of list || []) {
-        if (!rec || typeof rec.dataUrl !== 'string' || !/^data:/.test(rec.dataUrl)) continue;
+        if (!rec || typeof rec.dataUrl !== 'string' || !/^data:/.test(rec.dataUrl) || dataBytes(rec.dataUrl) > MAX_BYTES) continue;
         try {
           const name = rec.name || String(rec.family || 'Custom').replace(/ \(custom\)$/, '');
           const entry = await TM.fonts.addCustom(name, await dataUrlToBuffer(rec.dataUrl), rec.dataUrl);
@@ -123,6 +127,34 @@
     forScene(scene) {
       const fams = new Set((scene.layers || []).map((l) => l.font && l.font.family));
       return [...records.values()].filter((r) => fams.has(r.family)).map(({ family, name, dataUrl }) => ({ family, name, dataUrl }));
+    },
+
+    /**
+     * Vet the fonts a project file brings, before anything is installed. Kept: valid data: URLs
+     * for families the file's own (raw) scene uses, each within the 15 MB upload cap, at most
+     * MAX_PROJECT_FONTS. Fonts already installed here with the same file need no asking.
+     * → { ask: [{ family, name, dataUrl, bytes }], known: [...], skipped: [{ family, why }] }
+     */
+    screen(list, scene) {
+      // Only the layers the studio keeps count (normalize() drops the rest).
+      const layers = scene && Array.isArray(scene.layers) ? scene.layers.slice(0, TM.Scene.MAX_LAYERS || 6) : [];
+      const used = new Set(layers.map((l) => l && l.font && l.font.family).filter((f) => typeof f === 'string'));
+      const out = { ask: [], known: [], skipped: [] };
+      const seen = new Set();
+      for (const rec of Array.isArray(list) ? list.slice(0, 200) : []) {
+        const family = rec && typeof rec.family === 'string' ? rec.family.slice(0, 80) : null;
+        if (!family || typeof rec.dataUrl !== 'string' || !/^data:/.test(rec.dataUrl)) { out.skipped.push({ family: family || 'a font', why: 'not a font file' }); continue; }
+        if (seen.has(family)) continue;
+        seen.add(family);
+        if (!used.has(family)) { out.skipped.push({ family, why: 'not used by the project' }); continue; }
+        const bytes = dataBytes(rec.dataUrl);
+        if (bytes > MAX_BYTES) { out.skipped.push({ family, why: 'larger than 15 MB' }); continue; }
+        const mine = records.get(family);
+        if (mine && mine.dataUrl === rec.dataUrl) { out.known.push(rec); continue; }
+        if (out.ask.length >= MAX_PROJECT_FONTS) { out.skipped.push({ family, why: 'more than ' + MAX_PROJECT_FONTS + ' fonts' }); continue; }
+        out.ask.push({ family, name: typeof rec.name === 'string' ? rec.name.slice(0, 120) : null, dataUrl: rec.dataUrl, bytes });
+      }
+      return out;
     },
 
     usesCustom(scene) {

@@ -173,6 +173,38 @@
   }
 
   // ───────────────────────────── project files ─────────────────────────────
+  const bytes = (n) => (TM.Export && TM.Export.formatBytes ? TM.Export.formatBytes(n) : Math.round(n / 1024) + ' KB');
+  /**
+   * A project file wants to install fonts in this browser (they persist, like an upload): ask
+   * first, naming each font and its size. Resolves true to install, false to open without them.
+   */
+  function confirmFonts(plan) {
+    return new Promise((resolve) => {
+      let install = false;
+      const one = plan.ask.length === 1;
+      UI.modal({
+        title: one ? 'Install a font?' : 'Install ' + plan.ask.length + ' fonts?',
+        className: 'confirm-fonts',
+        onClose: () => resolve(install),
+        build(body, api) {
+          const yes = h('button', { type: 'button', class: 'btn primary', autofocus: true, onclick: () => { install = true; api.close(); } }, one ? 'Install and open' : 'Install them and open');
+          const no = h('button', { type: 'button', class: 'btn ghost', onclick: () => api.close() }, 'Open without');
+          const unused = plan.skipped.filter((s) => s.why === 'not used by the project').length;
+          const refused = plan.skipped.filter((s) => s.why !== 'not used by the project');
+          const notes = refused.map((s) => Studio.fontLabel(s.family) + ' (' + s.why + ')').slice(0, 6);
+          if (refused.length > 6) notes.push(refused.length - 6 + ' more');
+          if (unused) notes.push(UI.plural(unused, 'font') + ' the project doesn’t use');
+          body.append(
+            h('p', null, 'This project uses ' + (one ? 'an uploaded font that isn’t' : plan.ask.length + ' uploaded fonts that aren’t') + ' in this browser yet. Installing keeps ' + (one ? 'it' : 'them') + ' here, like a font you upload yourself.'),
+            h('ul', { class: 'cf-list' }, plan.ask.map((f) => h('li', null, h('b', null, Studio.fontLabel(f.family)), h('span', null, bytes(f.bytes))))),
+            notes.length ? h('p', { class: 'hint' }, 'Not installed: ' + notes.join(', ') + '.') : null,
+            h('p', { class: 'hint' }, 'Without ' + (one ? 'it' : 'them') + ', those layers show ' + TM.Scene.defaultLayer().font.family + '. Only install fonts from people you trust.'),
+            h('div', { class: 'modal-foot cf-foot' }, no, yes));
+        },
+      });
+    });
+  }
+
   function download(blob, name) {
     const a = h('a', { href: URL.createObjectURL(blob), download: name });
     document.body.append(a);
@@ -402,10 +434,23 @@
         const data = JSON.parse(await file.text());
         const scene = data && data.scene ? data.scene : data;
         if (!scene || !Array.isArray(scene.layers)) throw new Error('That isn’t a TYPOMAN project file');
-        if (Array.isArray(data.fonts) && Studio.customFonts) await Studio.customFonts.register(data.fonts);
+        // Fonts persist in this browser, so a file never installs them silently: vet (used by
+        // the scene, ≤ 8, ≤ 15 MB each), then ask unless they are already here.
+        let note = '';
+        if (Array.isArray(data.fonts) && data.fonts.length && Studio.customFonts) {
+          const plan = Studio.customFonts.screen(data.fonts, scene);
+          if (plan.known.length) await Studio.customFonts.register(plan.known, false);
+          let declined = 0;
+          if (plan.ask.length) {
+            if (await confirmFonts(plan)) await Studio.customFonts.register(plan.ask);
+            else declined = plan.ask.length;
+          }
+          const left = declined + plan.skipped.filter((s) => s.why !== 'not used by the project').length;
+          if (left) note = ' · ' + UI.plural(left, 'font') + ' not installed, so ' + TM.Scene.defaultLayer().font.family + ' stands in';
+        }
         this.store.replace(scene, { label: 'Open project' });
         await TM.prepare(this.store.scene);
-        toast('Opened “' + this.store.scene.name + '”', 'ok', 4000, { label: 'Undo', run: () => this.store.undo() });
+        toast('Opened “' + this.store.scene.name + '”' + note, note ? 'info' : 'ok', note ? 6000 : 4000, { label: 'Undo', run: () => this.store.undo() });
       } catch (e) {
         toast(e instanceof SyntaxError ? 'That file isn’t valid JSON' : e.message || 'Could not open that file', 'error');
       }

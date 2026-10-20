@@ -654,6 +654,13 @@ input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(
 .modal-body { padding: 10px 22px 20px; }
 .modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
 .modal-foot .hint { margin: 0; }
+/* "Install fonts?" before a project file adds fonts to this browser */
+.modal.confirm-fonts { width: min(460px, 100%); }
+.confirm-fonts .modal-body p { margin: 0 0 10px; line-height: 1.5; }
+.cf-list { list-style: none; margin: 4px 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cf-list li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line-2); }
+.cf-list span { color: var(--text-3); font: 500 11.5px var(--mono); }
+.cf-foot { justify-content: flex-end; }
 .sc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px 28px; }
 .sc-group h3 { margin: 0 0 8px; font-size: 10.5px; font-weight: 650; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-fg); }
 .sc-group dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; align-items: center; }
