@@ -43,8 +43,10 @@ vendor/*          pinned third-party code (MIT), served locally
   post:{ grain 0..1, vignette 0..1 },
   layers:[{ id, name, visible, text /*\n = new line*/, preset, params:{…per preset schema…},
     font:{ family, weight, width /*wdth %, default 100*/, opsz /*'auto' | number*/,
-           axes /*{ TAG: value } for any other axis the family has: slnt, XROT, YEAR, MORF…*/ },
-    type:{ size /*× unit*/, tracking /*em*/, leading, align, case, slant /*deg*/, wrap:'auto'|'off' },
+           axes /*{ TAG: value } for any other axis the family has: slnt, XROT, YEAR, MORF…*/,
+           italic /*true italic where the family has one*/ },
+    type:{ size /*× unit*/, tracking /*em*/, leading, align, case, slant /*deg*/, wrap:'auto'|'off',
+           ligatures /*default true*/ },
     fill:{ type:'solid'|'gradient'|'palette', color, color2, angle, palette:[hex…] },
     stroke:{ mode:'none'|'outline'|'both', width /*em*/, color },
     path:{ closed, preset?, nodes:[{x,y,ix,iy,ox,oy,k}] } | null,   // normalised 0..1, handles relative
@@ -127,6 +129,23 @@ user's intent.
 - Without the `FontFace` `variationSettings` descriptor, a family is requested without its
   `opsz` axis. Google then serves it pinned at the default, so it is still stable, just not
   size-aware.
+- **True italics.** `font.italic` draws the family's real italic where Google serves one
+  (`TM.fonts.hasItalic(family)`: 17 families, among them Playfair Display, Fraunces, Inter Tight,
+  Montserrat, Bodoni Moda and JetBrains Mono). The instance (`"Playfair Display ~i"`) registers
+  the italic files as its upright faces, so font strings, layout and every preset are
+  unchanged. Families without italics ignore it.
+- **Drawn obliques.** A forward `type.slant` on a family with a `slnt` axis (Roboto Flex,
+  Recursive, Science Gothic) moves onto the axis as far as it goes. The renderer skews only the
+  rest (`f.slant`), and the typeset layer's `font.autoSlnt` records the degrees the axis covers.
+  Recursive's cursive forms switch on at its full slant. A slant the user pins in `font.axes`
+  stays theirs, and a backward slant is always a skew.
+
+**Ligatures.** Presets draw clusters one at a time, which would lose the font's ligatures. The
+layout finds, once per font, the sequences that draw differently as a run than letter by letter
+(fi, fl, ff, ffi, ffl, Th, st, a script's joins…), and lays each out as one cluster, since the
+ligature is one glyph in the font. `type.ligatures: false` turns this off, and tracking beyond
+±0.03 em does too, as CSS does. Per-cluster drawing then matches a native run: Playfair's
+"office fluffy staff" differs by 0.00% of ink, against 8.5% letter by letter.
 
 ## Preset contract
 

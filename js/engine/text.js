@@ -92,6 +92,63 @@
     }
   }
 
+  // ── ligatures ──
+  // Presets draw clusters one at a time, which loses the font's ligatures. Sequences that the
+  // font draws differently as a run than letter by letter (fi, ffl, Th, a script's joins…) are
+  // found once per font by drawing both ways, and laid out as one cluster: the ligature is one
+  // glyph in the font, so it animates as one.
+  const LIG_CANDIDATES = ['ffi', 'ffl', 'ff', 'fi', 'fl', 'fj', 'ft', 'fb', 'fh', 'fk', 'Th', 'tt', 'st', 'ct'];
+  const ligCache = new Map();
+  let ligCanvas = null;
+  function ligaturesFor(family, weight) {
+    if (typeof document === 'undefined' && typeof OffscreenCanvas === 'undefined') return null;
+    const font = TM.fonts.fontString(family, weight, 64);
+    const key = font + '|' + TM.fonts.version();
+    if (ligCache.has(key)) return ligCache.get(key);
+    if (!ligCanvas) {
+      const c = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(240, 110) : document.createElement('canvas');
+      c.width = 240; c.height = 110;
+      ligCanvas = c.getContext('2d', { willReadFrequently: true });
+    }
+    const g = ligCanvas;
+    g.font = font;
+    if ('fontKerning' in g) g.fontKerning = 'normal';
+    if ('letterSpacing' in g) g.letterSpacing = '0px';
+    g.fillStyle = '#000';
+    const ink = (fn) => { g.clearRect(0, 0, 240, 110); fn(); return g.getImageData(0, 0, 240, 110).data; };
+    const found = new Set();
+    for (const seq of LIG_CANDIDATES) {
+      // Longer ligatures that contain a found one still get tested on their own (ffi vs fi).
+      const run = ink(() => g.fillText(seq, 16, 80));
+      const per = ink(() => {
+        let acc = '';
+        for (const ch of seq) { acc += ch; g.fillText(ch, 16 + g.measureText(acc).width - g.measureText(ch).width, 80); }
+      });
+      let diff = 0, total = 0;
+      for (let i = 3; i < run.length; i += 4) { diff += Math.abs(run[i] - per[i]); total += run[i]; }
+      if (total && diff / total > 0.04) found.add(seq);
+    }
+    if (ligCache.size > 120) ligCache.clear();
+    ligCache.set(key, found);
+    return found;
+  }
+
+  /** Merge single-character clusters that form one of `ligs`, longest first. */
+  function mergeLigatures(parts, ligs) {
+    if (!ligs || !ligs.size) return parts;
+    const out = [];
+    for (let k = 0; k < parts.length;) {
+      let hit = 0;
+      for (const n of [3, 2]) {
+        if (k + n > parts.length) continue;
+        const seq = parts.slice(k, k + n);
+        if (seq.every((p) => p.length === 1) && ligs.has(seq.join(''))) { hit = n; break; }
+      }
+      if (hit) { out.push(parts.slice(k, k + hit).join('')); k += hit; } else out.push(parts[k++]);
+    }
+    return out;
+  }
+
   let scratch = null;
   function measureCtx() {
     if (!scratch) {
@@ -104,11 +161,13 @@
   const cache = new Map();
 
   /**
-   * opts: { text, family, weight, sizePx, tracking (em), leading (× size), align, case }
+   * opts: { text, family, weight, sizePx, tracking (em), leading (× size), align, case,
+   *         ligatures (default true; off anyway once tracking opens past ±0.03 em) }
    * Returns { glyphs, lines, width, height, sizePx, capH, ascent, descent, font, count, words }.
    */
   function layout(opts) {
-    const key = [opts.text, opts.family, opts.weight, opts.sizePx.toFixed(2), opts.tracking, opts.leading, opts.align, opts.case, TM.fonts.version()].join('\u0001');
+    const ligOn = opts.ligatures !== false && Math.abs(opts.tracking || 0) < 0.03;
+    const key = [opts.text, opts.family, opts.weight, opts.sizePx.toFixed(2), opts.tracking, opts.leading, opts.align, opts.case, ligOn, TM.fonts.version()].join('\u0001');
     const hit = cache.get(key);
     if (hit) return hit;
 
@@ -132,8 +191,11 @@
     const glyphs = [];
     let maxW = 0, wordIndex = 0, visible = 0;
 
+    const ligs = ligOn ? ligaturesFor(opts.family, opts.weight) : null;
     lineTexts.forEach((lineText, li) => {
-      const { parts, rtl } = clustersFor(lineText);
+      const cl = clustersFor(lineText);
+      const rtl = cl.rtl;
+      const parts = cl.rtl || RTL_CHAR.test(lineText) ? cl.parts : mergeLigatures(cl.parts, ligs);
       // prefix[k] = kerned width of clusters 0..k-1; adv[k] = cluster k's own advance. Cluster k's
       // pen position is prefix[k+1] - adv[k]: that includes its kern with the cluster before it
       // (prefix[k] alone would apply every kern one pair late).

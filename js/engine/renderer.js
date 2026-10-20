@@ -38,7 +38,8 @@
       this._path = undefined;
       this._noise = null;
       const L = this.layer;
-      this.slant = (L.type.slant || 0) * DEG;
+      // Slant the font's own slnt axis already drew (typeset) isn't skewed again.
+      this.slant = ((L.type.slant || 0) - (L.font.autoSlnt || 0)) * DEG;
       this.strokeMode = L.stroke.mode;
       this.strokeW = L.stroke.width * this.size;
       this.ctx.lineJoin = 'round';
@@ -378,6 +379,7 @@
         leading: layer.type.leading,
         align: layer.type.align,
         case: layer.type.case,
+        ligatures: layer.type.ligatures,
       };
       let L = TM.text.layout(opts);
       if (preset.fit && L.width > 0) {
@@ -818,7 +820,21 @@
    */
   function familyFor(layer, scene) {
     const side = scene && scene.size ? Math.min(scene.size.w, scene.size.h) : 1080;
-    return TM.fonts.resolve(layer.font, layer.type.size * side);
+    return TM.fonts.resolve(fontFor(layer), layer.type.size * side);
+  }
+
+  /**
+   * The font a layer draws with: its own, plus a forward slant moved onto the family's slnt axis
+   * (a drawn oblique) as far as the axis goes, unless the layer pins slnt itself. `autoSlnt`
+   * records the degrees the axis covers; the renderer skews only the rest.
+   */
+  function fontFor(layer) {
+    const font = layer.font, slant = layer.type.slant || 0;
+    if (font.autoSlnt != null || !(slant > 0) || (font.axes && font.axes.slnt != null)) return font;
+    const ax = TM.fonts.axes(font.family);
+    if (!ax || !ax.slnt) return font;
+    const deg = Math.min(slant, -ax.slnt[0]);
+    return Object.assign({}, font, { axes: Object.assign({}, font.axes, { slnt: -deg }), autoSlnt: deg });
   }
 
   /**
@@ -840,10 +856,15 @@
   }
   const wrapCache = new Map();
 
-  /** The layer as presets see it: font.family already names the instance to draw with. */
+  /**
+   * The layer as presets see it: font.family already names the instance to draw with, and
+   * font.axes carries any slant moved onto the slnt axis (so instances a preset derives from
+   * layer.font, like Axis Wave's ladder, keep it).
+   */
   function typeset(layer, scene) {
+    const font = fontFor(layer);
     const family = familyFor(layer, scene);
-    return family === layer.font.family ? layer : Object.assign({}, layer, { font: Object.assign({}, layer.font, { family }) });
+    return family === layer.font.family && font === layer.font ? layer : Object.assign({}, layer, { font: Object.assign({}, font, { family }) });
   }
 
   TM.Renderer = Renderer;
@@ -868,7 +889,7 @@
       const preset = TM.getPreset(l.preset);
       if (preset && typeof preset.fonts === 'function') {
         let extra = [];
-        try { extra = preset.fonts(l, scene) || []; } catch (e) { console.warn('[TM] preset.fonts failed:', e); }
+        try { extra = preset.fonts(typeset(l, scene), scene) || []; } catch (e) { console.warn('[TM] preset.fonts failed:', e); }
         new Set(extra).forEach((fam) => {
           if (fam === main) return;
           const job = TM.fonts.ensure(fam, l.font.weight, l.text, opts.timeout);

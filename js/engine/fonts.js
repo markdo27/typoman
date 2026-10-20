@@ -94,6 +94,13 @@
     ['Shantell Sans', 'Script', 300, 800, null, { BNCE: [-100, 100, 0], INFM: [0, 100, 0], SPAC: [0, 100, 0] }],
   ];
 
+  // Families Google serves with true italics (checked against the css2 API: ital requests
+  // return 200 with italic faces). Italic draws through an instance whose faces are the italic
+  // files, so canvas font strings and every preset stay unchanged.
+  const ITALIC = new Set(['Inter Tight', 'Archivo', 'Anybody', 'Mona Sans', 'Saira', 'Montserrat', 'Rubik', 'Exo 2',
+    'Fraunces', 'Roboto Serif', 'Playfair Display', 'Bodoni Moda', 'DM Serif Display', 'Instrument Serif',
+    'JetBrains Mono', 'Space Mono', 'Shantell Sans']);
+
   const FALLBACK = { Serif: 'serif', Mono: 'monospace', Script: 'cursive' };
   const hasDOM = typeof document !== 'undefined';
   // Pinning opsz needs the FontFace variationSettings descriptor. Without it the family is
@@ -114,6 +121,7 @@
       weights: discrete || null,
       variable: !discrete && max > min,
       axes: Object.keys(ax).length ? ax : null,
+      italic: ITALIC.has(family),
       fallback: FALLBACK[cat] || 'sans-serif',
       custom: false,
     };
@@ -157,13 +165,21 @@
   function familyQuery(f) {
     f = f.base || f;
     const name = f.family.replace(/ /g, '+');
-    if (f.weights) return `${name}:wght@${f.weights.join(';')}`;
+    // Italic families ask for both styles: one tuple per style (ital 0 and 1), each listing
+    // every axis. The italic files only download when an italic instance draws.
+    const styles = f.italic ? [0, 1] : [null];
+    if (f.weights) {
+      return f.italic ? `${name}:ital,wght@${styles.flatMap((i) => f.weights.map((w) => i + ',' + w)).join(';')}` : `${name}:wght@${f.weights.join(';')}`;
+    }
     // css2 wants axis tags sorted alphabetically, registered (lowercase) before custom (uppercase).
-    const list = Object.entries(f.axes || {}).map(([tag, r]) => [tag, r[0], r[1]]);
-    if (f.max > f.min) list.push(['wght', f.min, f.max]);
+    const list = Object.entries(f.axes || {}).map(([tag, r]) => [tag, r[0] + '..' + r[1]]);
+    if (f.max > f.min) list.push(['wght', f.min + '..' + f.max]);
+    if (f.italic) list.push(['ital', null]);
     const custom = (tag) => (tag === tag.toUpperCase() ? 1 : 0);
     list.sort((a, b) => custom(a[0]) - custom(b[0]) || (a[0] < b[0] ? -1 : 1));
-    return list.length ? `${name}:${list.map((x) => x[0]).join(',')}@${list.map((x) => x[1] + '..' + x[2]).join(',')}` : name;
+    if (!list.length) return name;
+    const tuple = (i) => list.map((x) => (x[0] === 'ital' ? i : x[1])).join(',');
+    return `${name}:${list.map((x) => x[0]).join(',')}@${styles.map(tuple).join(';')}`;
   }
 
   function injectStylesheet(families) {
@@ -237,8 +253,9 @@
       if (tag === 'wdth' || tag === 'opsz') continue;
       const [lo, hi, def] = f.axes[tag];
       const want = axes && Number.isFinite(+axes[tag]) ? +axes[tag] : def;
+      // The grid is anchored at the default, so the default itself is never pinned slightly off.
       const grid = (hi - lo) / 200;
-      const v = +(lo + Math.round((TM.math.clamp(want, lo, hi) - lo) / grid) * grid).toFixed(3);
+      const v = +TM.math.clamp(def + Math.round((TM.math.clamp(want, lo, hi) - def) / grid) * grid, lo, hi).toFixed(3);
       if (Math.abs(v - def) > 1e-9) out.push([tag, v]);
     }
     return out;
@@ -246,18 +263,19 @@
 
   function resolve(font, designPx) {
     const f = font && byFamily.get(font.family);
-    if (!f || f.custom || !f.axes) return font ? font.family : '';
+    const ital = !!(f && font.italic && f.italic);
+    if (!f || f.custom || (!f.axes && !ital)) return font ? font.family : '';
     const wdth = widthFor(f, font.width);
     const opsz = opszFor(f, font.opsz, designPx);
     const custom = customFor(f, font.axes);
     // Nothing to pin (only custom axes, all at their defaults): the family itself draws the same.
-    if (wdth == null && opsz == null && !custom.length) return f.family;
-    const name = `${f.family} ~${wdth != null ? 'w' + wdth : ''}${opsz != null ? 'o' + opsz : ''}${custom.map(([t, v]) => '.' + t + v).join('')}`;
+    if (wdth == null && opsz == null && !custom.length && !ital) return f.family;
+    const name = `${f.family} ~${ital ? 'i' : ''}${wdth != null ? 'w' + wdth : ''}${opsz != null ? 'o' + opsz : ''}${custom.map(([t, v]) => '.' + t + v).join('')}`;
     const inst = instances.get(name);
     if (inst) inst.used = now();
     else {
       // `pins` (not `custom`, which marks uploaded fonts): the instance's pinned axis values.
-      instances.set(name, { ...f, family: name, base: f, instance: true, wdth, opsz, pins: custom, ready: null, faces: [], used: now() });
+      instances.set(name, { ...f, family: name, base: f, instance: true, ital, wdth, opsz, pins: custom, ready: null, faces: [], used: now() });
       ensure(name, font.weight);
     }
     // resolve() runs every frame, so it also does the (cheap, throttled) cleanup.
@@ -349,7 +367,10 @@
     if (inst.ready) return inst.ready;
     inst.ready = baseFaces(inst.base).then((blocks) => {
       for (const b of blocks) {
-        const d = { style: b.style || 'normal', weight: b.weight || '400', display: 'block' };
+        // An italic instance takes the italic files and registers them upright, so it draws
+        // italic under a plain font string; other instances take the upright files only.
+        if ((b.style === 'italic') !== !!inst.ital) continue;
+        const d = { style: 'normal', weight: b.weight || '400', display: 'block' };
         if (b.unicodeRange) d.unicodeRange = b.unicodeRange;
         if (inst.wdth != null) d.stretch = inst.wdth + '%';
         else if (b.stretch) d.stretch = b.stretch;
@@ -463,6 +484,8 @@
     opszFor: (family, opsz, designPx) => opszFor(get(family), opsz, designPx),
     /** Variable axes beyond weight by tag ({ wdth?: [min, max], opsz?: [min, max], XROT?: [min, max, def], … }), or null. */
     axes: (family) => { const f = get(family); return f && f.axes ? f.axes : null; },
+    /** True when Google serves the family (or an instance's base) with true italics. */
+    hasItalic: (family) => { const f = get(family); return !!(f && (f.base || f).italic); },
     /** A family's axes beyond weight as [{ tag, min, max, def }] (wdth default 100, opsz 'auto'). */
     axisList: (family) => {
       const f = get(family);

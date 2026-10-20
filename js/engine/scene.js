@@ -34,9 +34,11 @@
       params: {},
       // width: wdth % and opsz: 'auto' | number apply to families with those variable axes;
       // axes: { TAG: value } pins any other axis (slnt, XROT, YEAR, MORF, …) a family has.
-      font: { family: 'Anton', weight: 400, width: 100, opsz: 'auto', axes: {} },
+      // italic: the family's true italic where Google serves one (TM.fonts.get(f).italic).
+      font: { family: 'Anton', weight: 400, width: 100, opsz: 'auto', axes: {}, italic: false },
       // wrap: 'auto' re-wraps lines that would otherwise shrink to fit the frame; 'off' keeps them.
-      type: { size: 0.16, tracking: 0, leading: 0.95, align: 'center', case: 'upper', slant: 0, wrap: 'auto' },
+      // ligatures: draw the font's ligatures (fi, ffl, Th…) as one glyph (off past ±0.03 em tracking).
+      type: { size: 0.16, tracking: 0, leading: 0.95, align: 'center', case: 'upper', slant: 0, wrap: 'auto', ligatures: true },
       fill: { type: 'solid', color: '#ffffff', color2: '#00e5ff', angle: 90, palette: ['#ffffff', '#a3a2ff', '#00e5ff'] },
       stroke: { mode: 'none', width: 0.035, color: '#000000' },
       path: null,
@@ -220,6 +222,7 @@
         width: Math.round(num(s.font && s.font.width, 100, 25, 200)),
         opsz: opszOf(s.font && s.font.opsz),
         axes: cleanAxes(s.font && s.font.axes),
+        italic: !!(s.font && s.font.italic === true),
       },
       type: {
         size: num(ty.size, d.type.size, 0.01, 1.5),
@@ -229,6 +232,7 @@
         case: pick(ty.case, ['none', 'upper', 'lower', 'title'], d.type.case),
         slant: num(ty.slant, 0, -30, 30),
         wrap: pick(ty.wrap, ['auto', 'off'], 'auto'),
+        ligatures: ty.ligatures !== false,
       },
       fill: {
         type: pick(f.type, ['solid', 'gradient', 'palette'], d.fill.type),

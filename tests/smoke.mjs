@@ -204,9 +204,10 @@ const results = await page.evaluate(async () => {
   // native run (kern pairs AV, To, WA, LT). Round 2 found every kern applied one pair late.
   const kerning = await (async () => {
     const out = {};
-    for (const family of ['Inter Tight', 'Playfair Display']) {
-      await TM.fonts.ensure(family, 700, 'AVATAR To WAVY LT');
-      const L = TM.text.layout({ text: 'AVATAR To WAVY LT', family, weight: 700, sizePx: 120, tracking: 0, leading: 1, align: 'left', case: 'none' });
+    // Kerned pairs, plus ligatures (Playfair's ffi, fl): per-cluster drawing must match a run.
+    for (const [family, text] of [['Inter Tight', 'AVATAR To WAVY LT'], ['Playfair Display', 'AVATAR To WAVY LT'], ['Playfair Display', 'office fluffy staff']]) {
+      await TM.fonts.ensure(family, 700, text);
+      const L = TM.text.layout({ text, family, weight: 700, sizePx: 120, tracking: 0, leading: 1, align: 'left', case: 'none' });
       const Wd = Math.ceil(L.width) + 40, Hd = 180;
       // Kerning 'normal' as the renderer draws (it also kerns across word spaces, unlike 'auto').
       const draw = (fn) => { const c = document.createElement('canvas'); c.width = Wd; c.height = Hd; const g = c.getContext('2d'); g.font = L.font; g.fontKerning = 'normal'; g.fillStyle = '#fff'; fn(g); return g.getImageData(0, 0, Wd, Hd).data; };
@@ -215,9 +216,24 @@ const results = await page.evaluate(async () => {
       const native = draw((g) => g.fillText(L.lines[0].text, 20, 140));
       let diff = 0, ink = 0;
       for (let i = 3; i < glyphs.length; i += 4) { diff += Math.abs(glyphs[i] - native[i]); ink += native[i]; }
-      out[family] = ink ? diff / ink : 1;
+      out[family + (text.startsWith('office') ? ' ligatures' : '')] = ink ? diff / ink : 1;
     }
     return out;
+  })();
+
+  // True italics and drawn obliques: an italic instance loads and differs from upright; a
+  // forward slant goes onto Roboto Flex's slnt axis (10° of it) and only the rest is skewed.
+  const styles = await (async () => {
+    const it = TM.fonts.resolve({ family: 'Playfair Display', weight: 400, italic: true }, 100);
+    const loads = await TM.fonts.ensure(it, 400, 'Italic');
+    const c = document.createElement('canvas'); c.width = 400; c.height = 120; const g = c.getContext('2d');
+    const sig = (fam) => { g.clearRect(0, 0, 400, 120); g.font = TM.fonts.fontString(fam, 400, 80); g.fillText('Italic', 8, 90); const d = g.getImageData(0, 0, 400, 120).data; let h = 0; for (let i = 3; i < d.length; i += 4) h = (h * 31 + d[i]) | 0; return h; };
+    const sl = sceneFor('rise', (l) => { l.font.family = 'Roboto Flex'; l.type.slant = 14; });
+    const tl = TM.Renderer.typeset(sl.layers[0], sl);
+    return {
+      italic: loads && sig(it) !== sig('Playfair Display') && TM.fonts.resolve({ family: 'Anton', italic: true }, 100) === 'Anton',
+      slnt: tl.font.autoSlnt === 10 && tl.font.axes.slnt === -10 && /slnt-10/.test(tl.font.family),
+    };
   })();
 
   // Every catalogue family must load: a bad axis declaration makes Google answer 400 and the
@@ -269,7 +285,7 @@ const results = await page.evaluate(async () => {
   const close = (a, b) => (typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) < 1e-3
     : a && typeof a === 'object' ? b && typeof b === 'object' && Object.keys({ ...a, ...b }).every((k) => close(a[k], b[k])) : a === b);
   const roundTrip = close(s0, s1);
-  return { presets: out, fuzzOk, roundTrip, lineBands, timing, axes, fontLoads, kerning, safety };
+  return { presets: out, fuzzOk, roundTrip, lineBands, timing, axes, fontLoads, kerning, safety, styles };
 });
 
 await browser.close();
@@ -299,8 +315,11 @@ if (!tmg.delayShifts || !tmg.onceHolds || !tmg.onceWaits) fails.push('layer timi
 if (!tmg.lookApplies) fails.push('applyLook failed');
 const kern = Object.entries(results.kerning);
 const kernOk = kern.every(([, v]) => v < 0.03);
-console.log(`kerning (per-glyph vs native run): ${kernOk ? 'ok' : 'FAIL'} (${kern.map(([f, v]) => f + ' ' + (v * 100).toFixed(2) + '%').join(' · ')} of ink differs)`);
+console.log(`kerning + ligatures (per-glyph vs native run): ${kernOk ? 'ok' : 'FAIL'} (${kern.map(([f, v]) => f + ' ' + (v * 100).toFixed(2) + '%').join(' · ')} of ink differs)`);
 if (!kernOk) fails.push('per-glyph layout loses kerning');
+const st = results.styles;
+console.log(`italics + obliques: true italic ${st.italic ? 'ok' : 'FAIL'} · slant onto slnt axis ${st.slnt ? 'ok' : 'FAIL'}`);
+if (!st.italic || !st.slnt) fails.push('italic instances or slnt slant broken');
 const sf = results.safety;
 console.log(`photosensitivity check: ${sf.ok ? 'ok' : 'FAIL'} (2 Hz strobe ${sf.hz2}/s · 4 Hz ${sf.hz4}/s · fast bar ${sf.bar}/s)`);
 if (!sf.ok) fails.push('flash detector miscounts (TM.Safety)');
