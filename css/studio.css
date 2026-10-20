@@ -324,6 +324,9 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .artboard.flash { animation: flash 0.6s var(--ease-out); }
 @keyframes flash { 0% { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.09), 0 0 0 0 rgba(140, 152, 255, 0.6), 0 30px 80px -24px rgba(0, 0, 0, 0.9); } 100% { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.09), 0 0 0 14px rgba(140, 152, 255, 0), 0 30px 80px -24px rgba(0, 0, 0, 0.9); } }
 .path-overlay { position: absolute; inset: 0; overflow: visible; pointer-events: none; z-index: 3; }
+/* The preview simplified heavy effects this frame (exports never do); a paused frame redraws at full quality. */
+.draft-badge { position: absolute; top: 8px; right: 8px; z-index: 4; padding: 3px 8px; border-radius: 99px; background: rgba(12, 12, 15, 0.78); border: 1px solid rgba(255, 255, 255, 0.16); color: #e6e6ec; font: 600 10.5px/1.4 var(--ui); letter-spacing: 0.02em; backdrop-filter: blur(4px); cursor: help; user-select: none; }
+.editing-path .draft-badge, body.clean .draft-badge { display: none; }
 .editing-path .path-overlay { pointer-events: auto; }
 .editing-path .artboard { box-shadow: 0 0 0 1px var(--accent-hi), 0 30px 80px -24px rgba(0, 0, 0, 0.9); }
 /* Selection: two-tone lines read on light and dark artwork alike. */

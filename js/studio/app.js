@@ -239,9 +239,16 @@
       this.last = now;
       const ui = this.store.ui;
       if (ui.playing) ui.time = TM.math.mod(ui.time + dt, this.store.scene.duration);
+      if (!ui.playing && this._wasPlaying) this._stillAt = now + 450;
+      this._wasPlaying = ui.playing;
       if (ui.playing || this.stage.dirty) {
         this.stage.render(ui.time);
         this.stage.dirty = false;
+        this._stillAt = ui.playing ? 0 : now + 450;
+      } else if (this._stillAt && now >= this._stillAt) {
+        // Paused for a moment on a simplified preview frame: show it once at export quality.
+        this._stillAt = 0;
+        this.stage.renderStill();
       }
       this.transport.tick();
       this.layers.tick();
