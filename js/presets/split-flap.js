@@ -10,6 +10,9 @@
  *    edges) and the reel overshoots its letter, then settles back.
  *  - Cells get their own spacing, so the board is re-laid out from the text layout (keeping
  *    each glyph's advance and the line's kerning) and fitted to the frame.
+ *  - Right-to-left lines come laid out as whole words, so each word gets one cell (Arabic boards
+ *    use word modules too). Padding accumulates in visual order, and every letter of a word cell
+ *    rolls through its own script's alphabet, all in step: a Hebrew cell counts up in Hebrew.
  */
 (function (TM) {
   'use strict';
@@ -22,6 +25,42 @@
   const TILE_OUT = 0.16;  // share of the out-window spent folding it away
   const SETTLE = 0.24;    // share of the in-window spent settling after the last flip
   const DRUM_STEP = 0.95; // slot style: angular pitch between characters on the drum (rad)
+
+  // ── word cells (lines with right-to-left script) ──
+  const RTL = /[֐-ࣿיִ-﷿ﹰ-﻿]/u; // the ranges the layout marks line.rtl by
+  const HEBREW = 'אבגדהוזחטיכלמנסעפצקרשת';
+  const ALPHABETS = ['ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz', '0123456789', HEBREW, 'ابتثجحخدذرزسشصضطظعغفقكلمنهوي'];
+  // Letter variants that roll from their base letter: Hebrew final forms, Arabic hamza/alef forms.
+  const BASE = { 'ך': 'כ', 'ם': 'מ', 'ן': 'נ', 'ף': 'פ', 'ץ': 'צ', 'أ': 'ا', 'إ': 'ا', 'آ': 'ا', 'ٱ': 'ا', 'ء': 'ا', 'ة': 'ه', 'ى': 'ي', 'ئ': 'ي', 'ؤ': 'و' };
+  const FINAL = { 'כ': 'ך', 'מ': 'ם', 'נ': 'ן', 'פ': 'ף', 'צ': 'ץ' }; // Hebrew letters ending a word take their final form
+  const isWordCell = (ch) => RTL.test(ch) || TM.text.graphemes(ch).length > 1;
+
+  /**
+   * The strings a word cell rolls through: step(d) moves every letter d places along its own
+   * alphabet (the drum counting up, all letters in step), random(salt) draws random letters.
+   * Arabic is drawn as one string, so the rolled words join like real ones.
+   */
+  function wordDrum(word, rand) {
+    const parts = TM.text.graphemes(word);
+    const slots = parts.map((c) => {
+      const first = Array.from(c)[0];
+      const b = BASE[first] || first;
+      for (const set of ALPHABETS) { const i = set.indexOf(b); if (i >= 0) return { set, i }; }
+      return null; // punctuation, marks, other scripts: they stay put
+    });
+    let last = -1;
+    slots.forEach((s, k) => { if (s) last = k; });
+    const make = (pick) => parts.map((c, k) => {
+      const s = slots[k];
+      if (!s) return c;
+      const ch = s.set[pick(s, k)];
+      return s.set === HEBREW && k === last && FINAL[ch] ? FINAL[ch] : ch;
+    }).join('');
+    return {
+      step: (d) => make((s) => mod(s.i + d, s.set.length)),
+      random: (salt) => make((s, k) => Math.floor(rand(k, salt) * s.set.length)),
+    };
+  }
 
   TM.registerPreset({
     id: 'split-flap',
@@ -61,8 +100,10 @@
       // ── board layout: cells add padding around every glyph (spaces included) ──
       // Glyph j of a line moves right by (2j + 1)·padX, a uniform extra spacing, so the advances
       // and kerning of the text layout survive; adjacent cells are separated by exactly `gap`.
+      // j counts in visual order (left to right), so right-to-left lines keep even gaps too.
       const lines = L.lines.map((line) => {
-        const lower = line.glyphs.some((gi) => { const c = L.glyphs[gi].ch; return c !== c.toUpperCase(); });
+        // Lowercase, Hebrew and Arabic have descenders: give the cells room below the baseline.
+        const lower = RTL.test(line.text) || line.glyphs.some((gi) => { const c = L.glyphs[gi].ch; return c !== c.toUpperCase(); });
         const desc = lower ? L.descent * 0.8 : 0;
         const n = line.glyphs.length;
         const width = n ? line.width + n * 2 * padX + track - gap : 0;
@@ -80,7 +121,8 @@
         const x0 = align === 'left' ? -boardW / 2 : align === 'right' ? boardW / 2 - bl.width : -bl.width / 2;
         const mid = (li - (lines.length - 1) / 2) * pitch;
         const baseline = mid + capH / 2 - bl.desc / 2;
-        line.glyphs.forEach((gi, j) => {
+        const order = line.rtl ? line.glyphs.slice().sort((a, b) => L.glyphs[a].x - L.glyphs[b].x) : line.glyphs;
+        order.forEach((gi, j) => {
           const g = L.glyphs[gi];
           if (g.isSpace) return;
           const cx = x0 + (g.x - line.x) + (2 * j + 1) * padX + track / 2 - gap / 2 + g.w / 2;
@@ -98,17 +140,22 @@
       L.glyphs.forEach((g) => {
         const c = cells[g.i];
         if (!c) return;
-        const drum = g.ch !== g.ch.toUpperCase() ? DRUM_L : DRUM_U;
-        const idx = drum.indexOf(g.ch);
-        const counted = P.drum && idx > 0;
-        const rnd = (salt) => drum[1 + Math.floor(f.rand(g.i, salt) * (drum.length - 1))];
         const n = Math.max(2, Math.round(P.flips * (0.8 + 0.4 * f.rand(g.i, 61))));
-        const seqIn = [' '];
-        for (let s = 1; s < n; s++) seqIn.push(counted ? drum[mod(idx - (n - s), drum.length)] : rnd(70 + s));
-        seqIn.push(g.ch);
         const m = Math.max(2, Math.round(n * 0.55));
-        const seqOut = [g.ch];
-        for (let s = 1; s < m; s++) seqOut.push(counted ? drum[mod(idx + s, drum.length)] : rnd(110 + s));
+        const seqIn = [' '], seqOut = [g.ch];
+        if (isWordCell(g.ch)) {
+          const wd = wordDrum(g.ch, (j, salt) => f.rand(g.i * 131 + j, salt));
+          for (let s = 1; s < n; s++) seqIn.push(P.drum ? wd.step(s - n) : wd.random(70 + s));
+          for (let s = 1; s < m; s++) seqOut.push(P.drum ? wd.step(s) : wd.random(110 + s));
+        } else {
+          const drum = g.ch !== g.ch.toUpperCase() ? DRUM_L : DRUM_U;
+          const idx = drum.indexOf(g.ch);
+          const counted = P.drum && idx > 0;
+          const rnd = (salt) => drum[1 + Math.floor(f.rand(g.i, salt) * (drum.length - 1))];
+          for (let s = 1; s < n; s++) seqIn.push(counted ? drum[mod(idx - (n - s), drum.length)] : rnd(70 + s));
+          for (let s = 1; s < m; s++) seqOut.push(counted ? drum[mod(idx + s, drum.length)] : rnd(110 + s));
+        }
+        seqIn.push(g.ch);
         seqOut.push(' ');
         // Horizontal fit of each rolling character inside the cell.
         const inner = (c.right - c.left) / k - padX * 0.6;
