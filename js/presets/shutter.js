@@ -98,7 +98,7 @@
       try {
         f.drawInto(pctx, () => {
           for (const g of L.glyphs) f.drawGlyph(g, { x: f.cx + g.cx - x0, y: f.cy + g.cy - y0 });
-        });
+        }, { x: x0, y: y0 }); // the plate's pixel (0, 0) is frame (x0, y0): gradients stay put
       } finally { f.alpha = alpha; }
 
       // Each slat: its strip of the plate, squeezed by cos θ about its centre line.

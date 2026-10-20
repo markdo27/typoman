@@ -196,7 +196,7 @@
             plate(split, vs, (g) => channels(f.colorOf(g))[1]);
             bctx.globalCompositeOperation = 'source-over';
           }
-        });
+        }, { x: ox, y: oy }); // the buffer's pixel (0, 0) is frame (ox, oy): gradients stay put
       } finally {
         f.alpha = mainAlpha;
       }

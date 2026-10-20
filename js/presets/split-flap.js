@@ -181,7 +181,7 @@
       const slot = P.style === 'slot';
       const build = P.tiles === 'build';
       const tiles = P.tiles !== 'off' && P.tileAlpha > 0;
-      const tileAlpha = P.tileAlpha * (f.layer.fill.type === 'gradient' ? 0.3 : 1);
+      const tileAlpha = P.tileAlpha; // tiles keep their own colour and opacity under any fill
       const rollStart = build ? TILE_IN : 0, rollEnd = 1 - SETTLE;
       const outEnd = build ? 1 - TILE_OUT : 1;
       const ov = slot ? P.settle * 0.4 : 0; // slot reels overshoot their letter by this many characters
