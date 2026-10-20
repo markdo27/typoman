@@ -111,6 +111,12 @@ fieldset.tm-field::after { content: ""; display: table; clear: both; }
 .tm-info.bad { border-color: var(--d-hot); }
 .tm-info p { margin: 0; }
 .tm-info .btn { align-self: flex-start; margin-top: 4px; }
+/* flash check: checking (spinner), passed (quiet), warning (.warn) */
+.tm-info.tm-flash.checking .ttl, .tm-info.tm-flash.ok .ttl { font-weight: 600; }
+.tm-info.tm-flash.ok .ttl::before { content: "✓"; color: var(--d-ok); font-weight: 800; }
+.tm-spin { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--d-line2); border-top-color: var(--d-accent-hi); animation: tm-spin .8s linear infinite; align-self: center; }
+@keyframes tm-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .tm-spin { animation: none; } }
 
 /* footer: progress, result, actions */
 .tm-actions { display: flex; align-items: center; gap: 12px; justify-content: flex-end; flex-wrap: wrap; }

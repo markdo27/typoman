@@ -44,8 +44,9 @@
     // Preview state: a counter that forces a fresh player (autoplay / loop changes), and the
     // real HTML file (a blob URL) when the HTML tab previews uploaded fonts.
     let reloads = 0;
+    let flashJob = null; // aborts this opening's flash check when the dialog closes
     const file = { key: '', url: null, size: 0, token: 0, timer: 0 };
-    const m = Studio.modal({ id: 'tm-share', title: 'Embed & share', cls: 'tm-share', onClose: () => dropFile() });
+    const m = Studio.modal({ id: 'tm-share', title: 'Embed & share', cls: 'tm-share', onClose: () => { dropFile(); if (flashJob) flashJob.abort(); flashJob = null; flashBox.dataset.key = ''; } });
 
     // ── preview (local embed.html, or the HTML file itself) ──
     const frame = h('iframe', { title: 'Embed preview', loading: 'eager', style: 'color-scheme: normal' });
@@ -201,7 +202,7 @@
       const pb = Studio.publicBase();
       baseNote.textContent = pb.differs ? `Codes and links point to ${pb.base}, because this studio is running locally (${new URL(pb.local).host || 'file'}). The preview uses your local copy.` : `Codes and links point to ${pb.base}.`;
       baseNote.hidden = tab === 'html'; // the file is self-contained: it points nowhere
-      if (Studio.flashNote) Studio.flashNote(flashBox, s, 'Consider slowing it before it goes on a page: WCAG 2.3.1 is a Level A requirement for web content.');
+      if (Studio.flashNote) Studio.flashNote(flashBox, s, 'Consider slowing it before it goes on a page: WCAG 2.3.1 is a Level A requirement for web content.', flashJob && flashJob.signal);
       const custom = uploadedFonts(s);
       fontNote.hidden = !custom.length;
       if (!custom.length) return;
@@ -295,6 +296,7 @@
 
     return {
       async open() {
+        if (!flashJob) flashJob = new AbortController();
         code = await TM.Scene.encode(store.scene);
         reloads++; // every opening starts the preview fresh
         select(tab);

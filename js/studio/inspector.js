@@ -20,15 +20,18 @@
   };
 
   // ───────────────────────────── photosensitivity ─────────────────────────────
-  // Presets that can flash expose an optional preset.flashes(layer, scene): the most large-area
-  // flashes per second for the layer's current params, 0 if none. Above 3 a second (WCAG 2.3.1,
-  // ITU-R BT.1702) the studio warns: in the Motion panel, and in the export and embed dialogs.
-  Studio.FLASH_LIMIT = 3;
+  // TM.Safety.flashes(scene) is the source of truth: it renders the loop small and counts flashes
+  // the way WCAG 2.3.1 defines them (above 3 a second fails). Studio.safety runs it for the
+  // studio: one check at a time, results cached by scene JSON, and a check of a newer scene
+  // aborts an older one. The Motion panel asks in the background once edits settle; the export
+  // and embed dialogs ask when they open. A preset's own flashes(layer, scene) is optional and
+  // only a first guess while the real check is pending (or when TM.Safety isn't loaded).
+  Studio.FLASH_LIMIT = (TM.Safety && TM.Safety.LIMIT) || 3;
   /**
-   * Flashes per second of a visible layer, 0 when its preset can't tell. The method is asked
-   * for one pass at the scene's pace (cycles 1) and the result scaled by the layer's cycles:
-   * all motion runs on pass progress, so ×2 cycles flash twice as fast, whether or not the
-   * preset's own method counts cycles.
+   * Fast path: flashes per second of a visible layer by its preset's own estimate, 0 when it
+   * can't tell. The method is asked for one pass at the scene's pace (cycles 1) and the result
+   * scaled by the layer's cycles: all motion runs on pass progress, so ×2 cycles flash twice as
+   * fast, whether or not the preset's own method counts cycles.
    */
   Studio.flashRate = function (layer, scene) {
     const p = layer && TM.getPreset(layer.preset);
@@ -42,6 +45,151 @@
   /** Visible layers above the limit: [{ index, layer, rate }]. */
   Studio.flashRisks = (scene) => scene.layers.map((layer, index) => ({ index, layer, rate: Studio.flashRate(layer, scene) })).filter((x) => x.rate > Studio.FLASH_LIMIT);
   Studio.flashText = (rate) => 'about ' + (Math.round(rate * 10) / 10) + ' times a second';
+
+  const abortError = () => new DOMException('Flash check aborted', 'AbortError');
+  const keys = new WeakMap(); // scene object → cache key (store scenes are replaced, never mutated)
+  const listeners = new Set();
+  /**
+   * The studio's photosensitivity checks, on top of TM.Safety.flashes.
+   *   check(scene, { signal })  → Promise of { ok, flashes, red, worstAt, frames, limit }, or null
+   *                               without TM.Safety; rejects with an AbortError when aborted
+   *   cached(scene)             the result for exactly this scene, or null
+   *   latest                    { key, result } of the last finished check (any scene)
+   *   pending                   true while the background check for the current scene waits
+   *   watch(store), onChange(fn) background checks ~1.5 s after the last edit; fn hears results
+   */
+  const safety = {
+    available: () => !!(TM.Safety && typeof TM.Safety.flashes === 'function'),
+    latest: null,
+    pending: false,
+    _cache: new Map(),
+    _run: null,
+    keyOf(scene) {
+      let k = keys.get(scene);
+      if (k == null) { k = JSON.stringify(Object.assign({}, scene, { name: '' })); keys.set(scene, k); }
+      return k;
+    },
+    cached(scene) {
+      const k = this.keyOf(scene);
+      const hit = this._cache.get(k);
+      if (!hit) return null;
+      this._cache.delete(k); // most recently used last
+      this._cache.set(k, hit);
+      return hit;
+    },
+    _remember(key, result) {
+      this._cache.set(key, result);
+      while (this._cache.size > 32) this._cache.delete(this._cache.keys().next().value);
+      this.latest = { key, result };
+    },
+    check(scene, opts = {}) {
+      if (!this.available()) return Promise.resolve(null);
+      const hit = this.cached(scene);
+      if (hit) return Promise.resolve(hit);
+      const signal = opts.signal;
+      if (signal && signal.aborted) return Promise.reject(abortError());
+      const key = this.keyOf(scene);
+      let run = this._run;
+      if (!run || run.key !== key) {
+        if (run) run.ctrl.abort(); // a newer scene: that check is stale
+        const ctrl = new AbortController();
+        const snap = TM.Scene.clone(scene);
+        run = this._run = { key, ctrl, users: 0 };
+        run.promise = (async () => {
+          await TM.prepare(snap); // fonts first, as an export would draw them
+          if (ctrl.signal.aborted) throw abortError();
+          const result = await TM.Safety.flashes(snap, { signal: ctrl.signal });
+          this._remember(key, result);
+          return result;
+        })();
+        const done = () => { if (this._run === run) this._run = null; };
+        run.promise.then(done, done);
+      }
+      const mine = run;
+      mine.users++;
+      return new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = (fn, v) => {
+          if (settled) return;
+          settled = true;
+          mine.users--;
+          if (signal) signal.removeEventListener('abort', onAbort);
+          fn(v);
+        };
+        const onAbort = () => {
+          finish(reject, abortError());
+          // Nobody else waiting: stop rendering frames nobody will read.
+          if (mine.users <= 0 && this._run === mine) { mine.ctrl.abort(); this._run = null; }
+        };
+        if (signal) signal.addEventListener('abort', onAbort);
+        mine.promise.then((r) => finish(resolve, r), (e) => finish(reject, e));
+      });
+    },
+    onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+    _emit() { listeners.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } }); },
+    /**
+     * Background checks of the store's scene: ~1.5 s after the last edit (sooner at start), in an
+     * idle moment, never while the tab is hidden. Each edit aborts the check of the scene before.
+     */
+    watch(store) {
+      if (this._watched || !this.available()) return;
+      this._watched = store;
+      let timer = 0, idle = 0, ctrl = null;
+      const stop = () => {
+        clearTimeout(timer);
+        if (idle && window.cancelIdleCallback) window.cancelIdleCallback(idle);
+        idle = 0;
+        if (ctrl) { ctrl.abort(); ctrl = null; }
+      };
+      const schedule = (ms) => {
+        stop();
+        this.pending = !this.cached(store.scene);
+        this._emit();
+        if (this.pending) timer = setTimeout(start, ms);
+      };
+      const start = () => {
+        if (document.hidden) return; // picked up again on visibilitychange
+        const run = () => {
+          idle = 0;
+          const scene = store.scene;
+          const mine = (ctrl = new AbortController());
+          this.check(scene, { signal: mine.signal }).then(() => {
+            if (ctrl !== mine) return;
+            ctrl = null;
+            this.pending = false;
+            this._emit();
+          }, (e) => {
+            if (ctrl !== mine || (e && e.name === 'AbortError')) return;
+            ctrl = null;
+            console.warn('[studio] flash check failed', e);
+            this.pending = false;
+            this._emit();
+          });
+        };
+        if (window.requestIdleCallback) idle = window.requestIdleCallback(run, { timeout: 1000 });
+        else run();
+      };
+      store.on('change', () => schedule(1500));
+      document.addEventListener('visibilitychange', () => { if (!document.hidden && this.pending && !ctrl && !idle) schedule(400); });
+      schedule(1200);
+    },
+  };
+  Studio.safety = safety;
+
+  const secs = (t) => (Math.round(t * 10) / 10).toFixed(1) + ' s';
+  /**
+   * Words for a failing TM.Safety result: { title, when } — what flashes how often, and when the
+   * worst second starts ("from 2.5 s").
+   */
+  Studio.flashWords = function (res) {
+    const L = res.limit || Studio.FLASH_LIMIT;
+    const n = (v) => String(Math.round(v * 10) / 10);
+    const gen = res.flashes > L, red = res.red > L;
+    const title = gen && red ? 'Flashes about ' + n(res.flashes) + ' times a second, red ' + n(res.red)
+      : red ? 'Red flashes about ' + n(res.red) + ' times a second'
+        : 'Flashes about ' + n(res.flashes) + ' times a second';
+    return { title, when: 'from ' + secs(res.worstAt || 0) };
+  };
 
   // Helpers binding a control to a property path on the selected layer / scene.
   function getIn(obj, path) {
@@ -209,20 +357,40 @@
             browse));
           if (preset.description) body.append(h('p', { class: 'hint' }, preset.description));
         }
-        // Photosensitivity: a clear, non-blocking warning right under the preset.
+        // Photosensitivity: a clear, non-blocking warning right under the preset. TM.Safety checks
+        // the whole scene in the background once edits settle (Studio.safety.watch); until it
+        // has, the last warning stays up marked "Rechecking…", or a preset's own estimate shows.
         const flash = h('div', { class: 'flash-warn', role: 'note', hidden: true });
-        let flashShown = -1;
+        let flashShown = '';
         const syncFlash = () => {
-          const rate = Studio.flashRate(store.layer, store.scene);
-          const on = rate > Studio.FLASH_LIMIT;
+          const S = Studio.safety;
+          const exact = S.available() ? S.cached(store.scene) : null;
+          let res = exact, stale = false, guess = 0;
+          if (!exact && S.available() && S.latest && !S.latest.result.ok) { res = S.latest.result; stale = true; }
+          if (!res) {
+            const risks = Studio.flashRisks(store.scene);
+            guess = risks.reduce((m, r) => Math.max(m, r.rate), 0);
+          }
+          const on = (res && !res.ok) || guess > 0;
           flash.hidden = !on;
-          if (!on || Math.abs(rate - flashShown) < 0.05) return;
-          flashShown = rate;
+          flash.classList.toggle('stale', stale);
+          if (!on) { flashShown = ''; return; }
+          const key = res ? [res.flashes, res.red, res.worstAt, stale].join('|') : 'guess' + guess.toFixed(1);
+          if (key === flashShown) return;
+          flashShown = key;
+          const words = res ? Studio.flashWords(res) : { title: 'Flashes ' + Studio.flashText(guess), when: '' };
+          const go = res ? h('button', { type: 'button', class: 'link-btn', 'data-tip': 'Move the playhead to the worst second',
+            onclick: () => store.setUI({ time: Math.min(res.worstAt || 0, store.scene.duration - 1e-3) }) }, 'Show me') : null;
+          const several = store.scene.layers.filter((l) => l.visible !== false).length > 1;
           flash.replaceChildren(UI.icon('warning'), h('div', null,
-            h('b', null, 'Flashes ' + Studio.flashText(rate)),
-            h('p', null, 'Rapid flashing can trigger seizures in people with photosensitive epilepsy. WCAG 2.3.1 allows at most 3 flashes a second: slow it down, soften the flashes or lengthen the loop before you publish.')));
+            h('b', null, words.title),
+            h('p', null, (res ? 'Worst in the second ' + words.when + (several ? ', all layers together' : '') + '. ' : '') +
+              'Rapid flashing can trigger seizures in people with photosensitive epilepsy. WCAG 2.3.1 allows at most 3 flashes a second: slow it down, soften the flashes or lengthen the loop before you publish.'),
+            h('div', { class: 'fw-foot' }, go, stale || !res ? h('span', { class: 'fw-state' }, S.available() ? 'Rechecking…' : '') : null)));
         };
         body.append(flash);
+        Studio.safety.watch(store);
+        const offFlash = Studio.safety.onChange(() => syncFlash());
         // Stack's width-axis fill needs a font with a width axis to reach the edges.
         const WIDTH_FONTS = ['Roboto Flex', 'Science Gothic', 'Anybody'].filter((f) => TM.fonts.has(f));
         let axisTip = null, axisTipFor = null;
@@ -305,7 +473,7 @@
           syncAxisTip();
         };
         update();
-        return { update };
+        return { update, destroy: offFlash };
       },
     },
     {
