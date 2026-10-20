@@ -8,11 +8,12 @@
  *  - Framings are seeded per beat and clamped to stay inside the frame unless the beat is a
  *    deliberate "crop" (oversized type running off the edges).
  *  - The loop starts half a beat in, so the seam falls inside a beat and stays continuous.
- *  - Photosensitivity: invert flashes, stutters and big cuts are luminance flashes. Unless
- *    "Allow fast flashing" is on, the beat plan holds them to at most three flashes in any one
- *    second (WCAG 2.3.1, ITU-R BT.1702). Beats are planned in order; an event that would break
- *    the limit loses its stutter, then its invert, and a cut that still would is held on the
- *    previous framing. flashes(layer, scene) reports the planned rate (MotionKit.FLASH rules).
+ *  - Photosensitivity: invert flashes, stutters and cuts of big type are flashes in some 10°
+ *    field (as TM.Safety counts them). Unless "Allow fast strobe" is on, the beat plan keeps
+ *    them to two and a half a second at most (WCAG 2.3.1 allows three): cuts first, then
+ *    inverts, then stutters, each kept only where the whole loop still fits. A cut that does not
+ *    fit holds the previous framing, and held beats play as one shot (one punch, one push).
+ *    flashes(layer, scene) reports the planned rate (MotionKit.FLASH rules).
  */
 (function (TM) {
   'use strict';
@@ -45,7 +46,7 @@
       TM.P.range('stutter', 'Stutter', 0, 1, 0.01, 0.35, { group: 'Cuts' }),
       TM.P.range('punch', 'Punch', 0, 1, 0.01, 0.6, { group: 'Cuts' }),
       TM.P.select('colors', 'Colour', [['text', 'Text colour'], ['palette', 'Cycle palette']], 'text', { group: 'Cuts' }),
-      TM.P.toggle('fastFlash', 'Allow fast flashing', false, { group: 'Safety', hint: 'Off keeps flashes to 3 per second or fewer (WCAG 2.3.1). Faster flashing can trigger seizures in people with photosensitive epilepsy' }),
+      TM.P.toggle('fastFlash', 'Allow fast strobe (photosensitivity risk)', false, { group: 'Safety', hint: 'Off (the default) keeps the strobe to 3 flashes a second or fewer (WCAG 2.3.1) by holding cuts, inverts and stutters that come too fast. On plays every beat as set: faster flashing can trigger seizures in people with photosensitive epilepsy' }),
     ],
 
     setup(f) {
@@ -62,9 +63,11 @@
       const beatSec = f.dur / B;
       const beat = planFor(C, f).beats[b], F = beat.F;
 
-      // Beat envelope: punch, stutter, invert flash.
-      const punch = 1 + P.punch * 0.16 * Math.exp(-local * 9) * (1 - smoothstep(0.3, 0.6, local));
-      const S = F.S * (punch * (1 + 0.035 * local)); // a slow push through the beat
+      // Beat envelope: punch, stutter, invert flash. Beats held on one framing (the flash guard)
+      // are one long shot: a single punch, and the slow push runs through all of them.
+      const run = beat.n > 1 ? (beat.k + local) / beat.n : local;
+      const punch = beat.k ? 1 : 1 + P.punch * 0.16 * Math.exp(-local * 9) * (1 - smoothstep(0.3, 0.6, local));
+      const S = F.S * (punch * (1 + 0.035 * run)); // a slow push through the beat
       // 16th-note strobe: the off-flashes leave a faint ghost, so a still frame is never empty.
       const ghost = beat.st && local < 0.5 && Math.floor(local * 8) % 2 === 1 ? GHOST : 1;
       const flashLen = Math.min(0.09, beatSec * 0.35) / beatSec;
@@ -177,9 +180,9 @@
     const own = [];
     for (let b = 0; b < B; b++) own.push(framing(b, P, units, all, e));
 
-    // Coverage: a framing's ink as a share of the frame (the unit's ink scaled, clipped to the
-    // frame), grown by the layer's effects and by the punch's peak scale.
-    const frameA = e.W * e.H, capH = e.L.capH;
+    // Coverage: the most of one 10° field a framing's ink covers (the unit's ink, grown by the
+    // layer's effects and by the punch's peak scale, spread over its box clipped to the frame).
+    const capH = e.L.capH;
     const grow = e.spread * Math.pow(1 + 0.16 * P.punch, 2);
     const inks = new Map();
     const inkOf = (u) => {
@@ -196,25 +199,23 @@
       const uh = (F.u.all ? e.L.height : capH) * 1.15;
       const w = (F.quarter ? uh : F.u.w) * F.S, h = (F.quarter ? F.u.w : uh) * F.S;
       const x = e.cx + F.dx, y = e.cy + F.dy;
-      return { x0: x - w / 2, x1: x + w / 2, y0: y - h / 2, y1: y + h / 2, area: w * h };
+      return { x0: x - w / 2, x1: x + w / 2, y0: y - h / 2, y1: y + h / 2, w, h };
     };
-    const clipArea = (a, b) => Math.max(0, Math.min(a.x1, b.x1, e.W) - Math.max(a.x0, b.x0, 0)) * Math.max(0, Math.min(a.y1, b.y1, e.H) - Math.max(a.y0, b.y0, 0));
     const covOf = (F) => {
       const bx = boxOf(F);
-      return bx.area > 0 ? Math.min(1, (inkOf(F.u) * F.S * F.S * (clipArea(bx, bx) / bx.area)) / frameA) : 0;
+      const cw = Math.max(0, Math.min(bx.x1, e.W) - Math.max(bx.x0, 0)), ch = Math.max(0, Math.min(bx.y1, e.H) - Math.max(bx.y0, 0));
+      const ink = bx.w * bx.h > 0 ? inkOf(F.u) * F.S * F.S * ((cw * ch) / (bx.w * bx.h)) : 0;
+      return K.fieldShare(ink, cw, ch, e.W, e.H);
     };
     const colOf = (F) => (P.colors === 'palette' ? [e.pal[F.b % e.pal.length]] : e.inks);
-    // Is the cut F1 → F2 a large transition? The old ink vanishes and the new appears, each in
-    // one direction, except where they overlap (identical framings overlap fully; otherwise the
-    // shared ink is estimated as density × density × box overlap), where only the colour changes.
+    // Is the cut F1 → F2 a large transition? Unless the framing stays put (then only the colour
+    // can change), the old ink vanishes and the new appears somewhere in the frame.
     const cutLarge = (F1, F2) => {
       if (F1 === F2) return false;
-      const a = boxOf(F1), b = boxOf(F2), c1 = covOf(F1), c2 = covOf(F2);
+      const c1 = covOf(F1), c2 = covOf(F2);
       const same = F1.u === F2.u && Math.abs(F1.S / F2.S - 1) < 0.01 && Math.abs(F1.dx - F2.dx) < 1 && Math.abs(F1.dy - F2.dy) < 1 && Math.abs(F1.rot - F2.rot) < 0.01;
-      const d1 = a.area > 0 ? Math.min(1, (inkOf(F1.u) * F1.S * F1.S) / a.area) : 0;
-      const d2 = b.area > 0 ? Math.min(1, (inkOf(F2.u) * F2.S * F2.S) / b.area) : 0;
-      const ov = same ? Math.min(c1, c2) : Math.min(c1, c2, (clipArea(a, b) * d1 * d2) / frameA);
-      return K.swing(Math.max(c1, c2) - ov, colOf(F1).concat(colOf(F2)), e.backs) || K.swing(ov, colOf(F1), colOf(F2));
+      if (same) return K.swing(Math.min(c1, c2), colOf(F1), colOf(F2));
+      return K.swing(Math.max(c1, c2), colOf(F1).concat(colOf(F2)), e.backs);
     };
     const fade = (cols, alpha) => [].concat(...e.backs.map((bk) => cols.map((c) => TM.color.mix(bk, c, alpha))));
 
@@ -240,11 +241,15 @@
       let was = 'norm'; // every beat ends in its normal state (inverts and stutters finish by mid-beat)
       for (const u of marks) {
         const now = state(u + 1e-9), t = t0 + u * real;
-        if (u === 0 && now === 'norm') {
-          if (cutLarge(prevF, d.F)) push(out, t, 1, c, e.backs); // the cut (already judged large)
-        } else if (now !== was) {
+        // The cut (already judged large); a beat that opens on an invert or a ghost cuts too.
+        if (u === 0 && cutLarge(prevF, d.F)) {
+          push(out, t, 1, c, e.backs);
+          // On short beats the punch's recoil moves big edges fast enough to count as well.
+          if (P.punch > 0.2 && real < 0.2) push(out, t + 0.2 * real, 1, c, e.backs);
+        }
+        if (now !== was) {
           // Inverting floods the frame around the text; a ghost dims the text to 16 %.
-          if (now === 'inv' || was === 'inv') push(out, t, 1 - cov, c, e.backs);
+          if (now === 'inv' || was === 'inv') push(out, t, 1, c, e.backs);
           else push(out, t, cov, c, fade(c, GHOST));
         }
         was = now;
@@ -257,7 +262,7 @@
     if (!P.fastFlash) {
       // Plan by priority, in beat order, keeping every one-second window under three flashes:
       // the cuts first (they are the edit), then the inverts, then the stutters.
-      const limit = K.FLASH.perSec;
+      const limit = K.FLASH.perSec - 0.5; // half a flash of room for what the model leaves out (the punch's motion)
       const fits = (cand) => K.flashRate(allEvents(cand), e.pass) <= limit;
       const rechain = (cand) => { for (let b = 1; b < B; b++) if (cand[b].hold) cand[b].F = cand[b - 1].F; return cand; };
       // 1. Cuts. One that does not fit holds the previous framing (no cut, the beat still punches).
@@ -282,6 +287,10 @@
         }
       }
     }
+    // Runs of held beats: each beat's place in its run (k) and the run's length (n).
+    ds = ds.map((d) => Object.assign({}, d, { k: 0, n: 1 }));
+    for (let b = 1; b < B; b++) if (ds[b].hold) ds[b].k = ds[b - 1].k + 1;
+    for (let b = B - 1; b >= 0; b--) ds[b].n = b + 1 < B && ds[b + 1].hold ? ds[b + 1].n : ds[b].k + 1;
     const times = allEvents(ds);
     return { beats: ds, times, rate: K.flashRate(times, e.pass) };
   }

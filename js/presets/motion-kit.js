@@ -12,9 +12,12 @@
  *   MotionKit.portal(f, L, u, counters) where a camera dives through a unit: a counter, else a gap
  *
  * Photosensitivity (for presets with a flashes(layer, scene) method and a fast-flashing guard):
- *   MotionKit.FLASH                    the rules: ≤ 3 flashes/s; large = ≥ 25 % of the frame by ≥ 0.1
- *                                      relative luminance, or ≥ 0.1 of mean luma
- *   MotionKit.swing(area, a, b)        is a change of `area` between colours a and b a large transition
+ *   MotionKit.FLASH                    the rules (as TM.Safety counts them): ≤ 3 flashes/s; large =
+ *                                      ≥ 25 % of a 10° field (a third of the frame by a third) by ≥ 0.1
+ *                                      relative luminance, or to or from saturated red
+ *   MotionKit.swing(share, a, b)       is a change over `share` of a field between colours a and b large
+ *   MotionKit.fieldShare(ink, w, h, W, H) the most of one 10° field that ink spread over a w × h box covers
+ *   MotionKit.ghostAlpha(inks, backs)  the highest alpha at which ink over its backdrop can never flash
  *   MotionKit.flashRate(times, period) flashes per second of transitions on a repeating timeline
  *   MotionKit.frameOf(layer, scene, preset) the layout, size, seed and pass length outside a frame
  *   MotionKit.inkOf, inkSpread, inkColors, backdrops, luminance, passOf   their ingredients
@@ -206,22 +209,24 @@
     return { x: g.x + g.w + em * 0.3, y: g.cy, cw: em * 0.5, ch: Infinity };
   }
 
-  // ── photosensitivity (WCAG 2.3.1, ITU-R BT.1702) ──
-  // At most three flashes in any one second. A flash is a pair of opposing luminance
-  // transitions. A transition is large when at least a quarter of the frame changes relative
-  // luminance by 0.1 or more (the darker state below 0.8), or when it moves the frame's mean
-  // luma by 0.1 or more (a smaller area at high contrast). Shapes moving across the frame are
-  // not flashes; areas appearing, vanishing, inverting or changing colour are.
-  const FLASH = { area: 0.25, step: 0.1, dark: 0.8, mean: 0.1, perSec: 3 };
+  // ── photosensitivity (WCAG 2.3.1, ITU-R BT.1702; the reading TM.Safety.flashes measures) ──
+  // At most three flashes in any one second. A flash is a pair of opposing transitions. A
+  // transition is large when at least a quarter of some 10° field (full-screen playback: a third
+  // of the frame by a third) changes relative luminance by 0.1 or more with the darker state
+  // below 0.8, or changes to or from saturated red. Fast motion counts: big strokes sweeping
+  // across a field are transitions as surely as a cut is.
+  const FLASH = { area: 0.25, step: 0.1, dark: 0.8, perSec: 3 };
 
   const lums = new Map();
-  /** { Y: relative luminance (linear light), l: Rec. 709 luma of the sRGB values } of a hex colour. */
+  /** { Y: relative luminance (linear light), l: Rec. 709 luma of the sRGB values, red: saturated-red quantity } of a hex colour. */
   function luminance(hex) {
     let v = lums.get(hex);
     if (!v) {
       const c = TM.color.parse(hex);
       const lin = (u) => { u /= 255; return u <= 0.04045 ? u / 12.92 : Math.pow((u + 0.055) / 1.055, 2.4); };
-      v = { Y: 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b), l: (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255 };
+      const R = lin(c.r), G = lin(c.g), B = lin(c.b);
+      // red: TM.Safety's saturated-red quantity, (R − G − B) × 320 while R / (R + G + B) ≥ 0.8.
+      v = { Y: 0.2126 * R + 0.7152 * G + 0.0722 * B, l: (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255, red: R + G + B > 0 && R / (R + G + B) >= 0.8 ? Math.max(0, R - G - B) * 320 : 0 };
       if (lums.size > 512) lums.clear();
       lums.set(hex, v);
     }
@@ -235,21 +240,42 @@
   }
 
   /**
-   * Is a change of `area` (share of the frame) between colours a and b a large transition?
+   * Is a change over `share` of a 10° field between colours a and b a large transition?
    * a, b: hex colours, or arrays of candidates (the worst pair counts). Models estimate areas,
    * so they count from 80 % of each threshold (MARGIN): a guard then holds with room to spare.
    */
   const MARGIN = 0.8;
-  function swing(area, a, b) {
-    if (!(area > 0)) return false;
+  function swing(share, a, b) {
+    if (!(share >= FLASH.area * MARGIN)) return false;
     for (const x of [].concat(a)) {
       for (const y of [].concat(b)) {
         const A = luminance(x), B = luminance(y);
-        if (area >= FLASH.area * MARGIN && Math.abs(A.Y - B.Y) >= FLASH.step * MARGIN && Math.min(A.Y, B.Y) < FLASH.dark) return true;
-        if (Math.min(1, area) * Math.abs(A.l - B.l) >= FLASH.mean * MARGIN) return true;
+        if (Math.abs(A.Y - B.Y) >= FLASH.step * MARGIN && Math.min(A.Y, B.Y) < FLASH.dark) return true;
+        if ((A.red || B.red) && Math.abs(A.red - B.red) >= 20 * MARGIN) return true;
       }
     }
     return false;
+  }
+
+  /**
+   * The most of one 10° field (W/3 × H/3) that `ink` px², spread evenly over a w × h box, can
+   * change. Measured as TM.Safety measures it: on a 24 × 24 grid of cells, where a cell changes
+   * once about a tenth of it does at full contrast, so a thin stroke changes a whole column of
+   * cells (the box grows by a cell, and ink a quarter as dense still counts).
+   */
+  function fieldShare(ink, w, h, W, H) {
+    if (!(ink > 0) || !(w > 0) || !(h > 0)) return 0;
+    const fw = W / 3, fh = H / 3;
+    return Math.min(1, (4 * ink) / (w * h)) * (Math.min(w + W / 24, fw) * Math.min(h + H / 24, fh)) / (fw * fh);
+  }
+
+  /** The highest alpha at which ink of these colours over these backdrops never makes a large transition. */
+  function ghostAlpha(inks, backs) {
+    let lo = 0, hi = 1;
+    const ok = (a) => [].concat(backs).every((bk) => !swing(1, [].concat(inks).map((c) => TM.color.mix(bk, c, a)), bk));
+    if (ok(1)) return 1;
+    for (let n = 0; n < 10; n++) { const m = (lo + hi) / 2; if (ok(m)) lo = m; else hi = m; }
+    return lo;
   }
 
   /** How much a layer's effects spread its ink (glow halo, stroke, extrusion), as an area factor. */
@@ -350,6 +376,6 @@
 
   TM.MotionKit = {
     windows, seqAt, rankOf, slope, affine, units, canvas, counterOf, portal,
-    FLASH, luminance, backdrops, swing, flashRate, inkOf, inkSpread, frameOf, passOf, inkColors,
+    FLASH, luminance, backdrops, swing, fieldShare, ghostAlpha, flashRate, inkOf, inkSpread, frameOf, passOf, inkColors,
   };
 })(window.TM);
