@@ -329,9 +329,15 @@
       const p = plan, scene = X.sceneFor(store.scene, p);
       if (!costCanvas) { costCanvas = document.createElement('canvas'); costRenderer = new TM.Renderer(costCanvas, { quality: 'full' }); }
       const r = costRenderer;
-      r.setScene(scene);
+      // Still wanted? If not, release the probe's big buffer, unless a newer estimate owns it.
+      const live = () => {
+        const ok = token === costToken && !busy && m.isOpen;
+        if (!ok && token === costToken) r.resize(2, 2);
+        return ok;
+      };
       await TM.prepare(scene);
-      const live = () => token === costToken && !busy && m.isOpen;
+      if (!live()) return;
+      r.setScene(scene);
       const pause = () => new Promise((res) => setTimeout(res, 0));
       const time = (u) => { const t0 = performance.now(); r.render(scene.duration * u); return performance.now() - t0; };
       const size = (k) => r.resize(Math.max(2, p.width * k), Math.max(2, p.height * k));
