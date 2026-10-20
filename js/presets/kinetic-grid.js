@@ -1,14 +1,62 @@
 /* Preset: Kinetic Grid — a Swiss / Bauhaus modular grid of type.
- * The frame is divided into square-ish cells, each a palette tile carrying one letter (spaces are
- * blank tiles). On every beat each cell moves to its next page, staggered across the grid: it
- * slides, rotates, scales or flips to a new letter and colour. Pages walk through the text, so
- * long text is shown over the beats; after the last beat every cell is back on page 0, which
- * makes the loop seamless. Letters are knocked out of the tiles in the background colour.
+ * The frame is divided into square-ish cells, each a tile carrying one letter (spaces are blank
+ * tiles). On every beat each cell moves to its next page, staggered across the grid: it slides,
+ * rotates, scales or flips to a new letter and colour. Pages walk through the text, so long text
+ * is shown over the beats; after the last beat every cell is back on page 0, which makes the loop
+ * seamless.
+ *
+ * Letters are cut out of the tiles (destination-out), so whatever is behind the layer shows
+ * through: a gradient or radial background, another layer, or nothing in a transparent export.
+ * The tiles take the layer's fill: a palette cycles across them, a solid colour alternates with a
+ * tint of itself, a gradient runs across the whole grid. With tiles off the letters take the fill.
  */
 (function (TM) {
   'use strict';
   const { TAU, clamp } = TM.math;
   const MOVES = ['slide', 'rotate', 'scale', 'flip'];
+
+  /** Cells across and down: `cells` across the frame's short side, square-ish along the long one. */
+  function gridOf(f) {
+    const short = Math.max(2, Math.round(f.params.cells));
+    return f.W >= f.H
+      ? { cols: Math.max(short, Math.round((short * f.W) / f.H)), rows: short }
+      : { cols: short, rows: Math.max(short, Math.round((short * f.H) / f.W)) };
+  }
+
+  /**
+   * The text set in rows of `cols` cells without breaking words: a word that doesn't fit the rest
+   * of a row starts the next one, each text line starts a row, and a word longer than a row splits
+   * into even parts (MOTION on five cells → MOT / ION). Rows are aligned like the layer's text.
+   */
+  function wrapRows(L, cols, align) {
+    const out = [];
+    const flush = (row) => {
+      if (!row.length) return;
+      const pad = cols - row.length, left = align === 'left' ? 0 : align === 'right' ? pad : Math.floor(pad / 2);
+      out.push(Array.from({ length: cols }, (_, i) => (i >= left && i < left + row.length ? row[i - left] : null)));
+    };
+    for (const line of L.lines) {
+      const words = [];
+      let cur = [];
+      for (const gi of line.glyphs) {
+        const g = L.glyphs[gi];
+        if (g.isSpace) { if (cur.length) words.push(cur); cur = []; } else cur.push(g);
+      }
+      if (cur.length) words.push(cur);
+      let row = [];
+      for (const word of words) {
+        const parts = Math.ceil(word.length / cols), size = Math.ceil(word.length / parts);
+        for (let k = 0; k < word.length; k += size) {
+          const chunk = word.slice(k, k + size);
+          if (row.length && row.length + 1 + chunk.length > cols) { flush(row); row = []; }
+          if (row.length) row.push(null);
+          row.push(...chunk);
+        }
+      }
+      flush(row);
+    }
+    return out;
+  }
 
   TM.registerPreset({
     id: 'kinetic-grid',
@@ -21,6 +69,7 @@
       TM.P.range('gutter', 'Gutter', 0, 0.05, 0.001, 0.012, { group: 'Grid' }),
       TM.P.toggle('tiles', 'Colour tiles', true, { group: 'Grid', hint: 'Off: palette letters on the bare background' }),
       TM.P.range('textScale', 'Letter size', 0.3, 0.95, 0.01, 0.66, { group: 'Grid' }),
+      TM.P.toggle('words', 'Keep words whole', true, { group: 'Grid', hint: 'Rows break between words and the text scrolls a row per beat. Off: every cell filled, letter after letter' }),
       TM.P.range('beats', 'Beats per loop', 1, 8, 1, 4, { group: 'Rhythm' }),
       TM.P.range('moveLen', 'Move length', 0.15, 1, 0.01, 0.5, { group: 'Rhythm', hint: 'Fraction of a beat each move takes' }),
       TM.P.range('stagger', 'Stagger', 0, 0.8, 0.01, 0.35, { group: 'Rhythm' }),
@@ -36,16 +85,15 @@
         if (li) seq.push(null);
         for (const gi of line.glyphs) { const g = f.layout.glyphs[gi]; seq.push(g.isSpace ? null : g); }
       });
-      return { seq: seq.some(Boolean) ? seq : [] };
+      if (!seq.some(Boolean)) return { seq: [], wrapped: [] };
+      return { seq, wrapped: f.params.words ? wrapRows(f.layout, gridOf(f).cols, f.layer.type.align) : null };
     },
 
     render(f) {
       const P = f.params, seq = f.cache.seq, L = f.layout;
       if (!seq.length) return;
       const W = f.W, H = f.H, ctx = f.ctx;
-      const short = Math.max(2, Math.round(P.cells));
-      const cols = W >= H ? Math.max(short, Math.round((short * W) / H)) : short;
-      const rows = W >= H ? short : Math.max(short, Math.round((short * H) / W));
+      const { cols, rows } = gridOf(f);
       const gut = P.gutter * f.unit;
       const cw = (W - gut * (cols + 1)) / cols, ch = (H - gut * (rows + 1)) / rows;
       const n = cols * rows;
@@ -53,13 +101,22 @@
       const bp = f.p * B, beat = Math.min(B - 1, Math.floor(bp)), lt = bp - beat;
       const ease = TM.ease(P.ease, 'snap');
       const dur = Math.max(0.05, Math.min(P.moveLen, 1 - P.stagger));
-      const pal = f.layer.fill.palette;
-      const bg = f.renderer && f.renderer.scene && f.renderer.scene.bg;
-      const ink = f.colorOverride || (bg && bg.type !== 'transparent' ? bg.color : '#000000');
+      const fill = f.layer.fill;
+      const pal = fill.palette;
       const tiles = P.tiles && f.echo === 0;
+      // Tile colours from the layer fill. A solid fill alternates with a tint toward the
+      // background, so each beat's change still reads; a gradient is painted per tile below.
+      const bgc = f.bg && f.bg.type !== 'transparent' ? f.bg.color : '#000000';
+      const tint = fill.type === 'solid' ? [fill.color, TM.color.mix(fill.color, bgc, 0.18)] : null;
 
-      const content = (c, k) => seq[(c + k * n) % seq.length];
-      const colour = (c, k) => pal[(c + k) % pal.length];
+      // Page k of the text in cell c: whole rows scrolling up (as many rows per beat as it takes to
+      // show the text over the loop, at most a page), or the letters running on cell after cell.
+      const wr = f.cache.wrapped;
+      const step = wr && wr.length ? clamp(Math.ceil(wr.length / B), 1, rows) : 0;
+      const content = wr && wr.length
+        ? (c, k) => wr[(Math.floor(c / cols) + k * step) % wr.length][c % cols]
+        : (c, k) => seq[(c + k * n) % seq.length];
+      const colour = (c, k) => (fill.type === 'palette' ? pal[(c + k) % pal.length] : tint ? tint[(c + k) % 2] : null);
       const rankOf = (i, j, c) => {
         switch (P.order) {
           case 'rows': return n > 1 ? c / (n - 1) : 0;
@@ -82,13 +139,33 @@
           ctx.translate(x, y);
           ctx.rotate(rot);
           ctx.scale(sx, sy);
-          ctx.fillStyle = col;
+          // A gradient fill runs across the whole grid, fixed in frame space as the tile moves.
+          ctx.fillStyle = col || f.textPaint({ vi: c, cx: x - f.cx, cy: y - f.cy });
           ctx.fillRect(-cw / 2, -ch / 2, cw, ch);
         }
         const g = content(c, k);
         if (!g) return;
         const s = Math.min((ch * P.textScale) / Math.max(1, L.capH), (cw * 0.84) / Math.max(1, g.w));
-        f.drawGlyph(g, { x, y, rot, sx: s * sx, sy: s * sy, color: tiles ? ink : f.colorOverride || col });
+        const o = { x, y, rot, sx: s * sx, sy: s * sy };
+        if (!tiles) {
+          // Letters on the bare background take the fill (the palette per tile, else the fill).
+          if (fill.type === 'palette' || f.colorOverride) o.color = f.colorOverride || col;
+          f.drawGlyph(g, o);
+          return;
+        }
+        // Cut the letter out of its tile. With extrude on, the extrusion steps are drawn first
+        // (as drawGlyph would) and the face is then cut, so the letter reads as carved deep.
+        const ex = f.extrude, mode = f.strokeMode;
+        f.extrude = null;
+        if (ex) {
+          f.strokeMode = 'none';
+          for (let q = ex.steps; q >= 1; q--) f.drawGlyph(g, Object.assign({}, o, { x: x + ex.dx * q * o.sx, y: y + ex.dy * q * o.sy, color: ex.colors[q - 1] }));
+          f.strokeMode = mode;
+        }
+        ctx.globalCompositeOperation = 'destination-out';
+        f.drawGlyph(g, Object.assign({ color: '#000000' }, o));
+        ctx.globalCompositeOperation = 'source-over';
+        f.extrude = ex;
       };
 
       for (let j = 0; j < rows; j++) {
