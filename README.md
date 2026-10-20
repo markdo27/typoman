@@ -10,7 +10,7 @@ No install, no account, no build step. It's static files on GitHub Pages.
 
 ## What you can do
 
-- **Animate type with 32 motion presets**, grouped as path, kinetic, reveal, glitch,
+- **Animate type with 33 motion presets**, grouped as path, kinetic, reveal, glitch,
   dimensional and generative: from Path Flow, Ribbon and Orbit to Split Flap, Focus Pull,
   Kaleido and Melt. Three of them have no template-pack equivalent:
   - **Axis Wave** sweeps a font's own variable axes letter by letter: Tilt Warp's 3D tilt,
@@ -19,6 +19,10 @@ No install, no account, no build step. It's static files on GitHub Pages.
     rest dissolve.
   - **Particles** assembles the word from a seeded swarm that holds as dot or tile lettering,
     or condenses into solid type.
+  - **Gravity** drops the letters onto the path you draw. They bounce, tumble and settle into
+    place on it, then the ground gives way.
+- **Safe by default.** Every preset and look stays at or under 3 flashes a second (WCAG 2.3.1),
+  and the studio checks your scene before export.
 - **Time it like a motion designer.** Every preset staggers by letter, word or line. Easing
   curves are editable (signature curves, springs, or your own cubic-bézier). A
   **stagger curve** shapes how start times spread along the order, and seeded **jitter**

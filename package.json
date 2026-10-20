@@ -10,7 +10,9 @@
     "test:smoke": "node tests/smoke.mjs",
     "test:export": "node tests/export.mjs",
     "test:embed": "node tests/embed.mjs && node tests/embed-live.mjs",
-    "test:sweep": "node tests/sweep.mjs"
+    "test:sweep": "node tests/sweep.mjs && node tests/motion.mjs",
+    "test:motion": "node tests/motion.mjs",
+    "test:flash": "node tests/flashes-a.mjs all"
   },
   "devDependencies": {
     "playwright": "1.56.1"
