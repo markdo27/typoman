@@ -6,6 +6,10 @@
  *    the repeat delay, then a steady run.
  *  - The caret stays solid while keys are moving and blinks (whole blinks per loop) when idle.
  *  - Optional live centring re-centres each line as it grows, like typing into a centred field.
+ *  - Right-to-left lines (Hebrew, Arabic) type from their right edge leftward. The layout gives
+ *    them as whole words, so each word is typed grapheme by grapheme and drawn as its growing
+ *    prefix: one shaped run in the word's own cell, so Arabic letters join and change form as
+ *    they would in an editor. The caret, live centring and block caret mirror with them.
  *  - All timing lives in loop progress (computed in setup), so frames are a pure function of t.
  *    Typing is sequential by nature, so this preset has no stagger/order controls.
  */
@@ -17,6 +21,7 @@
   const IDLE = 0.5;    // seconds after a key before the caret starts blinking
   const PUNCT = /[.,!?;:…)\]]/u;
   const DEG = Math.PI / 180;
+  const RTL = /[֐-ࣿיִ-﷿ﹰ-﻿]/u; // the ranges the layout marks line.rtl by
 
   /** x such that fn(x) = y, for an easing that rises from 0 to 1 (bisection). */
   function invert(fn, y) {
@@ -26,6 +31,12 @@
       if (fn(m) < y) lo = m; else hi = m;
     }
     return (lo + hi) / 2;
+  }
+
+  /** The last grapheme of a cluster (a pause follows punctuation typed at the end of a word). */
+  function lastOf(s) {
+    const parts = TM.text.graphemes(s);
+    return parts[parts.length - 1] || '';
   }
 
   TM.registerPreset({
@@ -61,17 +72,50 @@
     setup(f) {
       const P = f.params, L = f.layout;
       const { inDur, outDur } = TM.MotionKit.windows(P);
+      const half = L.tracking / 2;
+
+      // Lines with right-to-left script come laid out as word clusters. Each word there is a
+      // run, typed grapheme by grapheme and drawn as its growing prefix, anchored on the side
+      // its script starts from: an RTL word grows leftward from its right edge, an LTR word
+      // inside such a line rightward from its left edge. pw[j] = advance of the first j graphemes.
+      const fam = f.layer.font.family, wt = f.layer.font.weight;
+      const runOf = (g) => {
+        const parts = TM.text.graphemes(g.ch);
+        const pw = [0];
+        let s = '';
+        for (const c of parts) { s += c; pw.push(TM.text.advance(s, fam, wt, L.sizePx)); }
+        return { parts, pw, n: parts.length, dir: RTL.test(g.ch) ? -1 : 1, first: 0 };
+      };
+      const wordLine = (line) => line.rtl || line.glyphs.some((gi) => {
+        const g = L.glyphs[gi];
+        return !g.isSpace && (RTL.test(g.ch) || TM.text.graphemes(g.ch).length > 1);
+      });
 
       // Keystrokes in reading order, with an Enter between lines. w = interval before the key.
       const keys = [];
       L.lines.forEach((line, li) => {
         if (li > 0) keys.push({ gi: -1, line: li, w: 1.8 + 1.4 * P.rhythm });
+        const words = wordLine(line);
         line.glyphs.forEach((gi, k) => {
           const prev = k > 0 ? L.glyphs[line.glyphs[k - 1]] : null;
-          let w = 1 + P.rhythm * 0.55 * f.srand(gi, 31);
-          if (prev && prev.isSpace) w += P.rhythm * 0.6;
-          if (prev && PUNCT.test(prev.ch)) w += P.rhythm * 1.3;
-          keys.push({ gi, line: li, w: Math.max(0.25, w) });
+          if (!words) {
+            let w = 1 + P.rhythm * 0.55 * f.srand(gi, 31);
+            if (prev && prev.isSpace) w += P.rhythm * 0.6;
+            if (prev && PUNCT.test(prev.ch)) w += P.rhythm * 1.3;
+            keys.push({ gi, line: li, w: Math.max(0.25, w) });
+            return;
+          }
+          const g = L.glyphs[gi];
+          const run = g.isSpace ? null : runOf(g);
+          const parts = run ? run.parts : [g.ch];
+          if (run) run.first = keys.length;
+          parts.forEach((c, j) => {
+            const before = j > 0 ? parts[j - 1] : prev ? lastOf(prev.ch) : '';
+            let w = 1 + P.rhythm * 0.55 * f.srand(gi, 31 + 1000 * j);
+            if (j === 0 && prev && prev.isSpace) w += P.rhythm * 0.6;
+            if (PUNCT.test(before)) w += P.rhythm * 1.3;
+            keys.push({ gi, line: li, w: Math.max(0.25, w), run, sub: j + 1 });
+          });
         });
       });
       const n = keys.length;
@@ -86,12 +130,28 @@
         k.tIn = t0 + invert(eIn, acc / totalW) * (t1 - t0);
       });
 
-      // Caret anchors per state (number of keys typed): line + x of the insertion point.
-      const half = L.tracking / 2;
-      const pos = [{ line: 0, x: (L.lines[0] ? L.lines[0].x : 0) }];
+      // Caret anchors per state (number of keys typed): line + x of the insertion point. On a
+      // right-to-left line `dir` is −1 (the next character goes to the left) and `ext` is how
+      // much of the line is typed, measured from its right edge.
+      const right = (line) => line.x + line.width;
+      const startOf = (li) => {
+        const line = L.lines[li];
+        return line && line.rtl ? { line: li, x: right(line), dir: -1, ext: 0 } : { line: li, x: line ? line.x : 0 };
+      };
+      const pos = [startOf(0)];
       keys.forEach((k) => {
-        if (k.gi < 0) pos.push({ line: k.line, x: L.lines[k.line].x });
-        else { const g = L.glyphs[k.gi]; pos.push({ line: g.line, x: g.x + g.w + half }); }
+        if (k.gi < 0) { pos.push(startOf(k.line)); return; }
+        const g = L.glyphs[k.gi], line = L.lines[g.line];
+        if (!k.run) {
+          if (line.rtl) pos.push({ line: g.line, x: g.x - half, dir: -1, ext: right(line) - g.x });
+          else pos.push({ line: g.line, x: g.x + g.w + half });
+          return;
+        }
+        const r = k.run, j = k.sub, end = j === r.n ? half : 0;
+        const a = r.dir < 0 ? g.x + g.w - r.pw[j] : g.x; // typed ink of this word: [a, b]
+        const b = r.dir < 0 ? g.x + g.w : g.x + r.pw[j];
+        const ext = line.rtl ? right(line) - a : b - line.x;
+        pos.push(r.dir < 0 ? { line: g.line, x: a - end, dir: -1, ext } : { line: g.line, x: b + end, dir: 1, ext });
       });
 
       // Events: { t, k (state after), from (state before) }.
@@ -122,8 +182,9 @@
       const align = f.layer.type.align;
       const af = align === 'right' ? 1 : align === 'left' ? 0 : 0.5; // share of the untyped width a line shifts by
       const offsets = pos.map((ps) => L.lines.map((line, li) => {
-        const typed = ps.line > li ? line.width : ps.line === li ? Math.max(0, ps.x - half - line.x) : 0;
-        return af * (line.width - typed);
+        const typed = ps.line > li ? line.width : ps.line === li ? (ps.ext != null ? Math.max(0, ps.ext) : Math.max(0, ps.x - half - line.x)) : 0;
+        // A right-to-left line grows leftward: its untyped part is on the left.
+        return line.rtl ? -(1 - af) * (line.width - typed) : af * (line.width - typed);
       }));
 
       // Static per-glyph "type-bar" wobble.
@@ -174,6 +235,7 @@
       // Glyphs.
       const ctx = f.ctx;
       const selected = [];
+      const words = new Map(); // word runs: how much of each word is typed, drawn after the loop
       for (let i = 0; i < n; i++) {
         const key = keys[i];
         if (key.gi < 0) continue;
@@ -183,6 +245,17 @@
         if (del != null && p >= del) continue;
         const age = (p - key.tIn) * dur;
         const punch = P.punch * Math.exp(-age / 0.05);
+        if (key.run) {
+          // A word's keys are typed in order and deleted in reverse, so its typed part is a
+          // prefix; the last key seen here is the newest. A selection takes whole words.
+          let shrink = 1;
+          if (!select && key.tOut != null) {
+            const left = (key.tOut - p) * dur;
+            if (left < 0.04) shrink = 0.55 + 0.45 * (left / 0.04);
+          }
+          words.set(key.run, { g, j: key.sub, punch, shrink, sel: i >= selFrom });
+          continue;
+        }
         const wb = wobble[g.i];
         const o = {
           x: f.cx + g.cx + off(g.line),
@@ -199,6 +272,7 @@
         if (i >= selFrom) selected.push([g, o]);
         else f.drawGlyph(g, o);
       }
+      words.forEach((st, run) => drawRun(f, run, st, wobble[st.g.i], P.ink, off(st.g.line), selected));
 
       // Selected run: a highlight bar with the letters knocked out of it.
       if (selected.length) {
@@ -226,9 +300,12 @@
       if (P.caret === 'none') return;
       let cpos = pos[k], cx = cpos.x;
       if (selFrom < n) {
-        // During a selection the caret rides the selection's leading edge.
-        const g = L.glyphs[keys[selFrom].gi >= 0 ? keys[selFrom].gi : keys[Math.min(n - 1, selFrom + 1)].gi];
-        cpos = { line: g.line, x: g.x - L.tracking / 2 };
+        // During a selection the caret rides the selection's leading edge (the logical start of
+        // the selected text: the right edge of a right-to-left word).
+        const key = keys[selFrom].gi >= 0 ? keys[selFrom] : keys[Math.min(n - 1, selFrom + 1)];
+        const g = L.glyphs[key.gi];
+        const dir = key.run ? key.run.dir : L.lines[g.line].rtl ? -1 : 1;
+        cpos = dir < 0 ? { line: g.line, x: g.x + g.w + L.tracking / 2, dir } : { line: g.line, x: g.x - L.tracking / 2 };
         cx = cpos.x;
       } else if (pos[prev] && pos[prev].line === cpos.line) {
         // A short glide between insertion points.
@@ -239,13 +316,57 @@
       if (on <= 0.002) return;
       const nextKey = keys[k];
       const nextG = nextKey && nextKey.gi >= 0 && nextKey.line === cpos.line ? L.glyphs[nextKey.gi] : null;
+      const cellW = nextG && !nextG.isSpace ? (nextKey.run ? nextKey.run.pw[nextKey.sub] - nextKey.run.pw[nextKey.sub - 1] : nextG.w) : L.sizePx * 0.5;
       drawCaret(f, P.caret, f.cx + cx + off(cpos.line), L.lines[cpos.line] ? L.lines[cpos.line].y : 0,
-        nextG && !nextG.isSpace ? nextG.w : L.sizePx * 0.5, P.accentCaret ? P.caretColor : f.colorOf({ vi: 0 }), on);
+        cellW, P.accentCaret ? P.caretColor : f.colorOf({ vi: 0 }), on, cpos.dir || 1);
     },
   });
 
-  /** Draw the caret in frame px. x = insertion point, baseY = the line's baseline (layout space). */
-  function drawCaret(f, style, x, baseY, cellW, color, alpha) {
+  /**
+   * A word run: its first j graphemes drawn as one shaped string in the word's own layout cell,
+   * anchored on the side its script starts from. The newest grapheme's slice of the run takes
+   * the key punch (or the backspace shrink); a selected word goes to the knock-out pass whole.
+   */
+  function drawRun(f, run, st, wb, ink, off, selected) {
+    const { g, j } = st;
+    const w = run.pw[j];
+    const o = {
+      x: f.cx + off + (run.dir < 0 ? g.x + g.w - w / 2 : g.x + w / 2),
+      y: f.cy + g.cy + wb.y * ink,
+      rot: wb.rot * ink * 0.35, // a whole word tilts less than a single type bar
+      alpha: 1 - (1 - wb.a) * ink,
+    };
+    if (j < run.n) o.ch = run.parts.slice(0, j).join('');
+    if (st.sel) { selected.push([g, o]); return; }
+    const sc = (1 + 0.32 * st.punch) * st.shrink, fa = 1 - 0.45 * st.punch;
+    if (Math.abs(sc - 1) < 0.002 && fa > 0.998) { f.drawGlyph(g, o); return; }
+    // Split the run where the newest grapheme starts: the older part as is, the new one
+    // scaled about its own centre and clipped at the scaled boundary, so no scaled neighbour
+    // shows (a punched letter overlaps its neighbour, as a single glyph's punch does).
+    const at = (u) => f.cx + off + (run.dir < 0 ? g.x + g.w - u : g.x + u);
+    const edge = at(run.pw[j - 1]), mid = at((run.pw[j] + run.pw[j - 1]) / 2);
+    if (j > 1) clipSide(f, edge, -run.dir, o.y, () => f.drawGlyph(g, o));
+    clipSide(f, mid + (edge - mid) * sc, run.dir, o.y, () => f.drawGlyph(g, Object.assign({}, o, { x: mid + (o.x - mid) * sc, scale: sc, alpha: o.alpha * fa })));
+  }
+
+  /** Run fn clipped to one side of the line through (x, yc) that leans with the layer's slant (side +1: the right). */
+  function clipSide(f, x, side, yc, fn) {
+    const ctx = f.ctx, k = -Math.tan(f.slant), far = side * (f.W + f.H) * 4;
+    const x0 = x - k * yc, x1 = x + k * (f.H - yc);
+    f.identity();
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x0, 0);
+    ctx.lineTo(x0 + far, 0);
+    ctx.lineTo(x1 + far, f.H);
+    ctx.lineTo(x1, f.H);
+    ctx.closePath();
+    ctx.clip();
+    try { fn(); } finally { ctx.restore(); }
+  }
+
+  /** Draw the caret in frame px. x = insertion point, baseY = the line's baseline (layout space), dir −1 = the text grows leftward. */
+  function drawCaret(f, style, x, baseY, cellW, color, alpha, dir) {
     const L = f.layout, ctx = f.ctx, size = L.sizePx, capH = L.capH;
     const cy = f.cy + baseY - capH / 2; // cap-height centre: the same pivot glyphs slant around
     f.identity();
@@ -255,13 +376,13 @@
     const top = -capH / 2 - capH * 0.14, bottom = capH / 2 + size * 0.1;
     if (style === 'block') {
       ctx.globalAlpha *= 0.85;
-      ctx.fillRect(size * 0.01, top, cellW, bottom - top);
+      ctx.fillRect(dir < 0 ? -size * 0.01 - cellW : size * 0.01, top, cellW, bottom - top);
     } else if (style === 'underscore') {
-      const h = Math.max(1, size * 0.07);
-      ctx.fillRect(size * 0.02, capH / 2 + size * 0.05, Math.max(cellW, size * 0.42), h);
+      const h = Math.max(1, size * 0.07), w = Math.max(cellW, size * 0.42);
+      ctx.fillRect(dir < 0 ? -size * 0.02 - w : size * 0.02, capH / 2 + size * 0.05, w, h);
     } else {
       const w = Math.max(1, size * 0.075);
-      ctx.fillRect(size * 0.035, top, w, bottom - top);
+      ctx.fillRect(dir < 0 ? -size * 0.035 - w : size * 0.035, top, w, bottom - top);
     }
     f.identity();
   }
