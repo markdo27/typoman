@@ -46,7 +46,7 @@
     let reloads = 0;
     let flashJob = null; // aborts this opening's flash check when the dialog closes
     const file = { key: '', url: null, size: 0, token: 0, timer: 0 };
-    const m = Studio.modal({ id: 'tm-share', title: 'Embed & share', cls: 'tm-share', onClose: () => { dropFile(); if (flashJob) flashJob.abort(); flashJob = null; flashBox.dataset.key = ''; } });
+    const m = Studio.modal({ id: 'tm-share', title: 'Embed & share', cls: 'tm-share', onClose: () => { dropFile(); if (flashJob) flashJob.abort(); flashJob = null; flashBox._flashKey = ''; } });
 
     // ── preview (local embed.html, or the HTML file itself) ──
     const frame = h('iframe', { title: 'Embed preview', loading: 'eager', style: 'color-scheme: normal' });

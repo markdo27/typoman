@@ -137,7 +137,7 @@
     const m = modal({
       id: 'tm-export', title: 'Export', cls: 'tm-export',
       onRequestClose: () => { if (busy) { cancel(); return false; } return true; },
-      onClose: () => { cancelAnimationFrame(raf); raf = 0; if (flashJob) flashJob.abort(); flashJob = null; flashBox.dataset.key = ''; },
+      onClose: () => { cancelAnimationFrame(raf); raf = 0; if (flashJob) flashJob.abort(); flashJob = null; flashBox._flashKey = ''; },
     });
 
     // ── preview ──
@@ -548,10 +548,10 @@
     const S = Studio.safety;
     if (S && S.available()) {
       const key = S.keyOf(scene);
-      if (box.dataset.key === key) return;
-      box.dataset.key = key;
+      if (box._flashKey === key) return;
+      box._flashKey = key;
       const show = (res) => {
-        if (box.dataset.key !== key) return;
+        if (box._flashKey !== key) return;
         box.hidden = false;
         if (!res) { box.hidden = true; return; }
         if (res.ok) {
@@ -575,8 +575,8 @@
       box.replaceChildren(h('div', { class: 'ttl' }, h('i', { class: 'tm-spin', 'aria-hidden': 'true' }), 'Checking for flashes…'),
         h('p', null, 'Playing the loop through a WCAG 2.3.1 flash test.'));
       S.check(scene, { signal }).then(show, (e) => {
-        if (box.dataset.key !== key) return;
-        box.dataset.key = ''; // aborted or failed: the next call checks again
+        if (box._flashKey !== key) return;
+        box._flashKey = ''; // aborted or failed: the next call checks again
         if (e && e.name === 'AbortError') { box.hidden = true; return; }
         console.warn('[studio] flash check', e);
         box.className = 'tm-info tm-flash';
@@ -588,8 +588,8 @@
     const risks = Studio.flashRisks ? Studio.flashRisks(scene) : [];
     box.hidden = !risks.length;
     const key = risks.map((r) => r.index + ':' + r.rate.toFixed(1)).join('|');
-    if (!risks.length || box.dataset.key === key) return;
-    box.dataset.key = key;
+    if (!risks.length || box._flashKey === key) return;
+    box._flashKey = key;
     const who = risks.map((r) => `“${Studio.layerName(r.layer)}” (${(TM.getPreset(r.layer.preset) || {}).name || r.layer.preset}) flashes ${Studio.flashText(r.rate)}`);
     box.replaceChildren(
       h('div', { class: 'ttl' }, 'Photosensitivity warning'),
