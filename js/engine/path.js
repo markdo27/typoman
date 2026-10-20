@@ -327,6 +327,8 @@
         for (const [side, a, b] of order) if (b > a) P = roll(P, side, a + ((b - a) * k) / 4, reach, step, P0);
       }
       const out = new SampledPath(Float32Array.from(P.xs), Float32Array.from(P.ys), this.closed);
+      // Where each point came from on this path: srcAt() on the copy, and on its lanes.
+      out.src = Float64Array.from(out.closed ? [...P.src, P.src[0] + this.length] : P.src);
       if (this._rounded.size > 8) this._rounded.clear();
       this._rounded.set(key, out);
       return out;
@@ -334,16 +336,18 @@
 
     /**
      * Parallel curve d px along the normal (negative = left of travel), like offset(d), that also
-     * records where each point came from: `src` is the arc length on this path, read back with
-     * srcAt(), so every lane of a block can share a phase along the source. On a rounded() curve
-     * and within its radii it has no loops to cut. Cached per d.
+     * records where each point came from: `src` is the arc length on the source, read back with
+     * srcAt(), so every lane of a block can share a phase along it. The source is this path, or
+     * the path this one was rounded() from: a lane of a rounded copy maps straight back to the
+     * drawn path. On a rounded() curve and within its radii there are no loops to cut. Cached
+     * per d.
      */
     lane(d) {
       const key = Math.round(d * 4) / 4;
       if (!this._lanes) this._lanes = new Map();
       const hit = this._lanes.get(key);
       if (hit) return hit;
-      const n = this.n, xs = [], ys = [], src = [];
+      const n = this.n, xs = [], ys = [], src = [], from = this.src || this.cum;
       let lx = 0, ly = 0;
       for (let i = 0; i < n; i++) {
         const x = this.xs[i] - this.ty[i] * key, y = this.ys[i] + this.tx[i] * key;
@@ -351,14 +355,15 @@
         if (xs.length && (x - lx) * this.tx[i] + (y - ly) * this.ty[i] <= 1e-6) continue;
         xs.push(x);
         ys.push(y);
-        src.push(this.cum[i]);
+        src.push(from[i]);
         lx = x;
         ly = y;
       }
       let out = this;
       if (xs.length > 1) {
         out = new SampledPath(Float32Array.from(xs), Float32Array.from(ys), this.closed);
-        if (out.closed) src.push(this.length);
+        // Closing segment: back to the first kept point, a whole source lap on.
+        if (out.closed) src.push(src[0] + (from[from.length - 1] - from[0]));
         out.src = Float64Array.from(src);
       }
       if (this._lanes.size > 16) this._lanes.clear();
@@ -366,7 +371,10 @@
       return out;
     }
 
-    /** Arc length on the source path at arc length s of a lane() (or of its tracked() copy). */
+    /**
+     * Arc length on the source path at arc length s of a rounded() copy, a lane() or a tracked()
+     * copy of either (text distance, then). Plain paths return s.
+     */
     srcAt(s) {
       const src = this.src, L = this.length, cum = this.cum;
       if (!src || L <= 1e-9) return s;
@@ -646,7 +654,7 @@
     let g0 = 0;
     if (closed) while (bad[g0]) g0++;
     const at = (t) => (closed ? (g0 + t) % n : t);
-    const ox = [], oy = [], os = [], L0 = P0 ? P0.length : 0;
+    const ox = [], oy = [], os = [], L0 = P.length || (P0 ? P0.length : 0);
     let changed = false;
     for (let t = 0; t < n; ) {
       const i = at(t);
@@ -681,7 +689,13 @@
       } else for (let v = t; v < u; v++) { ox.push(xs[at(v)]); oy.push(ys[at(v)]); os.push(src[at(v)]); }
       t = u;
     }
-    return changed ? { xs: Float64Array.from(ox), ys: Float64Array.from(oy), src: Float64Array.from(os), closed } : P;
+    if (!changed) return P;
+    // A closed curve restarts where the original started (lowest src), so src keeps rising
+    // along it and the curve's origin doesn't wander from roll to roll.
+    let z = 0;
+    if (closed) for (let q = 1; q < os.length; q++) if (os[q] < os[z]) z = q;
+    const rot = (a) => Float64Array.from(z ? a.slice(z).concat(a.slice(0, z)) : a);
+    return { xs: rot(ox), ys: rot(oy), src: rot(os), closed, length: P.length };
   }
 
   /** Parallel polyline d px along the normal, dropping points that step backwards. */
@@ -694,7 +708,7 @@
       oy.push(y);
       os.push(src[i]);
     }
-    return ox.length > 3 ? { xs: Float64Array.from(ox), ys: Float64Array.from(oy), src: Float64Array.from(os), closed } : P;
+    return ox.length > 3 ? { xs: Float64Array.from(ox), ys: Float64Array.from(oy), src: Float64Array.from(os), closed, length: P.length } : P;
   }
 
   /**

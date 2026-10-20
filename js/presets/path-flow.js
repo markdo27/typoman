@@ -199,9 +199,10 @@
         rotate: P.rotate, smooth: win, spread: SPREAD * size, amount: P.bendSpacing, cap: 4,
       });
     });
-    // The wave rides the carrier, so every lane shares its phase and the block moves as one.
-    // On a closed path it fits a whole number of waves round the loop.
-    const waveLen = carrier.closed ? carrier.length / Math.max(1, Math.round(carrier.length / wl)) : wl;
+    // The wave's phase is the position along the drawn path (srcAt), shared by every lane so the
+    // block moves as one. On a closed path it fits a whole number of waves round the loop.
+    const lap = carrier.src ? carrier.src[carrier.src.length - 1] - carrier.src[0] : carrier.length;
+    const waveLen = carrier.closed ? lap / Math.max(1, Math.round(lap / wl)) : wl;
     const G = { key, carrier, lanes, waveLen };
     built.set(base, G);
     return G;
