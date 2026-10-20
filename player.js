@@ -21,7 +21,10 @@
   const me = document.currentScript;
   const BASE = (function () {
     try { if (me && me.src) return new URL('./', me.src).href; } catch (e) { /* inline copy */ }
-    return (window.TM_MANIFEST && window.TM_MANIFEST.base) || new URL('./', location.href).href;
+    if (window.TM_MANIFEST && window.TM_MANIFEST.base) return window.TM_MANIFEST.base;
+    // blob:, data: and about:srcdoc pages (an inlined standalone copy) have no folder to resolve
+    // against; they already carry the engine, so the base is never used to load it.
+    try { return new URL('./', location.href).href; } catch (e) { return './'; }
   })();
   const MAX_PIXELS = 1920 * 1080;
   const SVG = 'http://www.w3.org/2000/svg';
