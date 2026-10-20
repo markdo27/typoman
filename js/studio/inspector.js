@@ -29,17 +29,15 @@
   Studio.FLASH_LIMIT = (TM.Safety && TM.Safety.LIMIT) || 3;
   /**
    * Fast path: flashes per second of a visible layer by its preset's own estimate, 0 when it
-   * can't tell. The method is asked for one pass at the scene's pace (cycles 1) and the result
-   * scaled by the layer's cycles: all motion runs on pass progress, so ×2 cycles flash twice as
-   * fast, whether or not the preset's own method counts cycles.
+   * can't tell. preset.flashes(layer, scene) already accounts for the layer's cycles, so it is
+   * asked as is.
    */
   Studio.flashRate = function (layer, scene) {
     const p = layer && TM.getPreset(layer.preset);
     if (!p || typeof p.flashes !== 'function' || layer.visible === false || !String(layer.text || '').trim()) return 0;
     try {
-      const cycles = Math.max(1, (layer.time && layer.time.cycles) || 1);
-      const r = +p.flashes(Object.assign({}, layer, { time: Object.assign({}, layer.time, { cycles: 1 }) }), scene);
-      return Number.isFinite(r) && r > 0 ? r * cycles : 0;
+      const r = +p.flashes(layer, scene);
+      return Number.isFinite(r) && r > 0 ? r : 0;
     } catch (e) { return 0; }
   };
   /** Visible layers above the limit: [{ index, layer, rate }]. */
