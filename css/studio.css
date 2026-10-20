@@ -449,6 +449,18 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 .preset-name { font-weight: 650; font-size: 13.5px; margin-right: 2px; }
 .tag-chip { font-size: 10.5px; font-weight: 600; color: var(--text-2); padding: 2px 7px; border-radius: 99px; background: var(--panel-3); border: 1px solid var(--line-2); }
 .preset-line .link-btn { margin-left: auto; }
+/* Notes in the Motion panel: photosensitivity (warn) and the Stack width-axis tip (info). */
+.flash-warn, .axis-tip { display: flex; align-items: flex-start; gap: 9px; padding: 9px 11px; border-radius: 9px; font-size: 12px; line-height: 1.45; color: var(--text-2); }
+.flash-warn > svg, .axis-tip > svg { width: 16px; height: 16px; margin-top: 1px; }
+.flash-warn p, .axis-tip p { margin: 0; }
+.flash-warn { background: rgba(255, 181, 71, 0.08); border: 1px solid rgba(255, 181, 71, 0.45); }
+.flash-warn > svg, .flash-warn b { color: var(--warn); }
+.flash-warn b { display: block; margin-bottom: 2px; font-weight: 650; }
+.axis-tip { background: var(--accent-soft); border: 1px solid rgba(140, 152, 255, 0.3); }
+.axis-tip > svg { color: var(--accent-fg); }
+.axis-tip b { color: var(--text); font-weight: 650; }
+.axis-fonts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.axis-fonts .btn { font-size: 13px; font-weight: 700; }
 .pal-head { display: flex; align-items: center; justify-content: space-between; }
 .lbl, .ctl > label { color: var(--text-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: none; }
 

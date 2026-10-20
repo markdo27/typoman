@@ -143,8 +143,9 @@
 
     // Per-tab notes: uploaded fonts (does this way of sharing carry them?) and where codes point.
     const fontNote = h('div', { class: 'tm-fontnote', role: 'note', hidden: true });
+    const flashBox = h('div', { class: 'tm-info warn tm-flash', role: 'note', hidden: true });
     const baseNote = h('p', { class: 'tm-note' });
-    m.body.append(h('div', { class: 'tm-opts' }, tablist, optionsBox, ...Object.values(panels), fontNote, baseNote));
+    m.body.append(h('div', { class: 'tm-opts' }, tablist, flashBox, optionsBox, ...Object.values(panels), fontNote, baseNote));
 
     // ── output builders ──
     function hashFor(o) {
@@ -200,6 +201,7 @@
       const pb = Studio.publicBase();
       baseNote.textContent = pb.differs ? `Codes and links point to ${pb.base}, because this studio is running locally (${new URL(pb.local).host || 'file'}). The preview uses your local copy.` : `Codes and links point to ${pb.base}.`;
       baseNote.hidden = tab === 'html'; // the file is self-contained: it points nowhere
+      if (Studio.flashNote) Studio.flashNote(flashBox, s, 'Consider slowing it before it goes on a page: WCAG 2.3.1 is a Level A requirement for web content.');
       const custom = uploadedFonts(s);
       fontNote.hidden = !custom.length;
       if (!custom.length) return;

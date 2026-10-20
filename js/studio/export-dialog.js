@@ -203,7 +203,9 @@
     const ditherRow = h('div', { class: 'tm-field' }, h('span', { class: 'tm-lbl' }, 'Colours'), ditherSw.el);
 
     const info = h('div', { class: 'tm-info', 'aria-live': 'polite' });
-    const optsSet = h('fieldset', { class: 'tm-opts', style: 'border:0;margin:0;min-width:0' }, formats, resRow, fpsSeg.el, lenRow, frameRow, qualSeg.el, alphaRow, matteRow, ditherRow, info);
+    // Photosensitivity (WCAG 2.3.1): a warning, never a block.
+    const flashBox = h('div', { class: 'tm-info warn tm-flash', role: 'note', hidden: true });
+    const optsSet = h('fieldset', { class: 'tm-opts', style: 'border:0;margin:0;min-width:0' }, formats, flashBox, resRow, fpsSeg.el, lenRow, frameRow, qualSeg.el, alphaRow, matteRow, ditherRow, info);
     m.body.append(optsSet);
 
     // ── footer ──
@@ -296,6 +298,7 @@
       const key = JSON.stringify([s, plan.width, plan.height, plan.transparent, plan.matte, plan.format]);
       if (key !== prevKey) { prevKey = key; pvScene = X.sceneFor(s, plan); pvRenderer.setScene(pvScene); sizePreview(); TM.prepare(pvScene); }
       updateInfo();
+      Studio.flashNote(flashBox, s);
       if (f.still) drawPreview(plan.start);
     }
 
@@ -450,6 +453,23 @@
       get plan() { return plan; },
     };
   }
+
+  /**
+   * Fill `box` (a .tm-info.warn) with the scene's photosensitivity warning, or hide it: every
+   * visible layer above 3 flashes a second (Studio.flashRisks), named, with its rate.
+   */
+  Studio.flashNote = function (box, scene, advice = 'Consider slowing it before you publish; the export still works.') {
+    const risks = Studio.flashRisks ? Studio.flashRisks(scene) : [];
+    box.hidden = !risks.length;
+    const key = risks.map((r) => r.index + ':' + r.rate.toFixed(1)).join('|');
+    if (!risks.length || box.dataset.key === key) return;
+    box.dataset.key = key;
+    const who = risks.map((r) => `“${Studio.layerName(r.layer)}” (${(TM.getPreset(r.layer.preset) || {}).name || r.layer.preset}) flashes ${Studio.flashText(r.rate)}`);
+    box.replaceChildren(
+      h('div', { class: 'ttl' }, 'Photosensitivity warning'),
+      h('p', null, who.join('; ') + ', above the limit of 3 a second in WCAG 2.3.1.'),
+      h('p', null, 'Rapid flashing can trigger seizures in people with photosensitive epilepsy. ' + advice));
+  };
 
   // ───────────────────────────── clipboard ─────────────────────────────
   /** Copy text with feedback on the button; falls back to execCommand when the API is blocked. */
