@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /* TYPOMAN option sweep: every preset × (defaults, every curated look, every non-default value of
- * every select param, every toggle flipped), rendered small in headless Chromium.
+ * every select param, every toggle flipped), rendered small in headless Chromium. Also the
+ * params that decide whether a loop closes (whole cycles / turns / beats per loop at both ends,
+ * Hz and per-second rates at both ends and in between) and a 2.7 s loop length.
  *
  * Each configuration must
  *   - render without throwing (scene build, applyLook, renderer warnings, console errors),
@@ -36,12 +38,32 @@ async function sweepPreset({ id, W, H, SAMPLES, SCREEN_RATIO, SEAM_MIN, T_DET })
     s.layers[0].params = TM.presetDefaults(id);
     return s;
   };
-  const configs = [{ variant: 'defaults', make: () => TM.Scene.normalize(base()) }];
+  const configs = [
+    { variant: 'defaults', make: () => TM.Scene.normalize(base()) },
+    // A loop length that isn't a whole second (the inspector's slider steps by 0.1 s): anything
+    // timed in absolute units (per second, Hz) must still close the loop.
+    { variant: 'loop length 2.7 s', make: () => { const s = base(); s.duration = 2.7; return TM.Scene.normalize(s); } },
+  ];
   (P.looks || []).forEach((look) => configs.push({ variant: `look "${look.name}"`, make: () => TM.Scene.applyLook(TM.Scene.normalize(base()), 0, look) }));
   for (const p of P.params) {
     const set = (v) => () => { const s = base(); s.layers[0].params[p.key] = v; return TM.Scene.normalize(s); };
     if (p.type === 'select') for (const [v] of p.options) { if (v !== p.default) configs.push({ variant: `${p.key}=${v}`, make: set(v), key: p.key, value: v }); }
     else if (p.type === 'toggle') configs.push({ variant: `${p.key}=${!p.default}`, make: set(!p.default), key: p.key, value: !p.default });
+    else if (p.type === 'range') {
+      // The ranges that decide whether a loop closes: whole counts per loop (cycles, turns, laps,
+      // beats…) at both ends, and rates in absolute time (Hz, per second) at both ends plus an
+      // awkward value in between, snapped to the step the way TM.Scene.normalize snaps it.
+      const text = `${p.key} ${p.label} ${p.hint || ''}`;
+      const whole = p.step >= 1 && /cycle|turn|lap|loop|pass|beat|blink|burst|ring|repeat|scroll|flow|speed|spin/i.test(text);
+      const rate = /\bhz\b|\/s\)|per second/i.test(text);
+      if (!whole && !rate) continue;
+      const dp = String(p.step).includes('.') ? String(p.step).split('.')[1].length : 0;
+      const snap = (x) => +(Math.round((x - p.min) / p.step) * p.step + p.min).toFixed(dp);
+      const vals = new Set([p.min, p.max]);
+      if (rate) { let v = snap(p.min + 0.61 * (p.max - p.min)); if (v === p.default) v = snap(v + p.step); vals.add(v); }
+      vals.delete(p.default);
+      for (const v of vals) configs.push({ variant: `${p.key}=${v}`, make: set(v), key: p.key, value: v });
+    }
   }
   // smoke.mjs's metric: mean |ΔR|+|ΔG|+|ΔB| as % of the maximum difference.
   const diff = (a, b) => {

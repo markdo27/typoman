@@ -177,6 +177,24 @@ await run(async (cleanup) => {
     const s = sizeFor(180);
     const [a, b] = await refFrames(page, SCENES.solid, s, [0, SCENES.solid.duration], 'hash');
     R.check('engine: render(duration) === render(0) (the loop point)', a === b);
+    // A loop export must span exactly loops × duration, or the file restarts a fraction of a
+    // frame early or late (a hitch). Every loop length the inspector offers (0.5–20 s in 0.1 s
+    // steps) × scene fps × each format's export fps, planned with TM.Export.plan (pure).
+    const fit = await page.evaluate(() => {
+      const bad = [];
+      let total = 0;
+      for (let d10 = 5; d10 <= 200; d10++) for (const sceneFps of TM.Scene.FPS_OPTIONS) {
+        const scene = TM.Scene.normalize({ duration: d10 / 10, fps: sceneFps });
+        for (const format of ['mp4', 'gif']) for (const fps of TM.Export.FORMATS[format].fps) {
+          total++;
+          const plan = TM.Export.plan(scene, { format, fps, loops: 1 });
+          if (Math.abs(plan.duration - scene.duration) > 1e-6) bad.push(`${scene.duration} s ${format} @ ${fps} fps → ${plan.frames} frames = ${plan.duration.toFixed(3)} s`);
+        }
+      }
+      return { total, bad };
+    });
+    R.known('N14', 'loop exports span exactly one loop at every export frame rate', fit.bad.length === 0,
+      `${fit.bad.length} of ${fit.total} length × fps combinations don't, e.g. ${fit.bad.filter((b) => /^2\.7 s|^3\.3 s/.test(b)).slice(0, 3).join('; ')}`);
   }
 
   for (const job of JOBS) {
