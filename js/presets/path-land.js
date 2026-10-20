@@ -242,7 +242,7 @@
     path: 'arc',
     fit: true,
     params: [
-      ...TM.P.sequence({ inDur: 0.55, outDur: 0.24, stagger: 0.3, easeIn: [0.45, 0.05, 0.55, 0.88], easeOut: 'anticipate' }).map((p) => (p.key === 'order' ? ORDER : p.key === 'stagger' ? GAP : p)),
+      ...TM.P.sequence({ inDur: 0.52, outDur: 0.3, stagger: 0.3, easeIn: [0.45, 0.05, 0.55, 0.88], easeOut: 'linear' }).map((p) => (p.key === 'order' ? ORDER : p.key === 'stagger' ? GAP : p)),
       TM.P.range('peel', 'Peel off after', 0, 0.95, 0.01, 0, { group: 'Flight', hint: 'Letters leave the path where it passes nearest their place. Raise this to make them ride at least this far first' }),
       TM.P.range('leadIn', 'Lead-in (em)', 0, 10, 0.1, 0, { group: 'Flight', hint: 'Extra run-up before the path starts (open paths)' }),
       TM.P.range('follow', 'Follow tangent', 0, 1, 0.01, 1, { group: 'Flight' }),
@@ -267,17 +267,21 @@
         if (li) acc += L.sizePx * 0.3;
         let la = 0;
         first[li] = last[li] = null;
+        // Lines with RTL script are laid out in bidi visual order (reading order runs right to
+        // left): place their letters by where they sit on screen, so the train lands them there.
+        const visual = K.screenOrder(L, line) !== line.glyphs;
         for (const gi of line.glyphs) {
           const g = L.glyphs[gi];
           pos[gi] = acc + g.w / 2;
-          inLine[gi] = la + g.w / 2;
-          if (!g.isSpace) {
-            if (first[li] == null) { first[li] = inLine[gi]; firstW[li] = g.w; }
-            last[li] = inLine[gi];
-            lastW[li] = g.w;
-          }
+          inLine[gi] = visual ? g.x - line.x + g.w / 2 : la + g.w / 2;
           acc += g.w + L.tracking;
           la += g.w + L.tracking;
+        }
+        for (const gi of line.glyphs) {
+          const g = L.glyphs[gi];
+          if (g.isSpace) continue;
+          if (first[li] == null || inLine[gi] < first[li]) { first[li] = inLine[gi]; firstW[li] = g.w; }
+          if (last[li] == null || inLine[gi] > last[li]) { last[li] = inLine[gi]; lastW[li] = g.w; }
         }
       });
       return { pos, inLine, first, last, firstW, lastW };
@@ -291,7 +295,7 @@
       const PT = T.T;
       if (P.guide !== 'none' && f.echo === 0) guide(f, path, P.guide);
       const dur = f.dur;
-      const easeIn = TM.ease(P.easeIn, 'smooth'), easeOut = TM.ease(P.easeOut, 'anticipate');
+      const easeIn = TM.ease(P.easeIn, 'smooth'), easeOut = TM.ease(P.easeOut, 'linear');
       let inDur = P.inDur, outDur = P.timing === 'in' ? 0 : P.outDur;
       const tot = inDur + outDur;
       if (tot > 1) { inDur /= tot; outDur /= tot; }

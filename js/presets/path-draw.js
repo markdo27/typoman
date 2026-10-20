@@ -186,7 +186,7 @@
         const lane = laneTable(path, up, L.capH * k);
         const Ll = lane.length;
         const w = line.width * k;
-        const x0 = L.glyphs[line.glyphs[0]].x;
+        const x0 = line.x; // left edge: RTL lines keep their visual order, reading right to left along the path
         // On closed paths "center" means centred on the top of the shape, where text reads upright.
         let start = path.closed ? lane.top - w / 2 : (Ll - w) / 2, stretch = 1;
         if (P.align === 'start') start = path.closed ? 0 : Ll * 0.04;
