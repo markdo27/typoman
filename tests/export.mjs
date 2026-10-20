@@ -35,7 +35,8 @@ const MIN_GIF_PSNR = 40; // dB RGB, ≤ 256 colours, no dither (measured 56.4)
 // Transparent WebM: the alpha stream gets half the colour bitrate, so fast motion costs it
 // (measured 39.4 dB on keyframes, 31.8 dB on P-frames of a 1 s orbit; 35.1 dB at 4 s).
 const MIN_ALPHA_PSNR = 27; // dB, alpha plane
-const MIN_ALPHA_RGB_LUMA_PSNR = 27; // dB, colour where the reference is opaque (measured 31.4–40.0)
+const MIN_ALPHA_COLOUR_PSNR = 27; // dB luma, colour where the reference is opaque (measured 31.4–40.0)
+const SOFT_ALPHA_RATIO = [0.7, 1.3]; // decoded / reference count of partially transparent pixels (measured 1.01–1.04)
 const MAX_TRANSPARENT_DELTA = 0.01; // |transparent fraction(file) − (reference)| (measured 0.0022)
 const MIN_CLEAR_BG = 0.99; // reference-transparent pixels that decode with alpha ≤ 2 (measured 0.997)
 const MIN_SOLID_CORE = 0.95; // type interior (≥ 2 px from any edge) that decodes with alpha ≥ 240 (measured 0.982)
@@ -97,18 +98,14 @@ async function installPageHelpers(page) {
     };
     window.__qaExport = async (sceneIn, opts) => {
       const progress = [];
-      let codec = null;
       const t0 = performance.now();
-      const res = await TM.Export.run(TM.Scene.normalize(sceneIn), opts, {
-        onProgress: (p) => progress.push(+(p.fraction || 0)),
-        onCodec: (c) => { codec = { id: c.id, codec: c.codec, label: c.label, family: c.family, alphaMode: c.alphaMode }; },
-      });
+      const res = await TM.Export.run(TM.Scene.normalize(sceneIn), opts, { onProgress: (p) => progress.push(+(p.fraction || 0)) });
       const ms = performance.now() - t0;
       let monotonic = true;
       for (let i = 1; i < progress.length; i++) if (progress[i] < progress[i - 1] - 1e-9) monotonic = false;
       const neg = opts.format === 'mp4' || opts.format === 'webm' ? await TM.Export.negotiate(res.plan) : null;
       return {
-        ms, name: res.name, info: res.info, plan: res.plan, codec,
+        ms, name: res.name, info: res.info, plan: res.plan,
         tried: neg ? neg.tried.map((t) => `${t.id}:${t.ok ? 'yes' : 'no'}`).join(' ') : '',
         progress: { count: progress.length, monotonic, last: progress[progress.length - 1] },
         b64: await toB64(new Uint8Array(await res.blob.arrayBuffer())),
@@ -342,19 +339,21 @@ async function checkAlphaVideo(R, page, job, scene, res, file, size, hasFF) {
   if (frames.length !== n) return;
   const M = yuvMatrix(st.color_space, st.color_range);
   const refs = await refFrames(page, scene, size, job.sample.map((i) => i / FPS));
-  let worstA = Infinity, worstC = Infinity, worstDelta = 0, minFrac = 1, maxFrac = 0, softMin = Infinity, worstClear = 1, worstCore = 1;
+  let worstA = Infinity, worstC = Infinity, worstDelta = 0, minFrac = 1, maxFrac = 0, worstClear = 1, worstCore = 1;
+  const softRatios = [];
   const rows = [];
   job.sample.forEach((i, j) => {
     const P = planes(frames[i], W, H), rf = refs[j];
     const refA = new Uint8Array(W * H), mask = new Uint8Array(W * H);
-    let tRef = 0, tDec = 0, soft = 0, zero = 0, zeroClear = 0, core = 0, coreSolid = 0;
+    let tRef = 0, tDec = 0, softRef = 0, softDec = 0, zero = 0, zeroClear = 0, core = 0, coreSolid = 0;
     for (let p = 0; p < W * H; p++) {
       const a = rf[p * 4 + 3];
       refA[p] = a;
       mask[p] = a >= 250 ? 1 : 0;
       if (a < 8) tRef++;
       if (P.A[p] < 8) tDec++;
-      if (a > 8 && a < 247) soft++;
+      if (a > 8 && a < 247) softRef++;
+      if (P.A[p] > 8 && P.A[p] < 247) softDec++;
       if (a === 0) { zero++; if (P.A[p] <= 2) zeroClear++; }
     }
     // Interior of the type: opaque with every pixel within 2 px opaque too.
@@ -372,19 +371,20 @@ async function checkAlphaVideo(R, page, job, scene, res, file, size, hasFF) {
     worstDelta = Math.max(worstDelta, Math.abs(fr - fd));
     minFrac = Math.min(minFrac, fr);
     maxFrac = Math.max(maxFrac, fr);
-    softMin = Math.min(softMin, soft);
+    softRatios.push(softRef ? softDec / softRef : 0);
     worstClear = Math.min(worstClear, zero ? zeroClear / zero : 1);
     worstCore = Math.min(worstCore, core ? coreSolid / core : 0);
     rows.push(`${i}: alpha ${fmtDB(a)} dB, opaque-colour Y ${fmtDB(y)} dB, transparent ${(fd * 100).toFixed(2)}% (ref ${(fr * 100).toFixed(2)}%), solid core ${((coreSolid / Math.max(1, core)) * 100).toFixed(1)}% of ${core}`);
   });
   R.info(rows.join(' · '));
   R.check(`webm-alpha: alpha PSNR ≥ ${MIN_ALPHA_PSNR} dB`, worstA >= MIN_ALPHA_PSNR, `worst ${fmtDB(worstA)} dB`);
-  R.check(`webm-alpha: colour PSNR ≥ ${MIN_ALPHA_RGB_LUMA_PSNR} dB where opaque`, worstC >= MIN_ALPHA_RGB_LUMA_PSNR, `worst ${fmtDB(worstC)} dB`);
+  R.check(`webm-alpha: colour PSNR ≥ ${MIN_ALPHA_COLOUR_PSNR} dB where opaque`, worstC >= MIN_ALPHA_COLOUR_PSNR, `worst ${fmtDB(worstC)} dB`);
   R.check('webm-alpha: transparent fraction matches the reference', worstDelta <= MAX_TRANSPARENT_DELTA, `worst |Δ| ${(worstDelta * 100).toFixed(3)} points`);
   R.check('webm-alpha: transparent fraction is sensible (mostly background, type visible)', minFrac > 0.5 && maxFrac < 0.99, `${(minFrac * 100).toFixed(1)}–${(maxFrac * 100).toFixed(1)}% transparent`);
   R.check('webm-alpha: the background decodes transparent (alpha ≤ 2)', worstClear >= MIN_CLEAR_BG, `worst ${(worstClear * 100).toFixed(2)}% of transparent pixels`);
   R.check('webm-alpha: the inside of the type decodes opaque (alpha ≥ 240)', worstCore >= MIN_SOLID_CORE, `worst ${(worstCore * 100).toFixed(1)}% of interior pixels`);
-  R.check('webm-alpha: soft (partial) alpha survives', softMin > 500, `≥ ${softMin} partially transparent pixels per frame in the reference`);
+  R.check('webm-alpha: soft (partial) alpha survives', softRatios.every((r) => r >= SOFT_ALPHA_RATIO[0] && r <= SOFT_ALPHA_RATIO[1]),
+    `partially transparent pixels, file / reference: ${softRatios.map((r) => r.toFixed(2)).join(', ')}`);
 }
 
 // ───────────────────────────── GIF ─────────────────────────────
@@ -452,7 +452,7 @@ async function checkZIP(R, page, job, scene, res, bytes, size) {
   const n = job.frames;
   const pngs = entries.filter((e) => e.name.endsWith('.png'));
   const readme = entries.find((e) => e.name === 'README.txt');
-  const slug = 'qa-cylinder';
+  const slug = scene.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); // as TM.Export.slug
   R.check('zip: one PNG per frame plus README.txt', pngs.length === n && !!readme && entries.length === n + 1, `${entries.length} entries`);
   R.check('zip: stored entries with valid CRC-32', entries.every((e) => e.crcOk && e.method === 0), entries.filter((e) => !e.crcOk).map((e) => e.name).join(', '));
   const names = pngs.map((e) => e.name);
