@@ -179,3 +179,67 @@ tests; a correct `av1C` box in AV1 MP4s.
 Full reports: [art director](round-2/art-director.md) ·
 [motion designer](round-2/motion-designer.md) ·
 [creative technologist](round-2/creative-technologist.md)
+
+
+---
+
+## Round 3: out-of-the-box signature features
+
+**Snapshot:** `f25ca23`. **Band: 8.0** (from 7.5). All three judges independently scored 8.0.
+
+| Judge | MC | TQ | PC | CR | EE | UX | PR | EQ | Mean | Band |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Art Director | 7.5 | 7.5 | 8 (p) | 8 | 8.5 | 8 (p) | 7.5 | 7.5 | 7.81 | 8.0 |
+| Motion Designer | 8 | 8 | 8.5 | 8 | 8.5 | 8.5 | 8 | 7.5 (p) | 8.125 | 8.0 |
+| Creative Technologist | 7.5 | 7.5 | 8 (p) | 7.5 (p) | 8.5 | 7.5 (p) | 7.5 | 8 | 7.75 | 8.0 |
+| **Median** | **7.5** | **7.5** | **8** | **8** | **8.5** | **8** | **7.5** | **7.5** | | **8.0** |
+
+(p) = provisional.
+
+**What the round added, verified by the jury**
+- **Signature presets:** Phrase Morph (shared letters glide between phrases), Particles (a seeded swarm that
+  assembles, holds and condenses), Gravity (letters fall onto the drawn path and settle on it, with
+  deterministic rigid-body physics), Axis Wave (any variable-font axis, letter by letter).
+- **Multi-layer scenes:** 8 starter templates, track mattes, transform keyframes with diamonds on the
+  timeline.
+- **Timing ceiling:** a stagger-distribution curve, seeded jitter, and custom springs `spring(k,c)` in the
+  curve editor.
+- **Typography:** ligatures preserved under per-glyph animation (0.00 % from a native run), true italics on
+  17 families, slant onto `slnt` axes, OpenType figure features, uploaded fonts named from their own tables
+  with their variable axes, collision-free Path Flow, RTL in 31 of 33 presets.
+- **Safety:** a WCAG 2.3.1 flash check in the studio, export and embed dialogs; every shipped preset and
+  look at or under 3 flashes a second.
+- **Embeds:** per-page `text=`, `scrub="scroll"`, `trigger="hover"`, and an iframe `progress` API; every
+  route bit-identical to the studio.
+- **Exports:** exact loop spans at any frame rate (N14); better transparent-WebM alpha.
+- **CI:** smoke, export (ffprobe/ffmpeg), embed, live-embed, option sweep, path motion, and a studio
+  interaction suite (desktop + phone), as five parallel jobs.
+
+**Fixed right after the round**
+| Finding | Fix |
+|---|---|
+| Phrase Morph drew glyphs at full size on a smaller fitted layout, crushing user text (AD 1, MD 2) | Glyphs draw at the fitted size; one line morphs word to word |
+| Axis Wave RTL lines sat ~200 px right of centre (AD 4) | RTL lines measured without logical-order kerns: ink centre 479 of 480 |
+| The flash check passed a full-screen 30 Hz strobe at 60 fps (CT F1) | Only the latest change in the tolerance window counts; smoke checks a per-frame strobe |
+| WOFF zlib bomb in the font reader: 1.1 MB file → 3.1 GB (CT F3) | Capped streaming inflate: a 300 MB bomb is rejected in 4 ms |
+
+**Round 4 priorities (merged from the three reports, ranked)**
+1. **Type on paths clean in every exported frame:** the Fill-mode repeat seam during morphs, word splits at
+   sharp pen corners, Path Flow on Star, and the collision-free carrier in Draw On, Ribbon and Fly In
+   (AD 2–3, MD 1, 4).
+2. **Robust to user copy:** long text in every preset, templates that adapt to line count and the matte
+   text, Stack descenders, Wave amplitude vs leading, Kinetic Grid words kept whole (AD 5, 7, 8, 10; MD 2).
+3. **CI that catches feature regressions:** pixel-level checks for mattes, transform keys, italics,
+   features, `text-2…6`, eviction and alpha quality; motion/overlap checks for every preset; flash
+   detector strobes (red, long and short loops) and `flashes-a` in CI; a performance budget (CT F2, F5).
+4. **Embed dialog exposes the live-embed features** (hover, scroll scrub, page text), plus a font route for
+   uploaded fonts in iframe and web-component embeds (MD 5).
+5. **Responsiveness:** keep the studio responsive during export (Cancel under a second), simulate Gravity
+   off the main thread, flushed timing in the preview adapter, honest export estimates (MD 7, 8; CT F7, F8).
+6. **Polish:** Gravity resting overlaps, transform-keyed layers rasterised at their scale, bounded springs,
+   uploaded families grouped (Bold + Bold Italic), BT.709 tags for HD, path keys on the timeline,
+   housekeeping (CT F6, F9, F11, F12; MD 3, 6, 9–12).
+
+Full reports: [art director](round-3/art-director.md) ·
+[motion designer](round-3/motion-designer.md) ·
+[creative technologist](round-3/creative-technologist.md)

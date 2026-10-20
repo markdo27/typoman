@@ -153,6 +153,7 @@ across eight criteria, scored by a three-judge jury each round. See
 | 0: original V3 demo | 3.5 |
 | 1: rebuilt studio | 7.0 |
 | 2: more presets, looks, pen tool, path keyframes, layer timing, width & optical size | **7.5** |
+| 3: Phrase Morph, Particles, Gravity, templates, mattes, keyframes, springs, real italics & ligatures, live embeds, flash safety | **8.0** |
 
 ## License
 
