@@ -65,8 +65,10 @@
   const REMIX_FONTS = ['Anton', 'Bebas Neue', 'Unbounded', 'Syne', 'Dela Gothic One', 'Rubik Mono One', 'Big Shoulders Display', 'Bricolage Grotesque', 'Fraunces', 'Instrument Serif', 'Archivo Black', 'Climate Crisis', 'Tilt Warp', 'Space Grotesk', 'Inter Tight', 'Bodoni Moda', 'Monoton', 'Six Caps', 'Righteous', 'Major Mono Display', 'Roboto Flex', 'Science Gothic', 'Anybody'];
   function remixLocks() {
     const l = UI.storage.get(REMIX_KEY, null) || {};
-    return { look: !!l.look, font: !!l.font, colors: !!l.colors };
+    return { look: !!l.look, font: !!l.font, colors: !!l.colors, path: !!l.path };
   }
+  const LOCK_NAMES = { look: 'preset', font: 'font', colors: 'colours', path: 'path' };
+  const pathName = (def) => (def && def.preset ? ((TM.Path.PRESETS.find((p) => p.id === def.preset) || {}).label || def.preset) : 'custom');
   const NICE_EASES = ['glide', 'smooth', 'snap', 'overshoot', 'anticipate', 'spring', 'springSoft', 'outBack', 'outExpo', 'outQuart', 'inOutCubic'];
   /** A motion param near its default: often the default, otherwise a draw biased toward it. */
   function remixParam(p) {
@@ -89,7 +91,8 @@
   /**
    * Remix: one undoable step. Picks a preset (unless locked), then either starts from one of its
    * curated looks (sometimes) or rolls palette, font, effects, motion params biased to their
-   * defaults and — for path presets with an untouched shape — a new path. Locks are respected.
+   * defaults and — for path presets with an untouched shape — a new path. Locks are respected:
+   * the Path lock keeps the layer's path and its keyframes exactly as they were.
    */
   function remix(store) {
     const locks = remixLocks();
@@ -104,8 +107,12 @@
     TM.fonts.ensure(family, 700);
     const aspect = store.scene.size.w / store.scene.size.h;
     const sel = store.selected;
+    const pathBefore = JSON.stringify(store.layer.path);
     store.update((s) => {
       let l = s.layers[sel];
+      // Path lock: whatever happens below, the path and its keyframes are put back untouched.
+      const keepPath = locks.path ? JSON.parse(JSON.stringify({ path: l.path || null, pathMorph: l.pathMorph })) : null;
+      const restorePath = () => { if (keepPath) { l.path = keepPath.path; l.pathMorph = keepPath.pathMorph; } };
       s.seed = Math.floor(Math.random() * 9999);
       if (l.preset !== presetId) {
         l.preset = presetId;
@@ -120,13 +127,15 @@
         l = s.layers[sel];
         if (locks.font) l.font = keep.font;
         if (locks.colors) { l.fill = keep.fill; l.stroke = keep.stroke; s.bg = keep.bg; }
+        restorePath();
         return; // a curated look keeps its designer-tuned motion
       }
       def.params.forEach((p) => { if (p.type !== 'color') l.params[p.key] = remixParam(p); });
-      if (def.usesPath && (!l.path || l.path.preset) && Math.random() < 0.7) {
+      if (!keepPath && def.usesPath && (!l.path || l.path.preset) && Math.random() < 0.7) {
         const shapes = TM.Path.PRESETS.map((x) => x.id).filter((id) => !l.path || id !== l.path.preset);
         l.path = TM.Path.preset(pick(shapes), aspect);
       }
+      restorePath();
       if (!locks.colors) {
         s.bg.type = 'solid';
         s.bg.color = bg;
@@ -154,9 +163,11 @@
       s.post.grain = Math.random() < 0.3 ? 0.3 : 0;
     }, { reason: 'remix', label: look ? 'Remix: ' + look.name : 'Remix' });
     if (look) TM.prepare(store.scene);
-    const kept = Object.entries(locks).filter(([, v]) => v).map(([k]) => ({ look: 'preset', font: 'font', colors: 'colours' })[k]);
+    const kept = Object.entries(locks).filter(([, v]) => v).map(([k]) => LOCK_NAMES[k]);
     const what = look ? '“' + look.name + '” (' + def.name + ')' : def.name + ' · ' + Studio.fontLabel(store.layer.font.family);
-    toast('Remixed: ' + what + (kept.length ? ' · kept ' + kept.join(', ') : ''), 'info', 3200, { label: 'Undo', run: () => store.undo() });
+    // Name a new path shape, so a changed path never goes unnoticed (Undo brings it back).
+    const newPath = def.usesPath && JSON.stringify(store.layer.path) !== pathBefore ? ' · path: ' + pathName(store.layer.path) : '';
+    toast('Remixed: ' + what + newPath + (kept.length ? ' · kept ' + kept.join(', ') : ''), 'info', 3200, { label: 'Undo', run: () => store.undo() });
     const btn = $('#remixBtn');
     if (btn && !UI.reducedMotion()) { btn.classList.remove('spin'); void btn.offsetWidth; btn.classList.add('spin'); }
   }
@@ -341,6 +352,7 @@
         { label: 'Current preset', checked: locks.look, run: (v) => { locks.look = v; save(); } },
         { label: 'Font', checked: locks.font, run: (v) => { locks.font = v; save(); } },
         { label: 'Colours', hint: 'Keep your brand palette', checked: locks.colors, run: (v) => { locks.colors = v; save(); } },
+        { label: 'Path', hint: 'Keep its shape and keyframes', checked: locks.path, run: (v) => { locks.path = v; save(); } },
         '-',
         { label: 'Remix now', icon: 'dice', kbd: 'R', run: () => remix(this.store) },
       ], { label: 'Remix options', width: 248 });
