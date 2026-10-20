@@ -205,7 +205,10 @@
     const info = h('div', { class: 'tm-info', 'aria-live': 'polite' });
     // Photosensitivity (WCAG 2.3.1): a warning, never a block.
     const flashBox = h('div', { class: 'tm-info warn tm-flash', role: 'note', hidden: true });
-    const optsSet = h('fieldset', { class: 'tm-opts', style: 'border:0;margin:0;min-width:0' }, formats, flashBox, resRow, fpsSeg.el, lenRow, frameRow, qualSeg.el, alphaRow, matteRow, ditherRow, info);
+    // Render-time estimate, measured before you start: a heavy effect stack at 1080p60 can take
+    // a quarter of an hour, and the progress ETA only appears once rendering has begun.
+    const costBox = h('div', { class: 'tm-info warn tm-cost', role: 'note', hidden: true });
+    const optsSet = h('fieldset', { class: 'tm-opts', style: 'border:0;margin:0;min-width:0' }, formats, flashBox, resRow, fpsSeg.el, lenRow, frameRow, qualSeg.el, alphaRow, matteRow, ditherRow, info, costBox);
     m.body.append(optsSet);
 
     // ── footer ──
@@ -299,7 +302,80 @@
       if (key !== prevKey) { prevKey = key; pvScene = X.sceneFor(s, plan); pvRenderer.setScene(pvScene); sizePreview(); TM.prepare(pvScene); }
       updateInfo();
       Studio.flashNote(flashBox, s);
+      scheduleCost();
       if (f.still) drawPreview(plan.start);
+    }
+
+    // ── render-time estimate ──
+    let costTimer = 0, costToken = 0, costKey = '', costCanvas = null, costRenderer = null;
+    const SLOW_MS = 60000;
+    function scheduleCost() {
+      const key = JSON.stringify([store.scene, plan.width, plan.height, plan.frames, plan.transparent, plan.matte]);
+      if (key === costKey) return;
+      costKey = key;
+      costBox.hidden = true;
+      clearTimeout(costTimer);
+      if (plan.frames < 2) return; // a still renders in moments
+      costTimer = setTimeout(() => estimateCost(++costToken), 350);
+    }
+    /**
+     * Time export frames at export quality. Small probes first (≤ 320×180, then 4× the pixels):
+     * cost grows slower than the pixel count, so the two fit an exponent to extrapolate to the
+     * real size. When that predicts under ~0.3 s a frame, two frames at the real size replace
+     * the guess. The UI gets a turn between renders, so a heavy stack never freezes the dialog.
+     */
+    async function estimateCost(token) {
+      if (busy || !m.isOpen) return;
+      const p = plan, scene = X.sceneFor(store.scene, p);
+      if (!costCanvas) { costCanvas = document.createElement('canvas'); costRenderer = new TM.Renderer(costCanvas, { quality: 'full' }); }
+      const r = costRenderer;
+      r.setScene(scene);
+      await TM.prepare(scene);
+      const live = () => token === costToken && !busy && m.isOpen;
+      const pause = () => new Promise((res) => setTimeout(res, 0));
+      const time = (u) => { const t0 = performance.now(); r.render(scene.duration * u); return performance.now() - t0; };
+      const size = (k) => r.resize(Math.max(2, p.width * k), Math.max(2, p.height * k));
+      const k2 = Math.min(1, Math.sqrt((640 * 360) / (p.width * p.height))), k1 = k2 / 2;
+      let perFrame = Infinity;
+      if (k2 < 1) {
+        size(k1);
+        time(0.25); // warm-up: layouts, caches, buffers
+        await pause();
+        if (!live()) return;
+        const t1 = time(0.6);
+        await pause();
+        if (!live()) return;
+        size(k2);
+        const t2 = time(0.6);
+        const e = TM.math.clamp(Math.log(Math.max(t2, 0.1) / Math.max(t1, 0.1)) / Math.log(4), 0.5, 1.1);
+        perFrame = t2 * Math.pow(1 / (k2 * k2), e);
+      }
+      if (perFrame < 300 || k2 >= 1) {
+        size(1);
+        time(0.25);
+        await pause();
+        if (!live()) return;
+        const a = time(0.6);
+        await pause();
+        if (!live()) return;
+        perFrame = (a + time(0.85)) / 2;
+      }
+      r.resize(2, 2); // release the big buffer
+      const total = perFrame * p.frames * 1.1; // + encoding
+      costBox.hidden = total < SLOW_MS;
+      if (costBox.hidden) return;
+      const heavy = [];
+      store.scene.layers.forEach((l) => {
+        if (l.visible === false) return;
+        if (l.fx.blur > 0) heavy.push('motion blur');
+        if (l.fx.echo.count > 0) heavy.push('echo');
+        if (l.fx.extrude.depth > 0) heavy.push('extrude');
+        if (l.fx.glow.amount > 0) heavy.push('glow');
+      });
+      costBox.replaceChildren(
+        h('div', { class: 'ttl' }, 'Slow export: about ' + X.formatDuration(total)),
+        h('p', null, `About ${perFrame < 1000 ? Math.round(perFrame) + ' ms' : (perFrame / 1000).toFixed(1) + ' s'} a frame × ${p.frames} frames at ${p.width}×${p.height}` + (heavy.length ? ', mostly from ' + [...new Set(heavy)].join(', ') : '') + '.'),
+        h('p', null, 'A lower resolution or frame rate, or lighter effects, renders much faster. Keep this tab open while it runs.'));
     }
 
     function sizePreview() {
