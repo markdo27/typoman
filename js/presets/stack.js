@@ -101,9 +101,12 @@
         let v;
         switch (P.motion) {
           case 'cascade': {
-            // A bulge travels down the stack.
-            const pos = (ph % 1) * (n + 1) - 0.5;
-            v = Math.exp(-Math.pow((i - pos) / 0.7, 2)) * 2 - 0.4;
+            // A bulge travels down the stack on a circle of n + 1 rows, so it leaves the bottom
+            // while it re-enters the top: periodic, hence seamless at the loop.
+            const C = n + 1;
+            const dd = (((i - (ph % 1) * C) % C) + C) % C;
+            const d = Math.min(dd, C - dd);
+            v = Math.exp(-Math.pow(d / 0.7, 2)) * 2 - 0.4;
             break;
           }
           case 'pulse': v = Math.sin(TAU * ph) * (i % 2 ? -1 : 1); break;
@@ -207,10 +210,23 @@
     const ls = 'letterSpacing' in ctx;
     if (ls) ctx.letterSpacing = spacing.toFixed(2) + 'px';
     const tk = -Math.tan(skew + f.slant);
-    ctx.setTransform(sx, 0, tk * sy, sy, x, y);
     ctx.globalAlpha = f.alpha;
-    const color = f.textPaint({ vi: i, cx: x - f.cx, cy: y - f.cy });
     const ox = -runW / 2, oy = row.oy; // centres the row's ink on (x, y)
+    const ex = f.extrude;
+    if (ex) {
+      // Extrude in proportion to the row's real size (rows are far bigger than the layer's
+      // font size the engine sized the extrusion for), with enough steps to stay solid.
+      const k = Math.max(1, (REF * sy) / f.size);
+      const steps = Math.min(64, Math.ceil(ex.steps * k));
+      for (let j = steps; j >= 1; j--) {
+        const t = (j / steps) * ex.steps * k;
+        ctx.setTransform(sx, 0, tk * sy, sy, x + ex.dx * t, y + ex.dy * t);
+        ctx.fillStyle = ex.colors[Math.min(ex.steps - 1, Math.max(0, Math.ceil((j / steps) * ex.steps) - 1))];
+        ctx.fillText(row.text, ox, oy);
+      }
+    }
+    ctx.setTransform(sx, 0, tk * sy, sy, x, y);
+    const color = f.textPaint({ vi: i, cx: x - f.cx, cy: y - f.cy });
     if (f.strokeMode === 'outline') {
       ctx.strokeStyle = color;
       ctx.lineWidth = (f.strokeW / Math.max(sx, sy)) * (REF / f.size);

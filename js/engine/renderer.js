@@ -251,8 +251,17 @@
       if ('letterSpacing' in ctx) ctx.letterSpacing = this.layout.tracking.toFixed(2) + 'px';
       ctx.globalAlpha = alpha;
       const ma = cos * sx, mb = sin * sx, mc = (cos * tk - sin) * sy, md = (sin * tk + cos) * sy;
-      ctx.setTransform(ma, mb, mc, md, x, y);
       const ox = -line.width / 2, oy = this.layout.capH / 2;
+      const ex = this.extrude;
+      if (ex) {
+        // Same screen-space extrusion as drawGlyph, behind the whole run.
+        for (let k = ex.steps; k >= 1; k--) {
+          ctx.setTransform(ma, mb, mc, md, x + ex.dx * k * sx, y + ex.dy * k * sy);
+          ctx.fillStyle = ex.colors[k - 1];
+          ctx.fillText(line.text, ox, oy);
+        }
+      }
+      ctx.setTransform(ma, mb, mc, md, x, y);
       const color = o.color || this._paint({ vi: line.index, cx: x - this.cx, cy: y - this.cy }, ma, mb, mc, md, x, y);
       if (this.strokeMode === 'outline') {
         ctx.strokeStyle = color;
@@ -720,16 +729,26 @@
   /**
    * Resolve once every font a scene uses is ready (never rejects): each layer's instance, the
    * subsets its text needs, and any extra instances its preset draws with (preset.fonts).
+   *   opts.timeout   longest wait per font in ms (default 15 s); loads continue past it and a
+   *                  late font re-renders through TM.fonts.onChange
+   *   opts.extras    'wait' (default; exports) or 'background': start the preset's extra
+   *                  instances without waiting for them (a cold embed shows frame 0 sooner)
    */
-  TM.prepare = function (scene) {
+  TM.prepare = function (scene, opts = {}) {
     const jobs = [];
     (scene.layers || []).forEach((l) => {
-      const families = [familyFor(l, scene)];
+      const main = familyFor(l, scene);
+      jobs.push(TM.fonts.ensure(main, l.font.weight, l.text, opts.timeout));
       const preset = TM.getPreset(l.preset);
       if (preset && typeof preset.fonts === 'function') {
-        try { families.push(...(preset.fonts(l, scene) || [])); } catch (e) { console.warn('[TM] preset.fonts failed:', e); }
+        let extra = [];
+        try { extra = preset.fonts(l, scene) || []; } catch (e) { console.warn('[TM] preset.fonts failed:', e); }
+        new Set(extra).forEach((fam) => {
+          if (fam === main) return;
+          const job = TM.fonts.ensure(fam, l.font.weight, l.text, opts.timeout);
+          if (opts.extras !== 'background') jobs.push(job);
+        });
       }
-      new Set(families).forEach((fam) => jobs.push(TM.fonts.ensure(fam, l.font.weight, l.text)));
     });
     return Promise.all(jobs).then(() => scene);
   };
