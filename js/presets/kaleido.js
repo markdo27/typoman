@@ -48,7 +48,7 @@
       const gap = P.gap * size;
 
       // One repeat of the run along x (layout px): glyph centres, then a separator.
-      const x0 = L.glyphs[line.glyphs[0]].x;
+      const x0 = line.x; // left edge (RTL lines keep their visual order)
       const items = [];
       for (const gi of line.glyphs) {
         const g = L.glyphs[gi];
@@ -92,7 +92,7 @@
     looks: [
       { name: 'Stained glass', bg: { type: 'radial', color: '#1b0a2e', color2: '#07000f' }, layer: { font: { family: 'Fraunces', weight: 900 }, fill: { type: 'palette', palette: ['#ff5e5b', '#ffb547', '#ffe3a3', '#ff2e88'] }, params: { segments: 10 } } },
       { name: 'Mono mandala', bg: { type: 'solid', color: '#f4f1ea' }, layer: { font: { family: 'Space Mono', weight: 700 }, fill: { type: 'solid', color: '#141414' }, params: { segments: 6, swing: 0.4, textScale: 0.6 } } },
-      { name: 'Acid bloom', bg: { type: 'solid', color: '#0b0b0c' }, layer: { font: { family: 'Rubik Mono One', weight: 400 }, fill: { type: 'palette', palette: ['#d4ff3a', '#ffffff', '#7a7a7a'] }, fx: { glow: { amount: 0.3, color: '#d4ff3a' } }, params: { segments: 12, flow: 2, spin: -1 } } },
+      { name: 'Acid bloom', bg: { type: 'solid', color: '#0b0b0c' }, layer: { font: { family: 'Rubik Mono One', weight: 400 }, fill: { type: 'palette', palette: ['#d4ff3a', '#ffffff', '#7a7a7a'] }, fx: { glow: { amount: 0.3, color: '#d4ff3a' } }, params: { segments: 12, flow: 1, swingCycles: 2, spin: -1 } } },
     ],
   });
 })(window.TM);

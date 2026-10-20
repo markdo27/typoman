@@ -10,11 +10,24 @@ No install, no account, no build step. It's static files on GitHub Pages.
 
 ## What you can do
 
-- **Animate type with 29 motion presets**, grouped as path, kinetic, reveal, glitch,
+- **Animate type with 33 motion presets**, grouped as path, kinetic, reveal, glitch,
   dimensional and generative: from Path Flow, Ribbon and Orbit to Split Flap, Focus Pull,
-  Kaleido and Melt. Every preset staggers by letter, word or line, with easing curves you
-  can edit (signature curves, springs, or your own cubic-bézier).
-- **Start from a look.** 87 curated looks (colour, font, motion and timing, designed per
+  Kaleido and Melt. Three of them have no template-pack equivalent:
+  - **Axis Wave** sweeps a font's own variable axes letter by letter: Tilt Warp's 3D tilt,
+    Climate Crisis melting through the years, Kablammo's morph.
+  - **Phrase Morph** carries the letters two phrases share into the next phrase, while the
+    rest dissolve.
+  - **Particles** assembles the word from a seeded swarm that holds as dot or tile lettering,
+    or condenses into solid type.
+  - **Gravity** drops the letters onto the path you draw. They bounce, tumble and settle into
+    place on it, then the ground gives way.
+- **Safe by default.** Every preset and look stays at or under 3 flashes a second (WCAG 2.3.1),
+  and the studio checks your scene before export.
+- **Time it like a motion designer.** Every preset staggers by letter, word or line. Easing
+  curves are editable (signature curves, springs, or your own cubic-bézier). A
+  **stagger curve** shapes how start times spread along the order, and seeded **jitter**
+  loosens it.
+- **Start from a look.** 103 curated looks (colour, font, motion and timing, designed per
   preset) are one click away in the **Inspiration** view. Applying a look never touches
   your text, and **Remix** mixes curated looks with fresh rolls.
 - **Shape the motion path.** Pick one of 22 shapes (wave, arc, circle, spiral, infinity,
@@ -24,14 +37,17 @@ No install, no account, no build step. It's static files on GitHub Pages.
   shapes, A → B → C → D → E, in a cycle or ping-pong, with an ease per step.
 - **Time each layer.** Up to six text layers, each with its own motion, on timeline lanes.
   Drag a lane to delay it, play it up to 8× per loop, or play it once and hold.
-- **Use real typography.** There are 54 curated Google Fonts, and you can upload your own.
-  Variable fonts animate their weight smoothly, and fonts with **width** and **optical
-  size** axes (Roboto Flex, Science Gothic, Fraunces, …) expose them as controls. Optical
+- **Use real typography.** There are 60 curated Google Fonts, and you can upload your own.
+  Variable fonts animate their weight smoothly, and fonts with **width**, **optical size**
+  or custom axes (Roboto Flex, Science Gothic, Fraunces, Tilt Warp, Recursive, …) expose them. Optical
   size follows the text's size in the scene, so previews and exports draw identical
   letterforms. **Stack** fills the frame through the width axis, condensing tall rows and
-  expanding short ones instead of stretching letters. Kerning is preserved, emoji are
-  safe, and Arabic and Hebrew text runs right to left. You get multi-line, tracking,
-  leading, case, slant, outline, and gradient or palette fills.
+  expanding short ones instead of stretching letters. Kerning and **ligatures** are
+  preserved even though letters move one by one (fi, ffl and Th stay one glyph). Slant uses
+  a font's own `slnt` axis where it has one, so Roboto Flex and Recursive lean as designed.
+  Emoji are safe, Arabic and Hebrew run right to left, and long lines wrap into balanced
+  lines. You get multi-line, tracking, leading, case, slant, outline, and gradient or
+  palette fills.
 - **Layer effects:** echo trails, motion blur, glow, drop shadow, 3D extrude, film grain
   and vignette.
 - **Export:** frame-accurate MP4 (H.264, with AV1/VP9 fallbacks), WebM (with
@@ -53,6 +69,23 @@ No install, no account, no build step. It's static files on GitHub Pages.
 ```
 
 The studio's **Embed** button generates both snippets with your scene filled in.
+
+An embed is live type, not a video, so it can do things a video can't:
+
+```html
+<!-- One design, different copy on every page (\n breaks the line) -->
+<typoman-player scene="…" autoplay loop text="Spring sale\n−40%"></typoman-player>
+
+<!-- Scroll-scrubbed: the animation follows the page's scroll -->
+<typoman-player scene="…" scrub="scroll"></typoman-player>
+
+<!-- Plays while the pointer is over it (a tap toggles on touch screens) -->
+<typoman-player scene="…" trigger="hover" loop></typoman-player>
+```
+
+`text-2` … `text-6` set the other layers. The iframe takes `&text=…&trigger=hover` in its
+URL, and a `{ typoman: 'progress', value: 0..1 }` message lets the parent page scrub it. With
+reduced motion turned on, every embed shows a still and a play button.
 
 ## Keyboard
 
@@ -99,7 +132,7 @@ js/presets/      one file per motion preset
 js/export/       MP4 / WebM / GIF / PNG / ZIP encoders, standalone HTML
 js/studio/       store · controls · inspector · panels · dialogs · app
 vendor/          pinned MIT libraries (mp4-muxer, webm-muxer)
-labs/            earlier experiments (V3 demo, Flash engine, Cavalry study)
+labs/            earlier experiments (V3 demo, Flash engine, Cavalry study), not deployed
 ```
 
 ## Develop
@@ -120,6 +153,7 @@ across eight criteria, scored by a three-judge jury each round. See
 | 0: original V3 demo | 3.5 |
 | 1: rebuilt studio | 7.0 |
 | 2: more presets, looks, pen tool, path keyframes, layer timing, width & optical size | **7.5** |
+| 3: Phrase Morph, Particles, Gravity, templates, mattes, keyframes, springs, real italics & ligatures, live embeds, flash safety | **8.0** |
 
 ## License
 

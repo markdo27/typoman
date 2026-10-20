@@ -6,6 +6,10 @@
  *  - The outline is a dashed strokeText run through f.drawGlyph (fill, palette, slant, echo all
  *    apply): one long dash slides in along every contour at once, with round caps like a pen.
  *    The gap after the dash is several times its length, so nothing leaks at the start.
+ *  - Canvas restarts the dash on every contour, so a dash as long as the glyph's longest
+ *    contour draws every contour on (and lifts it off) continuously. That length is measured
+ *    per glyph, because a fixed guess is too short for an M or a W: their outlines snapped in
+ *    at the end of the draw and vanished in one frame at the start of the lift.
  *  - The flood is the glyph's own fill clipped under a travelling wave whose amplitude dies as
  *    the level reaches the top, so the letter settles completely full.
  */
@@ -15,6 +19,60 @@
   const DRAW_END = 0.62;    // in-window share spent drawing the outline
   const FLOOD_START = 0.42; // ...and where the flood starts (they overlap)
   const DRAIN_END = 0.55, LIFT_START = 0.35;
+
+  // ── contour length ──
+  // Canvas exposes no glyph outlines, and tracing the filled shape is not enough: variable
+  // fonts and joined Arabic keep overlapping contours, which strokeText strokes in full. So the
+  // quantity that matters is measured directly: the shortest dash for which a dashed stroke of
+  // the glyph equals the solid stroke, found by doubling and bisection with a thin pen at a fixed
+  // reference size. A fixed size keeps the result independent of the render size, so the
+  // preview and every export draw on with the same timing. Results are memoised per glyph.
+  const REF = 96;
+  const memo = new Map();
+  let mctx = null;
+
+  /** Length of the longest contour of `ch` in `font` (a font string at REF px), per px of font size. */
+  function longestContour(font, ch) {
+    const key = font + '\u0001' + ch + '\u0001' + TM.fonts.version();
+    let v = memo.get(key);
+    if (v !== undefined) return v;
+    if (!mctx) mctx = TM.MotionKit.canvas(8, 8).getContext('2d', { willReadFrequently: true });
+    const c = mctx.canvas;
+    mctx.font = font;
+    const m = mctx.measureText(ch);
+    const x0 = Math.ceil(Math.max(0, m.actualBoundingBoxLeft || 0)) + 3;
+    const y0 = Math.ceil(Math.max(0, m.actualBoundingBoxAscent || REF)) + 3;
+    const w = x0 + Math.ceil(Math.max(1, m.actualBoundingBoxRight || REF)) + 3;
+    const h = y0 + Math.ceil(Math.max(0, m.actualBoundingBoxDescent || 0)) + 3;
+    c.width = w; c.height = h; // resets the context
+    const stroke = (dash) => {
+      mctx.setTransform(1, 0, 0, 1, 0, 0);
+      mctx.clearRect(0, 0, w, h);
+      mctx.font = font;
+      if ('fontKerning' in mctx) mctx.fontKerning = 'normal';
+      mctx.lineWidth = 1;
+      mctx.lineJoin = 'round';
+      mctx.lineCap = 'round';
+      mctx.setLineDash(dash ? [dash, dash * 5] : []);
+      mctx.lineDashOffset = 0;
+      mctx.strokeText(ch, x0, y0);
+      return mctx.getImageData(0, 0, w, h).data;
+    };
+    const solid = stroke(0);
+    // A dash shorter than some contour leaves part of it undrawn: whole pixels go missing.
+    const short = (dash) => {
+      const d = stroke(dash);
+      for (let i = 3, k = 0; i < d.length; i += 4) if (Math.abs(d[i] - solid[i]) > 100 && ++k > 2) return true;
+      return false;
+    };
+    let lo = 0, hi = REF * 0.25;
+    for (let n = 0; n < 12 && short(hi); n++) { lo = hi; hi *= 2; }
+    for (let n = 0; n < 9; n++) { const mid = (lo + hi) / 2; if (short(mid)) lo = mid; else hi = mid; }
+    v = hi / REF;
+    if (memo.size > 600) memo.delete(memo.keys().next().value);
+    memo.set(key, v);
+    return v;
+  }
 
   TM.registerPreset({
     id: 'outline-draw',
@@ -42,8 +100,22 @@
       TM.P.range('wave', 'Wave height', 0, 1, 0.01, 0.5, { group: 'Fill', showIf: { flood: 'liquid' } }),
     ],
 
+    setup(f) {
+      // Dash length per glyph: its longest contour at the layout size, with a small margin (a
+      // dash that is too short pops in). Glyphs without a traceable outline (colour emoji)
+      // keep the old proportional guess.
+      const L = f.layout, font = TM.fonts.fontString(f.layer.font.family, f.layer.font.weight, REF);
+      return {
+        dash: L.glyphs.map((g) => {
+          if (g.isSpace) return 0;
+          const len = longestContour(font, g.ch) * L.sizePx;
+          return len > L.capH * 0.2 ? len * 1.04 + 1 : 2.4 * (g.w + L.capH);
+        }),
+      };
+    },
+
     render(f) {
-      const P = f.params, L = f.layout, ctx = f.ctx;
+      const P = f.params, L = f.layout, ctx = f.ctx, C = f.cache;
       const capH = L.capH, size = L.sizePx;
       const eDraw = TM.ease(P.easeIn, 'smooth'), eOut = TM.ease(P.easeOut, 'inOutSine');
       const penW = Math.max(1, P.weight * size);
@@ -94,7 +166,7 @@
         // Unless kept, the line fades as the flood tops out, and returns as the drain begins.
         const solid = P.keep || P.flood === 'none';
         const lineAlpha = solid ? 1 : s.kout > 0 ? smoothstep(0, 0.18, s.kout) : 1 - smoothstep(0.75, 1, level);
-        const dash = 2.4 * (g.w + capH);
+        const dash = C ? C.dash[g.i] : 2.4 * (g.w + capH);
         const drawn = s.kout > 0 ? offset > -0.995 : draw > 0.005;
         if (drawn && lineAlpha > 0.002) {
           ctx.lineCap = 'round';

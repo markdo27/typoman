@@ -16,6 +16,7 @@
   var ENGINE = [
     'js/engine/core.js',
     'js/engine/fonts.js',
+    'js/engine/sfnt.js',
     'js/engine/text.js',
     'js/engine/path.js',
     'js/engine/scene.js',
@@ -27,6 +28,9 @@
     'js/presets/path-flow.js',
     'js/presets/rise.js',
     'js/presets/stack.js',
+    'js/presets/axis-wave.js',
+    'js/presets/phrase-morph.js',
+    'js/presets/particles.js',
   ];
 
   // ── Presets: path & loop family (owner: preset team A) ──
@@ -44,6 +48,7 @@
     'js/presets/kaleido.js',
     'js/presets/kinetic-grid.js',
     'js/presets/melt.js',
+    'js/presets/gravity.js',
   ];
 
   // ── Presets: reveal, glitch & dimensional family (owner: preset team B) ──
@@ -67,6 +72,7 @@
 
   // ── Export & embed runtime (owner: export team) ──
   var EXPORT = [
+    'js/engine/safety.js', // photosensitivity check (studio and export only, not standalone files)
     'js/export/core.js',
     'js/export/codecs.js',
     'js/export/frames.js',
@@ -109,12 +115,18 @@
     'js/studio/share-dialog.js',
   ];
 
+  // ── Starter templates: curated multi-layer scenes (owner: lead) ──
+  var TEMPLATES = [
+    'js/templates/templates.js',
+  ];
+
   var GROUPS = {
     engine: ENGINE,
     presets: PRESETS_CORE.concat(PRESETS_A, PRESETS_B),
     export: EXPORT,
+    templates: TEMPLATES,
     // Studio panels register themselves; app.js must come last so it can find them.
-    studio: STUDIO_UI.slice(0, -1).concat(STUDIO_PATH, STUDIO_EXPORT, STUDIO_UI.slice(-1)),
+    studio: TEMPLATES.concat(STUDIO_UI.slice(0, -1), STUDIO_PATH, STUDIO_EXPORT, STUDIO_UI.slice(-1)),
   };
 
   var me = document.currentScript;

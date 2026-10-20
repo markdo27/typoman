@@ -65,8 +65,10 @@
   const REMIX_FONTS = ['Anton', 'Bebas Neue', 'Unbounded', 'Syne', 'Dela Gothic One', 'Rubik Mono One', 'Big Shoulders Display', 'Bricolage Grotesque', 'Fraunces', 'Instrument Serif', 'Archivo Black', 'Climate Crisis', 'Tilt Warp', 'Space Grotesk', 'Inter Tight', 'Bodoni Moda', 'Monoton', 'Six Caps', 'Righteous', 'Major Mono Display', 'Roboto Flex', 'Science Gothic', 'Anybody'];
   function remixLocks() {
     const l = UI.storage.get(REMIX_KEY, null) || {};
-    return { look: !!l.look, font: !!l.font, colors: !!l.colors };
+    return { look: !!l.look, font: !!l.font, colors: !!l.colors, path: !!l.path };
   }
+  const LOCK_NAMES = { look: 'preset', font: 'font', colors: 'colours', path: 'path' };
+  const pathName = (def) => (def && def.preset ? ((TM.Path.PRESETS.find((p) => p.id === def.preset) || {}).label || def.preset) : 'custom');
   const NICE_EASES = ['glide', 'smooth', 'snap', 'overshoot', 'anticipate', 'spring', 'springSoft', 'outBack', 'outExpo', 'outQuart', 'inOutCubic'];
   /** A motion param near its default: often the default, otherwise a draw biased toward it. */
   function remixParam(p) {
@@ -89,7 +91,8 @@
   /**
    * Remix: one undoable step. Picks a preset (unless locked), then either starts from one of its
    * curated looks (sometimes) or rolls palette, font, effects, motion params biased to their
-   * defaults and — for path presets with an untouched shape — a new path. Locks are respected.
+   * defaults and — for path presets with an untouched shape — a new path. Locks are respected:
+   * the Path lock keeps the layer's path and its keyframes exactly as they were.
    */
   function remix(store) {
     const locks = remixLocks();
@@ -104,8 +107,12 @@
     TM.fonts.ensure(family, 700);
     const aspect = store.scene.size.w / store.scene.size.h;
     const sel = store.selected;
+    const pathBefore = JSON.stringify(store.layer.path);
     store.update((s) => {
       let l = s.layers[sel];
+      // Path lock: whatever happens below, the path and its keyframes are put back untouched.
+      const keepPath = locks.path ? JSON.parse(JSON.stringify({ path: l.path || null, pathMorph: l.pathMorph })) : null;
+      const restorePath = () => { if (keepPath) { l.path = keepPath.path; l.pathMorph = keepPath.pathMorph; } };
       s.seed = Math.floor(Math.random() * 9999);
       if (l.preset !== presetId) {
         l.preset = presetId;
@@ -120,13 +127,15 @@
         l = s.layers[sel];
         if (locks.font) l.font = keep.font;
         if (locks.colors) { l.fill = keep.fill; l.stroke = keep.stroke; s.bg = keep.bg; }
+        restorePath();
         return; // a curated look keeps its designer-tuned motion
       }
       def.params.forEach((p) => { if (p.type !== 'color') l.params[p.key] = remixParam(p); });
-      if (def.usesPath && (!l.path || l.path.preset) && Math.random() < 0.7) {
+      if (!keepPath && def.usesPath && (!l.path || l.path.preset) && Math.random() < 0.7) {
         const shapes = TM.Path.PRESETS.map((x) => x.id).filter((id) => !l.path || id !== l.path.preset);
         l.path = TM.Path.preset(pick(shapes), aspect);
       }
+      restorePath();
       if (!locks.colors) {
         s.bg.type = 'solid';
         s.bg.color = bg;
@@ -154,14 +163,48 @@
       s.post.grain = Math.random() < 0.3 ? 0.3 : 0;
     }, { reason: 'remix', label: look ? 'Remix: ' + look.name : 'Remix' });
     if (look) TM.prepare(store.scene);
-    const kept = Object.entries(locks).filter(([, v]) => v).map(([k]) => ({ look: 'preset', font: 'font', colors: 'colours' })[k]);
+    const kept = Object.entries(locks).filter(([, v]) => v).map(([k]) => LOCK_NAMES[k]);
     const what = look ? '“' + look.name + '” (' + def.name + ')' : def.name + ' · ' + Studio.fontLabel(store.layer.font.family);
-    toast('Remixed: ' + what + (kept.length ? ' · kept ' + kept.join(', ') : ''), 'info', 3200, { label: 'Undo', run: () => store.undo() });
+    // Name a new path shape, so a changed path never goes unnoticed (Undo brings it back).
+    const newPath = def.usesPath && JSON.stringify(store.layer.path) !== pathBefore ? ' · path: ' + pathName(store.layer.path) : '';
+    toast('Remixed: ' + what + newPath + (kept.length ? ' · kept ' + kept.join(', ') : ''), 'info', 3200, { label: 'Undo', run: () => store.undo() });
     const btn = $('#remixBtn');
     if (btn && !UI.reducedMotion()) { btn.classList.remove('spin'); void btn.offsetWidth; btn.classList.add('spin'); }
   }
 
   // ───────────────────────────── project files ─────────────────────────────
+  const bytes = (n) => (TM.Export && TM.Export.formatBytes ? TM.Export.formatBytes(n) : Math.round(n / 1024) + ' KB');
+  /**
+   * A project file wants to install fonts in this browser (they persist, like an upload): ask
+   * first, naming each font and its size. Resolves true to install, false to open without them.
+   */
+  function confirmFonts(plan) {
+    return new Promise((resolve) => {
+      let install = false;
+      const one = plan.ask.length === 1;
+      UI.modal({
+        title: one ? 'Install a font?' : 'Install ' + plan.ask.length + ' fonts?',
+        className: 'confirm-fonts',
+        onClose: () => resolve(install),
+        build(body, api) {
+          const yes = h('button', { type: 'button', class: 'btn primary', autofocus: true, onclick: () => { install = true; api.close(); } }, one ? 'Install and open' : 'Install them and open');
+          const no = h('button', { type: 'button', class: 'btn ghost', onclick: () => api.close() }, 'Open without');
+          const unused = plan.skipped.filter((s) => s.why === 'not used by the project').length;
+          const refused = plan.skipped.filter((s) => s.why !== 'not used by the project');
+          const notes = refused.map((s) => Studio.fontLabel(s.family) + ' (' + s.why + ')').slice(0, 6);
+          if (refused.length > 6) notes.push(refused.length - 6 + ' more');
+          if (unused) notes.push(UI.plural(unused, 'font') + ' the project doesn’t use');
+          body.append(
+            h('p', null, 'This project uses ' + (one ? 'an uploaded font that isn’t' : plan.ask.length + ' uploaded fonts that aren’t') + ' in this browser yet. Installing keeps ' + (one ? 'it' : 'them') + ' here, like a font you upload yourself.'),
+            h('ul', { class: 'cf-list' }, plan.ask.map((f) => h('li', null, h('b', null, Studio.fontLabel(f.family)), h('span', null, bytes(f.bytes))))),
+            notes.length ? h('p', { class: 'hint' }, 'Not installed: ' + notes.join(', ') + '.') : null,
+            h('p', { class: 'hint' }, 'Without ' + (one ? 'it' : 'them') + ', those layers show ' + TM.Scene.defaultLayer().font.family + '. Only install fonts from people you trust.'),
+            h('div', { class: 'modal-foot cf-foot' }, no, yes));
+        },
+      });
+    });
+  }
+
   function download(blob, name) {
     const a = h('a', { href: URL.createObjectURL(blob), download: name });
     document.body.append(a);
@@ -193,7 +236,7 @@
         if ('editPath' in patch) document.body.classList.toggle('editing-path', !!store.ui.editPath);
         if ('guides' in patch) document.body.classList.toggle('show-guides', !!store.ui.guides);
         if ('clean' in patch) this.onClean();
-        if ('editPath' in patch || 'guides' in patch) this.syncStagebar();
+        if ('editPath' in patch || 'guides' in patch || 'pathTool' in patch) this.syncStagebar();
         if ('playing' in patch && store.ui.playing) this.stage.dirty = true;
       });
       store.on('change', () => this.syncStagebar());
@@ -228,11 +271,19 @@
       this.last = now;
       const ui = this.store.ui;
       if (ui.playing) ui.time = TM.math.mod(ui.time + dt, this.store.scene.duration);
+      if (!ui.playing && this._wasPlaying) this._stillAt = now + 450;
+      this._wasPlaying = ui.playing;
       if (ui.playing || this.stage.dirty) {
         this.stage.render(ui.time);
         this.stage.dirty = false;
+        this._stillAt = ui.playing ? 0 : now + 450;
+      } else if (this._stillAt && now >= this._stillAt) {
+        // Paused for a moment on a simplified preview frame: show it once at export quality.
+        this._stillAt = 0;
+        this.stage.renderStill();
       }
       this.transport.tick();
+      this.layers.tick();
       this.gallery.tick(now);
       this.raf = requestAnimationFrame((t) => this.frame(t));
     }
@@ -245,7 +296,8 @@
         TM.fonts.ensure(fam, l.font.weight).then((ok) => {
           if (ok || this.warnedFonts.has(fam)) return;
           this.warnedFonts.add(fam);
-          toast('Couldn’t load ' + fam + '. Check your connection; a fallback font is showing for now.', 'error', 6000);
+          // Say what failed, not what the user did: only an offline browser is "your connection".
+          toast(navigator.onLine === false ? 'You’re offline, so ' + fam + ' can’t load yet; a fallback font is shown.' : 'Couldn’t load ' + fam + ' from Google Fonts, so a fallback font is shown.', 'error', 6000);
         });
       });
     }
@@ -341,6 +393,7 @@
         { label: 'Current preset', checked: locks.look, run: (v) => { locks.look = v; save(); } },
         { label: 'Font', checked: locks.font, run: (v) => { locks.font = v; save(); } },
         { label: 'Colours', hint: 'Keep your brand palette', checked: locks.colors, run: (v) => { locks.colors = v; save(); } },
+        { label: 'Path', hint: 'Keep its shape and keyframes', checked: locks.path, run: (v) => { locks.path = v; save(); } },
         '-',
         { label: 'Remix now', icon: 'dice', kbd: 'R', run: () => remix(this.store) },
       ], { label: 'Remix options', width: 248 });
@@ -382,10 +435,23 @@
         const data = JSON.parse(await file.text());
         const scene = data && data.scene ? data.scene : data;
         if (!scene || !Array.isArray(scene.layers)) throw new Error('That isn’t a TYPOMAN project file');
-        if (Array.isArray(data.fonts) && Studio.customFonts) await Studio.customFonts.register(data.fonts);
+        // Fonts persist in this browser, so a file never installs them silently: vet (used by
+        // the scene, ≤ 8, ≤ 15 MB each), then ask unless they are already here.
+        let note = '';
+        if (Array.isArray(data.fonts) && data.fonts.length && Studio.customFonts) {
+          const plan = Studio.customFonts.screen(data.fonts, scene);
+          if (plan.known.length) await Studio.customFonts.register(plan.known, false);
+          let declined = 0;
+          if (plan.ask.length) {
+            if (await confirmFonts(plan)) await Studio.customFonts.register(plan.ask);
+            else declined = plan.ask.length;
+          }
+          const left = declined + plan.skipped.filter((s) => s.why !== 'not used by the project').length;
+          if (left) note = ' · ' + UI.plural(left, 'font') + ' not installed, so ' + TM.Scene.defaultLayer().font.family + ' stands in';
+        }
         this.store.replace(scene, { label: 'Open project' });
         await TM.prepare(this.store.scene);
-        toast('Opened “' + this.store.scene.name + '”', 'ok', 4000, { label: 'Undo', run: () => this.store.undo() });
+        toast('Opened “' + this.store.scene.name + '”' + note, note ? 'info' : 'ok', note ? 6000 : 4000, { label: 'Undo', run: () => this.store.undo() });
       } catch (e) {
         toast(e instanceof SyntaxError ? 'That file isn’t valid JSON' : e.message || 'Could not open that file', 'error');
       }
@@ -461,8 +527,17 @@
       const g = $('#guidesBtn');
       g.classList.toggle('on', !!store.ui.guides);
       g.setAttribute('aria-pressed', store.ui.guides ? 'true' : 'false');
-      if (store.ui.editPath) this.setHint('Editing path · drag points · double-click to add · Del removes · Esc to finish', 'editing');
+      if (store.ui.editPath) this.setHint(this.pathHint(store.ui.pathTool), 'editing');
       else if (!this.stage.board.classList.contains('loading')) this.setHint('');
+    }
+
+    /** What the active path tool does, in the words of the device (click / tap, keys or not). */
+    pathHint(tool) {
+      const touch = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+      if (UI.isPhone()) return { pen: 'Pen · tap for corners, drag for curves', draw: 'Freehand · drag to draw' }[tool] || 'Editing path · drag the points';
+      if (tool === 'pen') return touch ? 'Pen · tap for corners, drag for curves · Finish when done' : 'Pen · click for corners, drag for curves · Enter to finish';
+      if (tool === 'draw') return 'Freehand · drag to draw a path' + (touch ? '' : ' · Esc to finish');
+      return touch ? 'Editing path · drag points · double-tap the curve to add one' : 'Editing path · drag points · double-click to add · Del removes · Esc to finish';
     }
 
     formatMenu(anchor) {

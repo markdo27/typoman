@@ -5,6 +5,8 @@
  * A popover for `ease` params: pick a named curve (each tile shows its shape) or drag the two
  * cubic-bézier handles. Custom curves are stored as [x1, y1, x2, y2] (TM.isEaseSpec accepts it).
  * Handles are focusable sliders: arrow keys nudge them (Shift = ×10). A dot previews the motion.
+ * Spring mode builds a custom spring, 'spring(stiffness, damping)' (TM.springSpec), from two
+ * sliders and plots its response; the named springs open there with their own values.
  */
 (function (TM) {
   'use strict';
@@ -31,6 +33,11 @@
     outBounce: [0.3, 1.3, 0.6, 1], inBounce: [0.4, -0.3, 0.7, 0], outElastic: [0.25, 1.6, 0.45, 1], inOutElastic: [0.7, -0.6, 0.3, 1.6],
   }, EXACT);
   const Y_LO = -0.5, Y_HI = 1.5;
+  // The named springs as stiffness / damping (TM.EASINGS: spring(180, 12) and friends).
+  const NAMED_SPRINGS = { spring: [180, 12], springSoft: [90, 14], springSnappy: [420, 26] };
+  /** [stiffness, damping] when a spec is a spring (custom or named), else null. */
+  const springOf = (spec) => (TM.springParams && TM.springParams(spec)) || NAMED_SPRINGS[spec] || null;
+  Studio.springOf = springOf;
 
   const round3 = (v) => Math.round(v * 1000) / 1000;
   const same = (a, b) => a && b && a.every((v, i) => Math.abs(v - b[i]) < 1e-3);
@@ -160,7 +167,7 @@
             const tctx = setupCanvas(tcv, 48, 30);
             Studio.drawEaseCurve(tctx, id, { x: 4, y: 3, w: 40, h: 24 }, { color: id === spec ? '#ffffff' : colors.accent, width: 1.5, samples: 40, lo: -0.35, hi: 1.35, guide: 'rgba(255,255,255,0.08)' });
             const b = h('button', { type: 'button', class: 'ce-tile' + (id === spec ? ' on' : ''), role: 'option', 'aria-selected': id === spec ? 'true' : 'false', 'data-id': id }, tcv, h('span', null, label));
-            b.addEventListener('click', () => apply(id, true));
+            b.addEventListener('click', () => { apply(id, true); const m = springOf(id) ? 'spring' : 'curve'; if (m !== mode) { mode = m; syncMode(); } });
             return b;
           }));
         }
@@ -184,9 +191,9 @@
           ctx.moveTo(X(0), Math.round(Y(0)) + 0.5); ctx.lineTo(X(1), Math.round(Y(0)) + 0.5);
           ctx.moveTo(X(0), Math.round(Y(1)) + 0.5); ctx.lineTo(X(1), Math.round(Y(1)) + 0.5);
           ctx.stroke();
-          // Handle arms.
+          // Handle arms (not for springs: they have no handles).
           ctx.setLineDash(exact ? [] : [3, 3]);
-          ctx.strokeStyle = exact ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.3)';
+          ctx.strokeStyle = mode === 'spring' ? 'transparent' : exact ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.3)';
           ctx.beginPath();
           ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(pts[0]), Y(pts[1]));
           ctx.moveTo(X(1), Y(1)); ctx.lineTo(X(pts[2]), Y(pts[3]));
@@ -212,7 +219,8 @@
             if (document.activeElement !== inp) inp.value = pts[i].toFixed(2);
             inp.classList.toggle('approx', !exact);
           });
-          nameEl.textContent = Studio.easeLabel(spec) + (exact ? '' : ' · drag a handle to customise');
+          nameEl.textContent = Studio.easeLabel(spec) + (exact || springOf(spec) ? '' : ' · drag a handle to customise');
+          if (mode === 'spring') { stiff.update(); damp.update(); }
           tiles.querySelectorAll('.ce-tile').forEach((b) => {
             const on = b.dataset.id === spec;
             b.classList.toggle('on', on);
@@ -265,7 +273,7 @@
           move(e);
         }
         graph.addEventListener('pointerdown', (e) => {
-          if (e.button !== 0) return;
+          if (e.button !== 0 || mode === 'spring') return;
           const rect = cv.getBoundingClientRect();
           const px = e.clientX - rect.left, py = e.clientY - rect.top;
           const pts = bezierOf(spec).pts;
@@ -287,17 +295,50 @@
           });
         });
 
+        // Curve or Spring: a spring is defined by its physics, not by handles.
+        let mode = springOf(spec) ? 'spring' : 'curve';
+        const modeSeg = Studio.controls.segmented({ label: '', options: [['curve', 'Curve', 'Bézier handles and named curves'], ['spring', 'Spring', 'A damped spring: stiffness and damping']],
+          get: () => mode, set: (v) => { if (v === mode) return; mode = v; if (v === 'spring' && !springOf(spec)) apply(TM.springSpec(180, 12), true); syncMode(); } });
+        modeSeg.el.classList.add('ce-mode');
+        const sp = () => springOf(spec) || [180, 12];
+        const LOGK = [Math.log(10), Math.log(1000)];
+        const stiff = Studio.controls.range({ label: 'Stiffness', min: 0, max: 1, step: 0.001, decimals: 0, hint: 'How hard the spring pulls: 10 (lazy) to 1000 (snappy)',
+          format: (v) => String(Math.round(Math.exp(LOGK[0] + v * (LOGK[1] - LOGK[0])))),
+          get: () => (Math.log(sp()[0]) - LOGK[0]) / (LOGK[1] - LOGK[0]),
+          set: (v, final) => apply(TM.springSpec(Math.exp(LOGK[0] + v * (LOGK[1] - LOGK[0])), sp()[1]), final) });
+        const damp = Studio.controls.range({ label: 'Damping', min: 1, max: 100, step: 0.5, decimals: 1, hint: 'How quickly it settles: low values ring and overshoot, high values creep in',
+          get: () => sp()[1], set: (v, final) => apply(TM.springSpec(sp()[0], v), final) });
+        // The stiffness field shows real units: typed values are converted back to the slider's log scale.
+        const kNum = stiff.el.querySelector('input.num');
+        kNum.addEventListener('change', (e) => { const v = parseFloat(kNum.value); if (Number.isFinite(v)) { e.stopImmediatePropagation(); apply(TM.springSpec(v, sp()[1]), true); stiff.update(); } }, true);
+        const springBox = h('div', { class: 'ce-spring' }, stiff.el, damp.el, h('p', { class: 'hint small' }, 'Normalised to land exactly on 1; a loose spring is sped up until it settles inside the move.'));
+        const curveOnly = [];
+        function syncMode() {
+          modeSeg.update();
+          const isSpring = mode === 'spring';
+          springBox.hidden = !isSpring;
+          curveOnly.forEach((el) => { el.hidden = isSpring; });
+          handles.forEach((el) => { el.hidden = isSpring; });
+          graph.classList.toggle('spring', isSpring);
+          stiff.update(); damp.update();
+          draw();
+        }
         renderTabs();
         renderTiles();
+        const fieldsEl = h('div', { class: 'ce-fields' }, fields);
+        curveOnly.push(fieldsEl, copyBtn);
         body.append(
+          modeSeg.el,
           graph,
           h('div', { class: 'ce-row' }, nameEl, copyBtn),
-          h('div', { class: 'ce-fields' }, fields),
+          fieldsEl,
+          springBox,
           h('div', { class: 'ce-preview' }, track, replay),
           tabs,
           tiles,
         );
         sync();
+        syncMode();
         if (playing) loop(); else place(1, 1);
         const on = tiles.querySelector('.ce-tile.on') || handles[0];
         on.setAttribute('data-initial-focus', '');

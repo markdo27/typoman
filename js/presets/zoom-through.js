@@ -3,72 +3,20 @@
  * of one of its letters (the hole of an O, D, A…) and the next word grows out of that hole.
  *
  * Craft notes
- *  - Counters are found by rasterising candidate letters once (in setup) and taking the
+ *  - Counters are found by rasterising candidate letters once (MotionKit.portal) and taking the
  *    centroid of the largest enclosed hole, so the camera really threads the letter.
  *  - Zoom is exponential (one constant ratio per word), so every step feels the same speed;
  *    each step eases out of and into a reading pause, and an optional twist rolls the camera.
  *  - Words cycle, and the camera position wraps after the last word, so it loops forever.
+ *  - Photosensitivity: unless "Allow fast flashing" is on, once the camera leaves reading size
+ *    only the letter it dives through keeps full contrast; the others fade to a ghost too faint
+ *    to flash (MotionKit.ghostAlpha), and the next word stays a ghost until it nears reading
+ *    size. Stroke after stroke sweeping a field is what TM.Safety counts as flashing.
  */
 (function (TM) {
   'use strict';
   const K = TM.MotionKit;
   const { clamp, smoothstep, fract } = TM.math;
-  const CANDIDATE = /[ABDOPQRabdegopq04689@&%#]/;
-
-  /** Largest enclosed hole of ch, as an offset from the glyph's centre (px at `size`), or null. */
-  function counterOf(family, weight, ch, size, adv, capH) {
-    const S = 96, k = S / size;
-    const w = Math.ceil(adv * k + 16), h = Math.ceil(capH * k * 1.6 + 16);
-    const c = typeof document !== 'undefined' ? document.createElement('canvas') : new OffscreenCanvas(w, h);
-    c.width = w; c.height = h;
-    const ctx = c.getContext('2d', { willReadFrequently: true });
-    ctx.font = TM.fonts.fontString(family, weight, S);
-    const base = Math.round(8 + capH * k * 1.2);
-    ctx.fillStyle = '#000';
-    ctx.fillText(ch, 8, base);
-    const data = ctx.getImageData(0, 0, w, h).data;
-    const ink = new Uint8Array(w * h);
-    for (let i = 0; i < w * h; i++) ink[i] = data[i * 4 + 3] > 110 ? 1 : 0;
-    // Flood the outside from the border; whatever empty space is left is a counter.
-    const mark = new Int32Array(w * h).fill(0);
-    const stack = [];
-    const flood = (seed, id) => {
-      let n = 0, sx = 0, sy = 0;
-      stack.push(seed);
-      mark[seed] = id;
-      while (stack.length) {
-        const p = stack.pop();
-        n++; sx += p % w; sy += (p / w) | 0;
-        const x = p % w, y = (p / w) | 0;
-        for (const q of [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, y > 0 ? p - w : -1, y < h - 1 ? p + w : -1]) {
-          if (q >= 0 && !ink[q] && !mark[q]) { mark[q] = id; stack.push(q); }
-        }
-      }
-      return { n, x: sx / Math.max(1, n), y: sy / Math.max(1, n) };
-    };
-    for (let x = 0; x < w; x++) { if (!ink[x] && !mark[x]) flood(x, 1); const b = (h - 1) * w + x; if (!ink[b] && !mark[b]) flood(b, 1); }
-    for (let y = 0; y < h; y++) { const l = y * w, r = l + w - 1; if (!ink[l] && !mark[l]) flood(l, 1); if (!ink[r] && !mark[r]) flood(r, 1); }
-    let best = null, id = 2;
-    for (let p = 0; p < w * h; p++) {
-      if (ink[p] || mark[p]) continue;
-      const hole = flood(p, id);
-      if (hole.n > 12 && (!best || hole.n > best.n)) { best = hole; best.id = id; }
-      id++;
-    }
-    if (!best) return null;
-    // Hole extent, for how far the camera must zoom before the hole covers the frame.
-    let x0 = w, x1 = 0, y0 = h, y1 = 0;
-    for (let p = 0; p < w * h; p++) {
-      if (mark[p] !== best.id) continue;
-      const x = p % w, y = (p / w) | 0;
-      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
-    }
-    // Back to glyph-centre coordinates at the layout size.
-    return {
-      dx: (best.x - 8 - (adv * k) / 2) / k, dy: (best.y - (base - (capH * k) / 2)) / k,
-      area: best.n / (k * k), cw: (x1 - x0 + 1) / k, ch: (y1 - y0 + 1) / k,
-    };
-  }
 
   TM.registerPreset({
     id: 'zoom-through',
@@ -91,48 +39,17 @@
       TM.P.range('twist', 'Twist', -1, 1, 0.01, 0.25, { group: 'Flight' }),
       TM.P.toggle('counters', 'Aim for counters', true, { group: 'Flight', hint: 'Dive through the hole of an O, D, A… when the word has one' }),
       TM.P.range('fill', 'Fill the frame', 0, 1, 0.01, 0.55, { group: 'Framing' }),
+      TM.P.toggle('fastFlash', 'Allow fast flashing', false, { group: 'Safety', hint: 'Each dive sweeps big strokes across the frame. Off keeps it to 3 flashes per second or fewer (WCAG 2.3.1): letters other than the one the camera dives through fade to a safe ghost, and words that come too fast merge into fewer stops' }),
     ],
 
     setup(f) {
-      const L = f.layout, P = f.params;
-      const by = P.split === 'auto' ? (L.lines.filter((l) => l.glyphs.length).length > 1 ? 'lines' : 'words') : P.split;
-      const fam = f.layer.font.family, wt = f.layer.font.weight;
-      const units = K.units(L, by).map((u) => {
-        const fit = Math.min((f.W * 0.8) / Math.max(1, u.w), (f.H * 0.5) / Math.max(1, L.capH), 4);
-        // Portal: the biggest counter near the middle, else the gap nearest the middle.
-        let portal = null, score = -Infinity;
-        if (P.counters) {
-          for (const gi of u.glyphs) {
-            const g = L.glyphs[gi];
-            if (!CANDIDATE.test(g.ch)) continue;
-            const hole = counterOf(fam, wt, g.ch, L.sizePx, g.w, L.capH);
-            if (!hole) continue;
-            const sc = Math.sqrt(hole.area) / L.capH - Math.abs(g.cx - u.cx) / Math.max(1, u.w);
-            if (sc > score) { score = sc; portal = { x: g.cx + hole.dx, y: g.cy + hole.dy, cw: hole.cw, ch: hole.ch }; }
-          }
-        }
-        if (!portal) {
-          // No counter: thread the gap nearest the middle (open above and below).
-          let best = null, bd = Infinity;
-          for (let j = 0; j + 1 < u.glyphs.length; j++) {
-            const a = L.glyphs[u.glyphs[j]], b = L.glyphs[u.glyphs[j + 1]];
-            const gx = (a.x + a.w + b.x) / 2, d = Math.abs(gx - u.cx);
-            if (d < bd) { bd = d; best = { x: gx, y: (a.cy + b.cy) / 2, cw: Math.max(L.sizePx * 0.04, b.x - a.x - a.w + L.sizePx * 0.04), ch: Infinity }; }
-          }
-          portal = best || { x: u.cx, y: u.cy, cw: L.sizePx * 0.05, ch: Infinity };
-        }
-        const scale = 1 + (fit - 1) * P.fill;
-        // Zoom for the dive: just enough for the hole (an ellipse) to contain the whole frame.
-        const need = Math.hypot(f.W / (portal.cw * scale), portal.ch === Infinity ? 0 : f.H / (portal.ch * scale));
-        return Object.assign(u, { scale, portal, ratio: clamp(need * 1.4 * P.dive, 6, 200) }); // counters aren't ellipses: margin
-      });
-      return { units };
+      return { base: K.units(f.layout, splitOf(f.params, f.layout)), plans: new Map() };
     },
 
     render(f) {
       const P = f.params, L = f.layout, C = f.cache;
-      if (!C || !C.units.length) return;
-      const units = C.units, N = units.length;
+      if (!C || !C.base.length) return;
+      const plan = planFor(C, f), units = plan.units, N = units.length;
       const at = (m) => units[((m % N) + N) % N];
       // Camera position in "words": a reading pause, then an eased dive to the next word.
       const x = f.p * N, k = Math.floor(x), u = fract(x);
@@ -161,7 +78,11 @@
         // Past reading size the camera aims for the portal, which slides to the frame centre.
         const aim = smoothstep(1, Math.pow(R, 0.4), s);
         const px = unit.cx + (unit.portal.x - unit.cx) * aim, py = unit.cy + (unit.portal.y - unit.cy) * aim;
-        items.push({ unit, S, alpha, px, py, rot: P.twist * d * 0.35, d });
+        // Flicker guard: past reading size only the portal letter keeps its contrast (the rest
+        // would sweep stroke after stroke across the frame); a word growing out of the hole
+        // stays a ghost until it nears reading size.
+        const ghost = plan.ghost < 1 ? (s > 1 ? smoothstep(1, Math.pow(R, 0.15), s) : 1 - smoothstep(Math.pow(prev, -0.2), Math.pow(prev, -0.04), s)) : 0;
+        items.push({ unit, S, alpha, px, py, rot: P.twist * d * 0.35, d, ghost: ghost > 0 ? 1 + (plan.ghost - 1) * ghost : 1, out: s > 1 });
       }
       items.sort((a, b) => a.d - b.d); // far (small) first: near letters occlude what is behind them
 
@@ -173,9 +94,84 @@
           const X = f.cx + ox * cs - oy * sn, Y = f.cy + ox * sn + oy * cs;
           const rad = (g.w + L.capH) * it.S * 0.75; // skip letters that are wholly off-frame
           if (X + rad < 0 || X - rad > f.W || Y + rad < 0 || Y - rad > f.H) continue;
-          f.drawGlyph(g, { x: X, y: Y, rot: it.rot, scale: it.S, alpha: it.alpha });
+          const keep = it.out && it.unit.portal.glyphs.includes(gi);
+          f.drawGlyph(g, { x: X, y: Y, rot: it.rot, scale: it.S, alpha: it.alpha * (keep ? 1 : it.ghost) });
         }
       }
     },
+
+    /** Large-area luminance flashes per second this layer makes (0 when it cannot flash). */
+    flashes(layer, scene) {
+      const fr = K.frameOf(layer, scene, TM.getPreset('zoom-through'));
+      const N = K.units(fr.layout, splitOf(layer.params, fr.layout)).length;
+      return N ? stops(layer.params, N, fr.pass, flashy(layer, scene.bg)).rate : 0;
+    },
   });
+
+  function splitOf(P, L) {
+    return P.split === 'auto' ? (L.lines.filter((l) => l.glyphs.length).length > 1 ? 'lines' : 'words') : P.split;
+  }
+
+  // ── photosensitivity ──
+  // Measured with TM.Safety (10° fields): with the flicker guard on (only the portal letter keeps
+  // its contrast past reading size), a dive still sweeps that letter's strokes across the frame,
+  // up to six large transitions in a field, bunched in the middle of the dive. A dive is modelled
+  // as those six. Unguarded (fast flashing allowed), every letter's strokes sweep: up to
+  // fourteen. Low-contrast type cannot flash.
+  const DIVE = [0.25, 0.3, 0.35, 0.4, 0.45, 0.5];
+  const DIVE_FAST = Array.from({ length: 14 }, (_, i) => 0.25 + i * 0.025);
+  const flashy = (layer, bg) => K.swing(1, K.inkColors(layer), K.backdrops(bg));
+  function diveTimes(M, P, pass) {
+    const out = [];
+    for (let m = 0; m < M; m++) for (const q of (P.fastFlash ? DIVE_FAST : DIVE)) out.push(((m + P.hold + (1 - P.hold) * q) / M) * pass);
+    return out;
+  }
+  /** How many stops the camera makes: one per unit or, with fast flashing off, as many as keep the dives under three flashes a second. */
+  function stops(P, N, pass, canFlash) {
+    if (!canFlash) return { M: N, rate: 0 };
+    let M = N;
+    if (!P.fastFlash) while (M > 1 && K.flashRate(diveTimes(M, P, pass), pass) > K.FLASH.perSec) M--;
+    return { M, rate: K.flashRate(diveTimes(M, P, pass), pass) };
+  }
+
+  /** The units the camera stops at, for this frame's colours, background and timing (none of them re-run setup), framed for the dive. */
+  function planFor(C, f) {
+    const key = JSON.stringify([f.layer.fill, f.bg, f.layer.time, f.dur]);
+    let plan = C.plans.get(key);
+    if (!plan) {
+      const P = f.params, L = f.layout;
+      const { M } = stops(P, C.base.length, K.passOf(f), flashy(f.layer, f.bg));
+      const units = group(L, C.base, M).map((u) => {
+        const h = u.h || L.capH;
+        const fit = Math.min((f.W * 0.8) / Math.max(1, u.w), (f.H * 0.5) / Math.max(1, h), 4);
+        // Portal: the biggest counter near the middle, else a gap between letters.
+        const portal = K.portal(f, L, u, P.counters);
+        const scale = 1 + (fit - 1) * P.fill;
+        // Zoom for the dive: just enough for the hole (an ellipse) to contain the whole frame.
+        const need = Math.hypot(f.W / (portal.cw * scale), portal.ch === Infinity ? 0 : f.H / (portal.ch * scale));
+        return Object.assign({}, u, { scale, portal, ratio: clamp(need * 1.4 * P.dive, 6, 200) }); // counters aren't ellipses: margin
+      });
+      // Ghost: how far letters that would flicker fade (to where they can no longer flash; 1 = no guard).
+      plan = { units, ghost: P.fastFlash ? 1 : K.ghostAlpha(K.inkColors(f.layer), K.backdrops(f.bg)) * 0.8 };
+      if (C.plans.size > 12) C.plans.clear();
+      C.plans.set(key, plan);
+    }
+    return plan;
+  }
+
+  /** M stops from the units, merging neighbours as evenly as possible (M ≥ count: the units as they are). */
+  function group(L, base, M) {
+    const N = base.length;
+    if (M >= N) return base;
+    const out = [];
+    for (let g = 0; g < M; g++) {
+      const parts = base.slice(Math.floor((g * N) / M), Math.floor(((g + 1) * N) / M));
+      const glyphs = [].concat(...parts.map((u) => u.glyphs));
+      const x0 = Math.min(...parts.map((u) => u.x0)), x1 = Math.max(...parts.map((u) => u.x1));
+      const ys = glyphs.map((gi) => L.glyphs[gi].y);
+      const cy = glyphs.reduce((s, gi) => s + L.glyphs[gi].cy, 0) / glyphs.length;
+      out.push({ glyphs, x0, x1, cx: (x0 + x1) / 2, cy, w: x1 - x0, line: parts[0].line, h: L.capH + Math.max(...ys) - Math.min(...ys) });
+    }
+    return out;
+  }
 })(window.TM);

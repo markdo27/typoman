@@ -32,9 +32,13 @@
       text: 'TYPE IN\nMOTION',
       preset: 'path-flow',
       params: {},
-      // width: wdth % and opsz: 'auto' | number apply to families with those variable axes.
-      font: { family: 'Anton', weight: 400, width: 100, opsz: 'auto' },
-      type: { size: 0.16, tracking: 0, leading: 0.95, align: 'center', case: 'upper', slant: 0 },
+      // width: wdth % and opsz: 'auto' | number apply to families with those variable axes;
+      // axes: { TAG: value } pins any other axis (slnt, XROT, YEAR, MORF, …) a family has.
+      // italic: the family's true italic where Google serves one (TM.fonts.get(f).italic).
+      font: { family: 'Anton', weight: 400, width: 100, opsz: 'auto', axes: {}, italic: false, features: {} },
+      // wrap: 'auto' re-wraps lines that would otherwise shrink to fit the frame; 'off' keeps them.
+      // ligatures: draw the font's ligatures (fi, ffl, Th…) as one glyph (off past ±0.03 em tracking).
+      type: { size: 0.16, tracking: 0, leading: 0.95, align: 'center', case: 'upper', slant: 0, wrap: 'auto', ligatures: true },
       fill: { type: 'solid', color: '#ffffff', color2: '#00e5ff', angle: 90, palette: ['#ffffff', '#a3a2ff', '#00e5ff'] },
       stroke: { mode: 'none', width: 0.035, color: '#000000' },
       path: null,
@@ -49,6 +53,12 @@
       anchor: { x: 0.5, y: 0.5 },
       // Per-layer timing: start later, run whole cycles faster, or play once and hold.
       time: { delay: 0, cycles: 1, mode: 'loop' },
+      // Track matte: show this layer only inside ('alpha') or outside ('alphaInvert') the ink of
+      // the layer below it. That layer becomes the matte and is hidden unless `show`.
+      matte: { mode: 'none', show: false },
+      // Transform keyframes on top of any preset, over the layer's own loop: offsets in frame
+      // fractions, scale, rotation in degrees, opacity; each key eases into the next.
+      transform: { enabled: false, keys: [] },
     };
     return overrides ? merge(layer, overrides) : layer;
   }
@@ -85,6 +95,28 @@
     return Number.isFinite(n) ? clamp(n, lo, hi) : d;
   };
   const int = (v, d, lo, hi) => Math.round(num(v, d, lo, hi));
+  /** Pinned variable-axis values { TAG: number }: four-letter tags, at most 12 (families clamp). */
+  function cleanAxes(a) {
+    const out = {};
+    if (!isObj(a)) return out;
+    for (const k of Object.keys(a).slice(0, 32)) {
+      if (!/^[A-Za-z0-9]{4}$/.test(k) || k === 'wght' || k === 'wdth' || k === 'opsz' || UNSAFE_KEY.has(k)) continue;
+      const v = num(a[k], NaN, -1e5, 1e5);
+      if (Number.isFinite(v) && Object.keys(out).length < 12) out[k] = Math.round(v * 1000) / 1000;
+    }
+    return out;
+  }
+  /** OpenType features pinned on: { tag: 1..99 } for lowercase 4-character tags, at most 12. */
+  function cleanFeatures(a) {
+    const out = {};
+    if (!isObj(a)) return out;
+    for (const k of Object.keys(a).slice(0, 32)) {
+      if (!/^[a-z0-9]{4}$/.test(k) || UNSAFE_KEY.has(k)) continue;
+      const v = Math.round(num(a[k], 0, 0, 99));
+      if (v > 0 && Object.keys(out).length < 12) out[k] = v;
+    }
+    return out;
+  }
   /** Optical size: a pinned number, or 'auto' (follow the text size) for anything else. */
   const opszOf = (v) => ((typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && /^\s*\d+(\.\d+)?\s*$/.test(v)) ? int(v, 14, 1, 1000) : 'auto');
   const bool = (v, d) => (typeof v === 'boolean' ? v : d);
@@ -200,6 +232,9 @@
         // each family clamps it to its own axis when drawing.
         width: Math.round(num(s.font && s.font.width, 100, 25, 200)),
         opsz: opszOf(s.font && s.font.opsz),
+        axes: cleanAxes(s.font && s.font.axes),
+        italic: !!(s.font && s.font.italic === true),
+        features: cleanFeatures(s.font && s.font.features),
       },
       type: {
         size: num(ty.size, d.type.size, 0.01, 1.5),
@@ -208,6 +243,8 @@
         align: pick(ty.align, ['left', 'center', 'right'], d.type.align),
         case: pick(ty.case, ['none', 'upper', 'lower', 'title'], d.type.case),
         slant: num(ty.slant, 0, -30, 30),
+        wrap: pick(ty.wrap, ['auto', 'off'], 'auto'),
+        ligatures: ty.ligatures !== false,
       },
       fill: {
         type: pick(f.type, ['solid', 'gradient', 'palette'], d.fill.type),
@@ -250,7 +287,28 @@
         cycles: int(s.time && s.time.cycles, 1, 1, 8),
         mode: pick(s.time && s.time.mode, ['loop', 'once'], 'loop'),
       },
+      matte: {
+        mode: pick(s.matte && s.matte.mode, ['none', 'alpha', 'alphaInvert'], 'none'),
+        show: bool(s.matte && s.matte.show, false),
+      },
+      transform: cleanTransform(s.transform),
     };
+  }
+
+  const MAX_TKEYS = 16;
+  /** Transform keyframes: up to 16, sorted by time, every value clamped. */
+  function cleanTransform(tr) {
+    const src = isObj(tr) && Array.isArray(tr.keys) ? tr.keys.slice(0, MAX_TKEYS) : [];
+    const keys = src.filter(isObj).map((k) => ({
+      t: num(k.t, 0, 0, 1),
+      x: num(k.x, 0, -2, 2),
+      y: num(k.y, 0, -2, 2),
+      scale: num(k.scale, 1, 0, 10),
+      rot: num(k.rot, 0, -3600, 3600),
+      opacity: num(k.opacity, 1, 0, 1),
+      ease: ease(k.ease, 'smooth'),
+    })).sort((a, b) => a.t - b.t);
+    return { enabled: bool(tr && tr.enabled, false) && keys.length > 0, keys };
   }
 
   /** Fill defaults and sanitise an untrusted scene object. Always returns a valid scene. */

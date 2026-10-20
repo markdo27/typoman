@@ -14,7 +14,6 @@
   'use strict';
   const { TAU, clamp, lerp, smoothstep, fract, pingpong, angleDelta } = TM.math;
   const K = TM.PathKit;
-  const DEG = Math.PI / 180;
   const REACH = 2.2; // bulge radius in lens radii
 
   /** Bulge profile: 1 at the centre, smooth cutoff to 0 at REACH. */
@@ -56,18 +55,22 @@
       const reps = clamp(Math.ceil(f.W / (repW * scale)) + 2, 2, Math.max(2, Math.floor(600 / unit.length)));
       const L = TM.text.layout(Object.assign({ text: unit.repeat(reps) }, opts));
       const line = L.lines[0];
-      const x0 = L.glyphs[line.glyphs[0]].x;
-      const rel = line.glyphs.map((gi) => L.glyphs[gi].x - x0); // left edge from run start
+      // Glyphs left to right as drawn: RTL text lays its clusters out in bidi visual order, so
+      // reading order and screen order differ. A logical slice of such a row isn't a contiguous
+      // stretch of it, so those rows are split by clipping the whole run instead (`clip`).
+      const ord = K.screenOrder(L, line);
+      const clip = ord !== line.glyphs || line.rtl;
+      const rel = ord.map((gi) => L.glyphs[gi].x - line.x); // left edge from run start
       const label = TM.text.layout(Object.assign({ text: unit }, opts, { tracking: Ly.type.tracking + 0.12 }));
-      return { L, line, rel, repW, scale, cell, label };
+      return { L, line, ord, clip, rel, repW, scale, cell, label };
     },
 
     render(f) {
       const path = f.path, C = f.cache;
       if (!path || path.length < 1 || !C.line) return;
-      const P = f.params, W = f.W, H = f.H;
+      const P = f.params, H = f.H;
       const { L, line, rel, repW, scale, cell } = C;
-      const glyphs = L.glyphs, idx = line.glyphs, n = idx.length;
+      const glyphs = L.glyphs, idx = C.ord, n = idx.length;
 
       // Lens position: whole laps per loop on closed paths, there-and-back on open ones.
       const ease = TM.ease(P.travel, 'inOutSine');
@@ -103,8 +106,15 @@
           }
           if (k1 < k0) { if (f.echo === 0) run(f, line.text, left, runW, y, scale, P.dim); continue; }
           if (f.echo === 0) {
-            if (k0 > 0) run(f, slice(glyphs, idx, 0, k0), left, rel[k0] * scale, y, scale, P.dim);
-            if (k1 < n - 1) run(f, slice(glyphs, idx, k1 + 1, n), left + rel[k1 + 1] * scale, runW - rel[k1 + 1] * scale, y, scale, P.dim);
+            if (C.clip) {
+              // The whole run, shown only outside the stretch of glyphs under the lens.
+              const a = left + rel[k0] * scale, b = left + (rel[k1] + glyphs[idx[k1]].w) * scale;
+              if (k0 > 0) clipped(f, line.text, left, runW, y, scale, P.dim, -1, a);
+              if (k1 < n - 1) clipped(f, line.text, left, runW, y, scale, P.dim, b, f.W + 1);
+            } else {
+              if (k0 > 0) run(f, slice(glyphs, idx, 0, k0), left, rel[k0] * scale, y, scale, P.dim);
+              if (k1 < n - 1) run(f, slice(glyphs, idx, k1 + 1, n), left + rel[k1 + 1] * scale, runW - rel[k1 + 1] * scale, y, scale, P.dim);
+            }
           }
           for (let k = k0; k <= k1; k++) {
             const g = glyphs[idx[k]];
@@ -160,6 +170,19 @@
     f.drawLine({ text, width: width / scale, index: 0 }, { x: x + width / 2, y, scale, alpha });
   }
 
+  /** run(), clipped to the frame columns x0..x1 (an RTL row split around the lens). */
+  function clipped(f, text, x, width, y, scale, alpha, x0, x1) {
+    if (x1 <= x0) return;
+    const ctx = f.ctx;
+    ctx.save();
+    f.identity();
+    ctx.beginPath();
+    ctx.rect(x0, 0, x1 - x0, f.H);
+    ctx.clip();
+    run(f, text, x, width, y, scale, alpha);
+    ctx.restore();
+  }
+
   function rays(f, x, y, items) {
     const ctx = f.ctx;
     ctx.save();
@@ -201,7 +224,7 @@
     const span = (label.width + label.tracking) * sc;
     const reps = Math.max(1, Math.floor(circ / span));
     const k = circ / (reps * span);
-    const x0 = label.glyphs.length ? label.glyphs[0].x : 0;
+    const x0 = label.lines.length ? label.lines[0].x : 0;
     for (let rpt = 0; rpt < reps; rpt++) {
       for (const g of label.glyphs) {
         if (g.isSpace) continue;

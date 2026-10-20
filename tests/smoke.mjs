@@ -138,6 +138,18 @@ const results = await page.evaluate(async () => {
       onceHolds: hashAt(once, plain.duration * 3) === hashAt(once, plain.duration * 5),
       onceWaits: hashAt(once, 0.2) === hashAt(once, 0.4),
       lookApplies: looked.bg.color === '#111111' && looked.layers[0].font.family === 'Fraunces' && looked.layers[0].params.tilt === 20 && looked.layers[0].text === plain.layers[0].text,
+      // Stagger distribution: a curve or jitter changes when letters start; a custom spring
+      // survives normalisation and settles at 1.
+      spread: (() => {
+        const t = plain.duration * 0.15;
+        const curved = sceneFor('rise', (l) => { l.params.staggerCurve = 'inCubic'; });
+        const jittered = sceneFor('rise', (l) => { l.params.jitter = 0.6; });
+        const sprung = sceneFor('rise', (l) => { l.params.easeIn = 'spring(300,6)'; });
+        const sp = TM.ease('spring(300,6)');
+        return hashAt(curved, t) !== hashAt(plain, t) && hashAt(jittered, t) !== hashAt(plain, t) &&
+          curved.layers[0].params.staggerCurve === 'inCubic' && sprung.layers[0].params.easeIn === 'spring(300,6)' &&
+          Math.abs(sp(0.999) - 1) < 0.01 && TM.getPreset('typewriter').params.every((q) => q.key !== 'jitter');
+      })(),
       // The same look over two different prior states gives the same style (no inherited blur,
       // glow or extrude), and a hand-drawn path survives it.
       lookReproducible: (() => {
@@ -192,9 +204,10 @@ const results = await page.evaluate(async () => {
   // native run (kern pairs AV, To, WA, LT). Round 2 found every kern applied one pair late.
   const kerning = await (async () => {
     const out = {};
-    for (const family of ['Inter Tight', 'Playfair Display']) {
-      await TM.fonts.ensure(family, 700, 'AVATAR To WAVY LT');
-      const L = TM.text.layout({ text: 'AVATAR To WAVY LT', family, weight: 700, sizePx: 120, tracking: 0, leading: 1, align: 'left', case: 'none' });
+    // Kerned pairs, plus ligatures (Playfair's ffi, fl): per-cluster drawing must match a run.
+    for (const [family, text] of [['Inter Tight', 'AVATAR To WAVY LT'], ['Playfair Display', 'AVATAR To WAVY LT'], ['Playfair Display', 'office fluffy staff']]) {
+      await TM.fonts.ensure(family, 700, text);
+      const L = TM.text.layout({ text, family, weight: 700, sizePx: 120, tracking: 0, leading: 1, align: 'left', case: 'none' });
       const Wd = Math.ceil(L.width) + 40, Hd = 180;
       // Kerning 'normal' as the renderer draws (it also kerns across word spaces, unlike 'auto').
       const draw = (fn) => { const c = document.createElement('canvas'); c.width = Wd; c.height = Hd; const g = c.getContext('2d'); g.font = L.font; g.fontKerning = 'normal'; g.fillStyle = '#fff'; fn(g); return g.getImageData(0, 0, Wd, Hd).data; };
@@ -203,9 +216,24 @@ const results = await page.evaluate(async () => {
       const native = draw((g) => g.fillText(L.lines[0].text, 20, 140));
       let diff = 0, ink = 0;
       for (let i = 3; i < glyphs.length; i += 4) { diff += Math.abs(glyphs[i] - native[i]); ink += native[i]; }
-      out[family] = ink ? diff / ink : 1;
+      out[family + (text.startsWith('office') ? ' ligatures' : '')] = ink ? diff / ink : 1;
     }
     return out;
+  })();
+
+  // True italics and drawn obliques: an italic instance loads and differs from upright; a
+  // forward slant goes onto Roboto Flex's slnt axis (10° of it) and only the rest is skewed.
+  const styles = await (async () => {
+    const it = TM.fonts.resolve({ family: 'Playfair Display', weight: 400, italic: true }, 100);
+    const loads = await TM.fonts.ensure(it, 400, 'Italic');
+    const c = document.createElement('canvas'); c.width = 400; c.height = 120; const g = c.getContext('2d');
+    const sig = (fam) => { g.clearRect(0, 0, 400, 120); g.font = TM.fonts.fontString(fam, 400, 80); g.fillText('Italic', 8, 90); const d = g.getImageData(0, 0, 400, 120).data; let h = 0; for (let i = 3; i < d.length; i += 4) h = (h * 31 + d[i]) | 0; return h; };
+    const sl = sceneFor('rise', (l) => { l.font.family = 'Roboto Flex'; l.type.slant = 14; });
+    const tl = TM.Renderer.typeset(sl.layers[0], sl);
+    return {
+      italic: loads && sig(it) !== sig('Playfair Display') && TM.fonts.resolve({ family: 'Anton', italic: true }, 100) === 'Anton',
+      slnt: tl.font.autoSlnt === 10 && tl.font.axes.slnt === -10 && /slnt-10/.test(tl.font.family),
+    };
   })();
 
   // Every catalogue family must load: a bad axis declaration makes Google answer 400 and the
@@ -218,6 +246,46 @@ const results = await page.evaluate(async () => {
       if (!ok) failed.push(f.family);
     }));
     return { total: TM.FONTS.filter((f) => !f.custom).length, failed };
+  })();
+
+  // Photosensitivity check (WCAG 2.3.1): a full-frame 2 Hz strobe passes, 4 Hz fails, a tiny
+  // flashing spot passes, and a bar sweeping 5 times a second is 5 flashes, not one per frame.
+  const safety = await (async () => {
+    TM.registerPreset({ id: 'smoke-strobe', params: [TM.P.range('hz', 'hz', 0, 30, 0.5, 2), TM.P.range('area', 'area', 0, 1, 0.01, 1), TM.P.range('sweeps', 'sweeps', 0, 20, 1, 0)], render(f) {
+      f.identity(); f.ctx.fillStyle = '#ffffff';
+      if (f.params.sweeps) { const x = ((f.p * f.params.sweeps) % 1) * f.W * 1.2 - f.W * 0.1; f.ctx.fillRect(x - f.W * 0.05, 0, f.W * 0.1, f.H); return; }
+      if (Math.floor(f.t * f.params.hz * 2 + 1e-6) % 2) return;
+      const a = Math.sqrt(f.params.area); f.ctx.fillRect((f.W * (1 - a)) / 2, (f.H * (1 - a)) / 2, f.W * a, f.H * a);
+    } });
+    const check = async (params) => {
+      const s = TM.Scene.defaults(); s.duration = 4; s.bg = { type: 'solid', color: '#000000' };
+      s.layers[0].preset = 'smoke-strobe'; s.layers[0].params = Object.assign(TM.presetDefaults('smoke-strobe'), params);
+      return TM.Safety.flashes(TM.Scene.normalize(s));
+    };
+    const [hz2, hz4, spot, bar, plain] = [await check({ hz: 2 }), await check({ hz: 4 }), await check({ hz: 6, area: 0.01 }), await check({ sweeps: 20 }), await TM.Safety.flashes(sceneFor('rise'))];
+    // A strobe flipping every frame at 60 fps (30 Hz) must read as 30 flashes a second, not 0.
+    const perFrame = await (async () => { const s = TM.Scene.defaults(); s.duration = 2; s.fps = 60; s.bg = { type: 'solid', color: '#000000' }; s.layers[0].preset = 'smoke-strobe'; s.layers[0].params = Object.assign(TM.presetDefaults('smoke-strobe'), { hz: 30 }); return TM.Safety.flashes(TM.Scene.normalize(s)); })();
+    delete TM.presets['smoke-strobe']; TM.presetOrder.splice(TM.presetOrder.indexOf('smoke-strobe'), 1);
+    return { ok: hz2.ok && hz2.flashes === 2 && !hz4.ok && hz4.flashes === 4 && spot.ok && bar.flashes === 5 && plain.ok && perFrame.flashes >= 25, hz2: hz2.flashes, hz4: hz4.flashes, bar: bar.flashes, perFrame: perFrame.flashes };
+  })();
+
+  // Starter templates: every one builds a valid multi-layer scene that renders the same twice,
+  // stays under the flash limit, and takes the user's text in its headline.
+  const templates = await (async () => {
+    const bad = [];
+    for (const t of TM.Templates.list()) {
+      const s = TM.Templates.build(t.id);
+      await TM.prepare(s, { timeout: 8000 });
+      const same = JSON.stringify(TM.Scene.normalize(s)) === JSON.stringify(s);
+      const c = document.createElement('canvas'); const r = new TM.Renderer(c, { quality: 'full' }); r.setScene(s); r.resize(320, Math.round((320 * s.size.h) / s.size.w));
+      const hash = () => { r.render(s.duration * 0.45); const d = r.ctx.getImageData(0, 0, c.width, c.height).data; let h = 0, ink = 0; for (let i = 0; i < d.length; i += 4) { h = (h * 31 + d[i] + d[i + 1] * 3) | 0; ink += d[i]; } return [h, ink]; };
+      const a = hash(), b = hash();
+      const fl = await TM.Safety.flashes(s, { maxFrames: 240 });
+      const withText = TM.Templates.build(t.id, { text: 'HELLO' });
+      const headline = withText.layers.some((l) => l.text === 'HELLO');
+      if (!same || a[0] !== b[0] || !fl.ok || !headline || s.layers.length < 2) bad.push(`${t.id}${!same ? ' (not normalised)' : ''}${a[0] !== b[0] ? ' (not deterministic)' : ''}${!fl.ok ? ' (flashes ' + fl.flashes + '/s)' : ''}${!headline ? ' (no headline)' : ''}`);
+    }
+    return { count: TM.Templates.list().length, bad };
   })();
 
   // Sanitiser fuzz: garbage must normalise to a valid scene without throwing.
@@ -238,7 +306,7 @@ const results = await page.evaluate(async () => {
   const close = (a, b) => (typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) < 1e-3
     : a && typeof a === 'object' ? b && typeof b === 'object' && Object.keys({ ...a, ...b }).every((k) => close(a[k], b[k])) : a === b);
   const roundTrip = close(s0, s1);
-  return { presets: out, fuzzOk, roundTrip, lineBands, timing, axes, fontLoads, kerning };
+  return { presets: out, fuzzOk, roundTrip, lineBands, timing, axes, fontLoads, kerning, safety, styles, templates };
 });
 
 await browser.close();
@@ -261,14 +329,24 @@ const linesOk = lb.length >= 2 && Math.min(lb[0], lb[1]) / Math.max(lb[0], lb[1]
 console.log(`multi-line font integrity: ${linesOk ? 'ok' : 'FAIL'} (line ink heights ${lb.slice(0, 2).join(' / ')} px)`);
 if (!linesOk) fails.push('second line lost its font (font cache vs save/restore)');
 const tmg = results.timing;
-console.log(`layer timing: delay ${tmg.delayShifts ? 'ok' : 'FAIL'} · once/hold ${tmg.onceHolds && tmg.onceWaits ? 'ok' : 'FAIL'} · looks ${tmg.lookApplies ? 'ok' : 'FAIL'} · looks reproducible + keep drawn paths ${tmg.lookReproducible ? 'ok' : 'FAIL'}`);
+console.log(`layer timing: delay ${tmg.delayShifts ? 'ok' : 'FAIL'} · once/hold ${tmg.onceHolds && tmg.onceWaits ? 'ok' : 'FAIL'} · looks ${tmg.lookApplies ? 'ok' : 'FAIL'} · looks reproducible + keep drawn paths ${tmg.lookReproducible ? 'ok' : 'FAIL'} · stagger curve, jitter + springs ${tmg.spread ? 'ok' : 'FAIL'}`);
+if (!tmg.spread) fails.push('stagger curve / jitter / custom spring broken');
 if (!tmg.lookReproducible) fails.push('applyLook depends on prior state or replaced a drawn path');
 if (!tmg.delayShifts || !tmg.onceHolds || !tmg.onceWaits) fails.push('layer timing semantics broken');
 if (!tmg.lookApplies) fails.push('applyLook failed');
 const kern = Object.entries(results.kerning);
 const kernOk = kern.every(([, v]) => v < 0.03);
-console.log(`kerning (per-glyph vs native run): ${kernOk ? 'ok' : 'FAIL'} (${kern.map(([f, v]) => f + ' ' + (v * 100).toFixed(2) + '%').join(' · ')} of ink differs)`);
+console.log(`kerning + ligatures (per-glyph vs native run): ${kernOk ? 'ok' : 'FAIL'} (${kern.map(([f, v]) => f + ' ' + (v * 100).toFixed(2) + '%').join(' · ')} of ink differs)`);
 if (!kernOk) fails.push('per-glyph layout loses kerning');
+const tp = results.templates;
+console.log(`starter templates: ${tp.bad.length ? 'FAIL ' + tp.bad.join(', ') : 'ok'} (${tp.count} build, render deterministically, flash-safe, take the user's text)`);
+if (tp.bad.length || tp.count < 6) fails.push('starter templates broken: ' + tp.bad.join(', '));
+const st = results.styles;
+console.log(`italics + obliques: true italic ${st.italic ? 'ok' : 'FAIL'} · slant onto slnt axis ${st.slnt ? 'ok' : 'FAIL'}`);
+if (!st.italic || !st.slnt) fails.push('italic instances or slnt slant broken');
+const sf = results.safety;
+console.log(`photosensitivity check: ${sf.ok ? 'ok' : 'FAIL'} (2 Hz strobe ${sf.hz2}/s · 4 Hz ${sf.hz4}/s · fast bar ${sf.bar}/s · per-frame 60 fps ${sf.perFrame}/s)`);
+if (!sf.ok) fails.push('flash detector miscounts (TM.Safety)');
 const fl = results.fontLoads;
 console.log(`catalogue fonts: ${fl.total - fl.failed.length}/${fl.total} load${fl.failed.length ? ' · FAILED: ' + fl.failed.join(', ') : ''}`);
 if (fl.failed.length) fails.push(`fonts that never load: ${fl.failed.join(', ')}`);

@@ -10,18 +10,25 @@
 
   /**
    * Make sure every font the scene uses is loaded before frame 0.
-   * Resolves with the families that could not be loaded (rendered with a fallback face).
+   * Resolves with the families that could not be loaded (rendered with a fallback face). The
+   * array also carries `.axes`: families drawn without the width / optical size the scene asks
+   * for, because their font files couldn't be read (e.g. a CSP blocking the fonts CSS).
    */
   X.ensureFonts = async function (scene) {
-    const checks = await Promise.all(scene.layers.map((l) => TM.fonts.ensure(l.font.family, l.font.weight).then((ok) => [l.font.family, ok])));
+    const checks = await Promise.all(scene.layers.map((l) => TM.fonts.ensure(l.font.family, l.font.weight, l.text).then((ok) => [l.font.family, ok])));
     await TM.prepare(scene);
     if (document.fonts && document.fonts.ready) await document.fonts.ready;
-    const missing = new Set();
+    const missing = new Set(), axes = new Set();
     checks.forEach(([family, ok]) => {
       const f = TM.fonts.get(family);
       if (!ok && f && !f.custom) missing.add(family);
     });
-    return [...missing];
+    scene.layers.forEach((l) => {
+      if (!missing.has(l.font.family) && TM.fonts.axes(l.font.family) && TM.fonts.axesFailed(l.font.family)) axes.add(l.font.family);
+    });
+    const out = [...missing];
+    out.axes = [...axes];
+    return out;
   };
 
   /** A renderer for exports: its own canvas, full quality, sized to the plan. */
@@ -34,7 +41,9 @@
   };
 
   /** Time of frame i, in seconds. Shared by every encoder and by the verification tools. */
-  X.frameTime = (plan, i) => plan.start + i / plan.fps;
+  // Scene time of frame i: spread over the plan's span (exactly loops × duration for loop
+  // exports), so frame `frames` would be the loop point again.
+  X.frameTime = (plan, i) => plan.start + (plan.span > 0 && plan.frames > 0 ? (i * plan.span) / plan.frames : i / plan.fps);
   /** Presentation timestamp of frame i in microseconds (WebCodecs units). */
   X.frameTimestamp = (plan, i) => Math.round((i * 1e6) / plan.fps);
 
