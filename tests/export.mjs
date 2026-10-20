@@ -308,16 +308,18 @@ async function checkVideo(R, page, job, scene, res, file, bytes, size, hasFF) {
   R.check(`${job.id}: 4:2:0 8-bit`, st.pix_fmt === 'yuv420p', st.pix_fmt);
 
   if (st.codec_name === 'av1') {
-    // AV1-ISOBMFF §2.3.4: av1C's fields SHALL equal the sequence header's. Round 2 finding N5:
-    // mp4-muxer writes a placeholder (level 2.0, 4:4:4, no configOBUs) when given no description.
+    // AV1-ISOBMFF §2.3.4: av1C's fields SHALL equal the sequence header's, which strict demuxers
+    // (Apple's) read. Round 2 finding N5 (a placeholder: level 2.0, 4:4:4, no configOBUs) was
+    // fixed in 79e09d7; this keeps it fixed.
     const box = findBox(bytes, ['moov', 'trak', 'mdia', 'minf', 'stbl', 'stsd', 'av01', 'av1C']);
-    if (!box) R.check('mp4: av1C box present', false);
+    if (!box) R.check(`${job.id}: av1C box present`, false);
     else {
       const c = parseAv1C(bytes, box);
-      const okSub = c.subsamplingX === 1 && c.subsamplingY === 1 && !c.monochrome;
-      const okLevel = st.level == null || st.level < 0 || c.seqLevelIdx === +st.level;
-      R.known('N5', 'mp4: av1C matches the AV1 bitstream', okSub && okLevel && c.configOBUs > 0,
-        `av1C level idx ${c.seqLevelIdx} vs bitstream ${st.level}, subsampling ${c.subsamplingX},${c.subsamplingY} vs 4:2:0, ${c.configOBUs} configOBU bytes`);
+      const profile = { Main: 0, High: 1, Professional: 2 }[st.profile];
+      const ok = c.marker === 1 && c.version === 1 && c.seqProfile === profile && !c.highBitdepth && !c.monochrome &&
+        c.subsamplingX === 1 && c.subsamplingY === 1 && (st.level == null || st.level < 0 || c.seqLevelIdx === +st.level) && c.configOBUs > 0 && c.firstOBUType === 1;
+      R.check(`${job.id}: av1C matches the bitstream (profile, level, 8-bit 4:2:0, sequence header OBU)`, ok,
+        `av1C profile ${c.seqProfile} / level idx ${c.seqLevelIdx} vs ffprobe ${st.profile} / ${st.level}; ${c.highBitdepth ? '10+' : '8'}-bit, subsampling ${c.subsamplingX},${c.subsamplingY}; ${c.configOBUs} configOBU bytes${c.firstOBUType != null ? `, first OBU type ${c.firstOBUType}` : ''}`);
     }
   }
 

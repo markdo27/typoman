@@ -67,9 +67,10 @@ export const harnessPage = (groups = 'engine,presets,export') =>
   `<!doctype html><html><head><meta charset="utf-8"><title>TYPOMAN test harness</title></head><body>` +
   `<script src="/js/boot.js" data-groups="${groups}"></script></body></html>`;
 
-/** Open the harness on `server` and wait for TM_READY. */
-export async function openHarness(context, server, { log, path: p = '/__harness.html' } = {}) {
-  if (!server.routes[p]) server.routes[p] = harnessPage();
+/** Open the harness on `server` (boot groups as in js/boot.js) and wait for TM_READY. */
+export async function openHarness(context, server, { log, groups = 'engine,presets,export' } = {}) {
+  const p = `/__harness-${groups.replace(/[^a-z]+/g, '-')}.html`;
+  if (!server.routes[p]) server.routes[p] = harnessPage(groups);
   const page = await context.newPage();
   if (log) log.watch(page, 'harness');
   await page.goto(server.url(p), { waitUntil: 'load' });
