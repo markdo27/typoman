@@ -30,7 +30,8 @@
     const ext = out.ext || plan.ext;
     const name = X.fileName(scene, Object.assign({}, plan, { ext }));
     const notes = (out.info.notes || []).slice();
-    if (missingFonts.length) notes.push(`${missingFonts.join(', ')} couldn't load (offline?), so a fallback font was used.`);
+    if (missingFonts.length) notes.push(`${missingFonts.join(', ')} couldn't be loaded from Google Fonts, so a fallback font was used.`);
+    if (missingFonts.axes && missingFonts.axes.length) notes.push(`${missingFonts.axes.join(', ')}: width and optical size couldn't be applied (the font files weren't readable), so the regular design was used.`);
     const info = Object.assign({
       format: plan.format,
       width: plan.width,

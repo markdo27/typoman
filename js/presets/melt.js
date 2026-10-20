@@ -36,10 +36,18 @@
       else if (p >= t2 && p < t3) M = 1;
       else if (p >= t3 && p < t4) M = 1 - TM.ease(P.reformEase, 'springSoft')((p - t3) / (t4 - t3));
       const lines = L.lines.filter((l) => l.text.trim());
-      if (Math.abs(M) < 1e-3) { for (const line of lines) f.drawLine(line); return; }
+      // Whole lines keep native shaping; a palette colours letter by letter, so it draws glyphs.
+      const perGlyph = f.layer.fill.type === 'palette' && !f.colorOverride;
+      const draw = () => {
+        for (const line of lines) {
+          if (!perGlyph) { f.drawLine(line); continue; }
+          for (const gi of line.glyphs) f.drawGlyph(L.glyphs[gi]);
+        }
+      };
+      if (Math.abs(M) < 1e-3) { draw(); return; }
 
       const buf = f.buffer('melt');
-      f.drawInto(buf.ctx, () => { for (const line of lines) f.drawLine(line); });
+      f.drawInto(buf.ctx, draw);
       const ctx = f.ctx;
       f.identity();
       const sw = Math.max(2, Math.round(f.unit / (110 + 260 * P.detail)));

@@ -32,6 +32,127 @@
     return Object.assign({}, meta, { decoderConfig: dc });
   }
 
+  // ───────────────────────────── AV1 in MP4 ─────────────────────────────
+  /** MSB-first bit reader for AV1 headers (f(n) and uvlc() of the spec). */
+  function bits(u8) {
+    let pos = 0;
+    const f = (n) => {
+      let v = 0;
+      for (let k = 0; k < n; k++) {
+        const byte = u8[pos >> 3];
+        if (byte === undefined) throw new Error('short header');
+        v = v * 2 + ((byte >> (7 - (pos & 7))) & 1);
+        pos++;
+      }
+      return v;
+    };
+    const uvlc = () => {
+      let zeros = 0;
+      while (!f(1)) if (++zeros >= 32) return 2 ** 32 - 1;
+      return f(zeros) + 2 ** zeros - 1;
+    };
+    return { f, uvlc };
+  }
+
+  /** The fields of an AV1 sequence header that an av1C record repeats (AV1 spec 5.5). */
+  function parseSequenceHeader(u8) {
+    const { f, uvlc } = bits(u8);
+    const profile = f(3);
+    f(1); // still_picture
+    const reduced = f(1);
+    let level = 0, tier = 0;
+    if (reduced) {
+      level = f(5);
+    } else {
+      let decoderModel = false, bufferDelayLen = 0;
+      if (f(1)) { // timing_info_present_flag
+        f(32); f(32); // num_units_in_display_tick, time_scale
+        if (f(1)) uvlc(); // equal_picture_interval → num_ticks_per_picture_minus_1
+        decoderModel = !!f(1);
+        if (decoderModel) { bufferDelayLen = f(5) + 1; f(32); f(5); f(5); }
+      }
+      const initialDelay = f(1);
+      const ops = f(5) + 1;
+      for (let i = 0; i < ops; i++) {
+        f(12); // operating_point_idc
+        const lv = f(5);
+        const tr = lv > 7 ? f(1) : 0;
+        if (i === 0) { level = lv; tier = tr; }
+        if (decoderModel && f(1)) { f(bufferDelayLen); f(bufferDelayLen); f(1); }
+        if (initialDelay && f(1)) f(4);
+      }
+    }
+    const wBits = f(4) + 1, hBits = f(4) + 1;
+    f(wBits); f(hBits); // max_frame_width/height_minus_1
+    if (!reduced && f(1)) { f(4); f(3); } // frame_id_numbers_present_flag
+    f(1); f(1); f(1); // use_128x128_superblock, enable_filter_intra, enable_intra_edge_filter
+    if (!reduced) {
+      f(1); f(1); f(1); f(1); // interintra, masked compound, warped motion, dual filter
+      const orderHint = f(1);
+      if (orderHint) { f(1); f(1); } // jnt_comp, ref_frame_mvs
+      const forceSct = f(1) ? 2 : f(1); // seq_choose_screen_content_tools ? SELECT : force
+      if (forceSct > 0 && !f(1)) f(1); // seq_choose_integer_mv / seq_force_integer_mv
+      if (orderHint) f(3);
+    }
+    f(1); f(1); f(1); // superres, cdef, restoration
+    // color_config()
+    const highBitdepth = f(1);
+    const twelveBit = profile === 2 && highBitdepth ? f(1) : 0;
+    const mono = profile === 1 ? 0 : f(1);
+    let cp = 2, tc = 2, mc = 2;
+    if (f(1)) { cp = f(8); tc = f(8); mc = f(8); }
+    let subX = 1, subY = 1, chromaPos = 0;
+    if (mono) {
+      f(1);
+    } else if (cp === 1 && tc === 13 && mc === 0) {
+      subX = 0; subY = 0;
+    } else {
+      f(1); // color_range
+      if (profile === 0) { subX = 1; subY = 1; }
+      else if (profile === 1) { subX = 0; subY = 0; }
+      else if (twelveBit) { subX = f(1); subY = subX ? f(1) : 0; }
+      else { subX = 1; subY = 0; }
+      if (subX && subY) chromaPos = f(2);
+    }
+    return { profile, level, tier, highBitdepth, twelveBit, mono, subX, subY, chromaPos };
+  }
+
+  /**
+   * AV1CodecConfigurationRecord for the 'av1C' box, built from a key frame's sequence-header OBU
+   * (WebCodecs encoders don't provide a description for AV1, and mp4-muxer's fallback claims
+   * level 2.0 and 4:4:4). The OBU itself goes in as configOBUs. Null if none is found.
+   */
+  function av1Config(chunk) {
+    const data = new Uint8Array(chunk.byteLength);
+    chunk.copyTo(data);
+    for (let i = 0; i < data.length;) {
+      const header = data[i];
+      const type = (header >> 3) & 15, ext = (header >> 2) & 1, hasSize = (header >> 1) & 1;
+      let j = i + 1 + ext, size = 0;
+      if (hasSize) {
+        for (let k = 0, b = 128; b & 128 && k < 8; k++) { b = data[j++]; size += (b & 127) * 2 ** (7 * k); }
+      } else size = data.length - j;
+      if (type === 1) { // OBU_SEQUENCE_HEADER
+        try {
+          const p = parseSequenceHeader(data.subarray(j, j + size));
+          const obu = data.subarray(i, j + size);
+          const rec = new Uint8Array(4 + obu.length);
+          rec[0] = 0x81; // marker, version 1
+          rec[1] = (p.profile << 5) | p.level;
+          rec[2] = (p.tier << 7) | (p.highBitdepth << 6) | (p.twelveBit << 5) | (p.mono << 4) | (p.subX << 3) | (p.subY << 2) | p.chromaPos;
+          rec[3] = 0; // no initial_presentation_delay
+          rec.set(obu, 4);
+          return rec;
+        } catch (e) {
+          return null;
+        }
+      }
+      i = j + size;
+    }
+    return null;
+  }
+  X._av1Config = av1Config;
+
   // ───────────────────────────── sinks ─────────────────────────────
   function mp4Sink(choice, plan) {
     const M = window.Mp4Muxer;
@@ -45,6 +166,10 @@
     return {
       color(chunk, meta) {
         const m = cleanMeta(meta, choice);
+        if (m && m.decoderConfig && choice.family === 'av1' && !m.decoderConfig.description && chunk.type === 'key') {
+          const rec = av1Config(chunk);
+          if (rec) m.decoderConfig = Object.assign({}, m.decoderConfig, { description: rec });
+        }
         if (m && m.decoderConfig) decoderConfig = m.decoderConfig;
         muxer.addVideoChunk(chunk, m);
         frames++;

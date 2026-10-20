@@ -14,7 +14,6 @@
   'use strict';
   const { TAU, clamp, lerp, smoothstep, fract, pingpong, angleDelta } = TM.math;
   const K = TM.PathKit;
-  const DEG = Math.PI / 180;
   const REACH = 2.2; // bulge radius in lens radii
 
   /** Bulge profile: 1 at the centre, smooth cutoff to 0 at REACH. */
@@ -65,7 +64,7 @@
     render(f) {
       const path = f.path, C = f.cache;
       if (!path || path.length < 1 || !C.line) return;
-      const P = f.params, W = f.W, H = f.H;
+      const P = f.params, H = f.H;
       const { L, line, rel, repW, scale, cell } = C;
       const glyphs = L.glyphs, idx = line.glyphs, n = idx.length;
 
