@@ -52,10 +52,12 @@
       store.on('select', () => { this.refreshSelection(); this.updateEmpty(); });
       store.on('ui', (patch) => {
         if ('zoom' in patch || 'clean' in patch) this.layout(true);
-        if ('editPath' in patch || 'clean' in patch) this.refreshSelection();
+        if ('editPath' in patch || 'clean' in patch) { this.refreshSelection(); this.board.style.cursor = ''; } // the path editor owns the cursor while editing
         if ('time' in patch) this.dirty = true;
       });
       this.watchDpr();
+      const badge = $('#draftBadge');
+      if (badge) badge.addEventListener('pointerdown', (e) => e.stopPropagation()); // not a press on the artwork
       this.wirePointer();
       this.wireKeys();
       this.wireWheel();
@@ -88,8 +90,9 @@
       let bw = cssW * dpr, bh = cssH * dpr;
       const px = bw * bh;
       if (px > PREVIEW_MAX_PIXELS) { const s = Math.sqrt(PREVIEW_MAX_PIXELS / px); bw *= s; bh *= s; }
-      // Dynamic resolution: heavy effect stacks lower the preview's backing size (exports are unaffected).
-      const rs = this.resScale || 1;
+      // Dynamic resolution: heavy effect stacks lower the preview's backing size (exports are
+      // unaffected), except for a paused full-quality still (renderStill).
+      const rs = this._fullRes ? 1 : this.resScale || 1;
       this.renderer.resize(Math.max(2, bw * rs), Math.max(2, bh * rs));
       this.overlay.setAttribute('viewBox', `0 0 ${cssW} ${cssH}`);
       this.overlay.setAttribute('width', cssW);
@@ -104,25 +107,65 @@
     }
 
     render(t) {
+      if (this._fullRes) { this._fullRes = false; this.layout(true); } // back from a paused full-quality still
       const t0 = performance.now();
       this.renderer.render(t);
-      this._adapt(performance.now() - t0);
+      this._lastT = t;
+      this._full = false;
+      // A resolution step resizes the canvas, which clears it: redraw this frame at the new size
+      // (otherwise the stage stays an empty checkerboard until the next frame, or while paused).
+      if (this._adapt(performance.now() - t0)) this.renderer.render(t);
+      this._draft = this._isDraft();
+      this.syncDraft();
     }
 
     /** Keep playback responsive: trade preview resolution for frame time, with hysteresis. */
     _adapt(ms) {
       this._ema = this._ema == null ? ms : this._ema * 0.85 + ms * 0.15;
       this._frames = (this._frames || 0) + 1;
-      if (this._frames < 24) return;
+      if (this._frames < 24) return false;
       this._frames = 0;
       const rs = this.resScale || 1;
       let next = rs;
       if (this._ema > 34 && rs > 0.4) next = Math.max(0.4, rs * 0.8);
       else if (this._ema < 12 && rs < 1) next = Math.min(1, rs / 0.8);
-      if (next !== rs) {
-        this.resScale = next;
-        this.layout(true);
-      }
+      if (next === rs) return false;
+      this.resScale = next;
+      this.layout(true);
+      return true;
+    }
+
+    // ── draft preview: the stage may simplify heavy effects; exports never do ──
+    /** Was this frame simplified compared with an export? */
+    _isDraft() {
+      if ((this.resScale || 1) < 0.999) return true; // adaptive resolution
+      const r = this.renderer;
+      if (typeof r.simplified === 'boolean') return r.simplified; // engine caps (blur samples, extrude steps)
+      // Engines without the flag: motion blur is the cap that always bites in preview.
+      return this.store.scene.layers.some((l) => l.visible !== false && l.fx && l.fx.blur > 0.05);
+    }
+
+    syncDraft() {
+      const badge = this.draftBadge || (this.draftBadge = $('#draftBadge'));
+      if (badge) badge.hidden = !(this._draft && !this._full);
+    }
+
+    /**
+     * Paused on a draft frame: draw it once at full quality and resolution, so what you inspect
+     * is what you export. Skipped when it would stall the UI (very heavy stacks keep the badge).
+     */
+    renderStill() {
+      if (!this._draft || this._full || this._lastT == null) return false;
+      const r = this.renderer, rs = this.resScale || 1;
+      if ((this._ema || 16) * 3 / (rs * rs) > 450) return false;
+      if (rs < 0.999) { this._fullRes = true; this.layout(true); }
+      const quality = r.quality;
+      r.quality = 'full';
+      try { r.render(this._lastT); } finally { r.quality = quality; }
+      this._full = true;
+      this.dirty = false; // keep the still until something changes
+      this.syncDraft();
+      return true;
     }
 
     watchDpr() {

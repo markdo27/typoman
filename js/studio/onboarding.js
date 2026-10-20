@@ -64,12 +64,16 @@
   };
 
   // ───────────────────────────── tour ─────────────────────────────
+  /** A screen without hover (phones, tablets): the copy says "tap" and skips keyboard tips. */
+  const touch = () => !!(window.matchMedia && window.matchMedia('(hover: none)').matches);
   const STEPS = [
     {
       target: () => (UI.isPhone() ? document.querySelector('.tabs [data-tab="presets"]') : document.querySelector('.presets-sec')),
       tab: 'presets',
       title: 'Pick a look',
-      text: 'Every preset animates your own words. Hover a card to preview it, click to apply.',
+      text: () => (touch()
+        ? 'Every preset animates your own words. Tap a card to apply it; Undo takes you back.'
+        : 'Every preset animates your own words. Hover a card to preview it, click to apply.'),
     },
     {
       target: () => (UI.isPhone() ? document.querySelector('.tabs [data-tab="edit"]') : document.querySelector('[data-panel="text"] .ctl-text')),
@@ -80,7 +84,9 @@
     {
       target: () => document.querySelector('#exportBtn'),
       title: 'Ship it',
-      text: 'Export an MP4 or copy an embed for your site. Press ? any time for shortcuts.',
+      text: () => (UI.isPhone()
+        ? 'Export an MP4 here. Embed codes and share links are in the ··· menu.'
+        : touch() ? 'Export an MP4 or copy an embed for your site.' : 'Export an MP4 or copy an embed for your site. Press ? any time for shortcuts.'),
     },
   ];
 
@@ -142,7 +148,7 @@
     active.card.replaceChildren(
       h('div', { class: 'coach-step' }, h('span', null, String(i + 1).padStart(2, '0')), ' / ' + String(STEPS.length).padStart(2, '0')),
       h('h3', { id: 'coachTitle' }, step.title),
-      h('p', { id: 'coachText' }, step.text),
+      h('p', { id: 'coachText' }, typeof step.text === 'function' ? step.text() : step.text),
       h('div', { class: 'coach-actions' }, skip, next));
     requestAnimationFrame(() => { place(); next.focus({ preventScroll: true }); });
   }
