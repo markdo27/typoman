@@ -212,7 +212,7 @@
 
     looks: [
       { name: 'Bauhaus', bg: { type: 'solid', color: '#f1ede4' }, layer: { font: { family: 'Archivo Black', weight: 400 }, fill: { type: 'palette', palette: ['#e63326', '#1d3fbb', '#f6bf26', '#111111'] }, params: { gutter: 0.008 } } },
-      { name: 'Swiss mono', bg: { type: 'solid', color: '#ffffff' }, layer: { font: { family: 'Inter Tight', weight: 800 }, fill: { type: 'palette', palette: ['#141414', '#ff3d00', '#141414', '#7c7c7c'] }, params: { cells: 4, moves: 'slide', order: 'rows', beats: 6 } } },
+      { name: 'Swiss mono', bg: { type: 'solid', color: '#ffffff' }, layer: { font: { family: 'Inter Tight', weight: 800 }, fill: { type: 'palette', palette: ['#141414', '#ff3d00', '#141414', '#7c7c7c'] }, params: { cells: 4, moves: 'slide', order: 'rows' } } },
       { name: 'Neon arcade', bg: { type: 'solid', color: '#07000f' }, layer: { font: { family: 'Press Start 2P', weight: 400 }, fill: { type: 'palette', palette: ['#ff00e5', '#00f0ff', '#faff00'] }, params: { tiles: false, textScale: 0.5, moves: 'flip', ease: 'outBounce' } } },
     ],
   });

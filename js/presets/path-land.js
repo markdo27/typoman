@@ -242,7 +242,7 @@
     path: 'arc',
     fit: true,
     params: [
-      ...TM.P.sequence({ inDur: 0.55, outDur: 0.24, stagger: 0.3, easeIn: [0.45, 0.05, 0.55, 0.88], easeOut: 'anticipate' }).map((p) => (p.key === 'order' ? ORDER : p.key === 'stagger' ? GAP : p)),
+      ...TM.P.sequence({ inDur: 0.52, outDur: 0.3, stagger: 0.3, easeIn: [0.45, 0.05, 0.55, 0.88], easeOut: 'linear' }).map((p) => (p.key === 'order' ? ORDER : p.key === 'stagger' ? GAP : p)),
       TM.P.range('peel', 'Peel off after', 0, 0.95, 0.01, 0, { group: 'Flight', hint: 'Letters leave the path where it passes nearest their place. Raise this to make them ride at least this far first' }),
       TM.P.range('leadIn', 'Lead-in (em)', 0, 10, 0.1, 0, { group: 'Flight', hint: 'Extra run-up before the path starts (open paths)' }),
       TM.P.range('follow', 'Follow tangent', 0, 1, 0.01, 1, { group: 'Flight' }),
@@ -291,7 +291,7 @@
       const PT = T.T;
       if (P.guide !== 'none' && f.echo === 0) guide(f, path, P.guide);
       const dur = f.dur;
-      const easeIn = TM.ease(P.easeIn, 'smooth'), easeOut = TM.ease(P.easeOut, 'anticipate');
+      const easeIn = TM.ease(P.easeIn, 'smooth'), easeOut = TM.ease(P.easeOut, 'linear');
       let inDur = P.inDur, outDur = P.timing === 'in' ? 0 : P.outDur;
       const tot = inDur + outDur;
       if (tot > 1) { inDur /= tot; outDur /= tot; }
