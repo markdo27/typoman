@@ -65,7 +65,7 @@
         const restore = () => {
           if (!original) return;
           const o = original;
-          store.updateLayer((l) => { l.font = { family: o.family, weight: o.weight }; }, { history: false, reason: 'font-preview' });
+          store.updateLayer((l) => { l.font = Object.assign({}, o); }, { history: false, reason: 'font-preview' });
         };
         const fontCtl = C.font({
           label: 'Font',
@@ -100,6 +100,42 @@
         };
         buildWeight();
 
+        // Width and optical size, for families with those variable axes (see TM.fonts.resolve).
+        const axesSlot = h('div', { class: 'slot' });
+        let axesCtl = [], axesFam = null;
+        const designPx = () => store.layer.type.size * Math.min(store.scene.size.w, store.scene.size.h);
+        const buildAxes = () => {
+          axesFam = store.layer.font.family;
+          axesCtl = [];
+          axesSlot.replaceChildren();
+          const ax = TM.fonts.axes(axesFam);
+          if (!ax) return;
+          if (ax.wdth) {
+            axesCtl.push(C.range({
+              label: 'Width', min: ax.wdth[0], max: ax.wdth[1], step: 1, decimals: 0, unit: '%',
+              default: TM.math.clamp(100, ax.wdth[0], ax.wdth[1]),
+              hint: 'Variable width axis: the typeface’s own condensed to expanded designs, never a stretch',
+              get: () => TM.fonts.widthFor(axesFam, store.layer.font.width),
+              set: layerBinding(store, 'font.width').set,
+            }));
+          }
+          if (ax.opsz) {
+            axesCtl.push(C.segmented({
+              label: 'Optical size',
+              options: [['auto', 'Auto', 'Follow the text size'], ['fixed', 'Fixed', 'Pin one optical size']],
+              get: () => (store.layer.font.opsz === 'auto' ? 'auto' : 'fixed'),
+              set: (v) => store.updateLayer((l) => { l.font.opsz = v === 'auto' ? 'auto' : TM.fonts.opszFor(axesFam, 'auto', designPx()); }, { reason: 'font.opsz', label: 'Optical size' }),
+            }), C.range({
+              label: 'Opsz', min: ax.opsz[0], max: ax.opsz[1], step: 1, decimals: 0,
+              hint: 'Optical size: low values draw sturdier, looser letters for small text; high values finer, tighter ones for display. Dragging pins it',
+              get: () => TM.fonts.opszFor(axesFam, store.layer.font.opsz, designPx()),
+              set: layerBinding(store, 'font.opsz').set,
+            }));
+          }
+          axesCtl.forEach((c) => axesSlot.append(c.el));
+        };
+        buildAxes();
+
         const size = C.range({ label: 'Size', min: 0.02, max: 0.8, step: 0.005, decimals: 3, default: DEF.type.size, hint: 'Relative to the shorter side of the frame', ...layerBinding(store, 'type.size') });
         const tracking = C.range({ label: 'Tracking', min: -0.2, max: 1, step: 0.005, decimals: 3, default: 0, hint: 'Letter spacing in em', ...layerBinding(store, 'type.tracking') });
         const leading = C.range({ label: 'Leading', min: 0.6, max: 2.5, step: 0.01, default: DEF.type.leading, hint: 'Line height', ...layerBinding(store, 'type.leading') });
@@ -120,11 +156,13 @@
         const posWrap = h('div', { class: 'slot' }, posHead, px.el, py.el, h('div', { class: 'row-end' }, center));
         ctl.push(px, py);
 
-        body.append(ta.el, fontCtl.el, weightSlot, size.el, tracking.el, leading.el, slant.el, align.el, textCase.el, posWrap);
+        body.append(ta.el, fontCtl.el, weightSlot, axesSlot, size.el, tracking.el, leading.el, slant.el, align.el, textCase.el, posWrap);
         const update = () => {
           if (store.layer.font.family !== weightFam) buildWeight();
+          if (store.layer.font.family !== axesFam) buildAxes();
           ctl.forEach((c) => c.update());
           if (weightCtl) weightCtl.update();
+          axesCtl.forEach((c) => c.update());
           posWrap.hidden = !!(store.preset && store.preset.usesPath);
         };
         update();
@@ -170,11 +208,29 @@
             body.append(c.el);
           });
         });
-        const durCtl = C.range({ label: 'Loop length', min: 0.5, max: 20, step: 0.1, unit: 's', default: 4, hint: 'Seconds per seamless loop', ...sceneBinding(store, 'duration') });
+        // Per-layer timing (layer.time): start later, run whole cycles faster, or play once and hold.
+        const timeBind = (key, label) => ({
+          get: () => store.layer.time[key],
+          set: (v) => store.updateLayer((l) => { l.time[key] = v; }, { coalesce: 'L:time.' + key, reason: 'time.' + key, label }),
+        });
+        const delaySlot = h('div', { class: 'slot' });
+        let delayCtl = null, delayFor = null;
+        const buildDelay = () => {
+          const s = store.scene;
+          delayFor = s.duration + '|' + s.fps;
+          delayCtl = C.range({ label: 'Starts at', min: 0, max: +(s.duration - 1 / s.fps).toFixed(3), step: +(1 / s.fps).toFixed(5), decimals: 2, unit: 's', default: 0, hint: 'Delay this layer, e.g. a subtitle after the title. Or drag its lane in the timeline', ...timeBind('delay', 'Layer start') });
+          delaySlot.replaceChildren(delayCtl.el);
+        };
+        buildDelay();
+        const cyclesCtl = C.range({ label: 'Cycles', min: 1, max: 8, step: 1, default: 1, hint: 'Whole passes per scene loop, so the loop stays seamless', ...timeBind('cycles', 'Cycles') });
+        const modeCtl = C.segmented({ label: 'Plays', options: [['loop', 'Loop', 'Repeat for the whole scene'], ['once', 'Once & hold', 'Play one pass, then hold the last frame until the scene loops']], ...timeBind('mode', 'Play mode') });
+        const durCtl = C.range({ label: 'Loop length', min: 0.5, max: 20, step: 0.1, unit: 's', default: 4, hint: 'Seconds per seamless loop (whole scene)', ...sceneBinding(store, 'duration') });
         durCtl.el.classList.add('ctl-duration');
-        body.append(h('div', { class: 'sub' }, 'Clip'), durCtl.el);
-        ctl.push(durCtl);
+        body.append(h('div', { class: 'sub' }, 'Layer timing'), delaySlot, cyclesCtl.el, modeCtl.el, h('div', { class: 'sub' }, 'Scene'), durCtl.el);
+        ctl.push(cyclesCtl, modeCtl, durCtl);
         const update = () => {
+          if (store.scene.duration + '|' + store.scene.fps !== delayFor) buildDelay();
+          if (delayCtl) delayCtl.update();
           ctl.forEach((c) => c.update());
           visibleIf.forEach(([c, cond]) => {
             const ok = Object.entries(cond).every(([k, v]) => (Array.isArray(v) ? v.includes(store.layer.params[k]) : store.layer.params[k] === v));
@@ -503,7 +559,10 @@
       if (!b) return null;
       if (b.section.el.classList.contains('collapsed')) b.section.head.click();
       const target = selector ? b.section.el.querySelector(selector) : b.section.head;
-      b.section.el.scrollIntoView({ block: 'nearest', behavior: UI.reducedMotion() ? 'auto' : 'smooth' });
+      // Scroll only the inspector (scrollIntoView would also nudge the page on phones).
+      const box = this.root.getBoundingClientRect(), r = (target || b.section.el).getBoundingClientRect();
+      const delta = selector ? r.top + r.height / 2 - (box.top + box.height / 2) : Math.min(0, r.top - box.top - 60) || Math.max(0, r.bottom - box.bottom + 16);
+      if (Math.abs(delta) > 1) this.root.scrollTo({ top: this.root.scrollTop + delta, behavior: UI.reducedMotion() ? 'auto' : 'smooth' });
       if (target) target.focus({ preventScroll: true });
       return target;
     }

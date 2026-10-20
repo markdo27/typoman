@@ -11,8 +11,10 @@
 (function (root) {
   'use strict';
   const TM = root.TM;
-  const { clamp, mod, pingpong, TAU } = TM.math;
+  const { clamp, mod, TAU } = TM.math;
   const DEG = Math.PI / 180;
+  // Canvas text kerning control (all current engines; guarded for old ones).
+  const KERN = typeof CanvasRenderingContext2D !== 'undefined' && 'fontKerning' in CanvasRenderingContext2D.prototype;
 
   function makeCanvas(w, h) {
     const c = typeof document !== 'undefined' ? document.createElement('canvas') : new OffscreenCanvas(w, h);
@@ -104,6 +106,11 @@
     }
 
     // ── style ──
+    /**
+     * The fill colour of glyph g as a CSS colour string. For gradient fills it is the gradient's
+     * colour at the glyph (a solid stand-in for decor drawn "in the text colour"); glyph ink
+     * itself gets the smooth gradient through textPaint().
+     */
     colorOf(g) {
       if (this.colorOverride) return this.colorOverride;
       const fill = this.layer.fill;
@@ -111,8 +118,43 @@
         const pal = fill.palette;
         return pal[mod((g.vi < 0 ? 0 : g.vi) + (this.paletteShift | 0), pal.length)];
       }
-      if (fill.type === 'gradient') return '#ffffff';
+      if (fill.type === 'gradient') {
+        const x = this.cx + (g && g.cx != null ? g.cx : 0), y = this.cy + (g && g.cy != null ? g.cy : 0);
+        return this.renderer._gradient(this.layer, this.W, this.H).colorAt(x, y);
+      }
       return fill.color;
+    }
+
+    /**
+     * Paint for glyph ink: the layer's colour, or for gradient fills a pattern that keeps the
+     * gradient fixed in frame space under any transform. Only ink gets the gradient, so a
+     * preset's decor (tiles, bands, pens, carets, fringes) keeps the colours it chose.
+     * drawGlyph and drawLine use it; a preset drawing text itself calls it right after setting
+     * its transform.
+     */
+    textPaint(g) {
+      if (this.colorOverride || this.layer.fill.type !== 'gradient') return this.colorOf(g);
+      const t = this.ctx.getTransform();
+      return this._paint(g, t.a, t.b, t.c, t.d, t.e, t.f);
+    }
+
+    /** textPaint for the transform (a, b, c, d, e, f) about to be used (no getTransform). */
+    _paint(g, a, b, c, d, e, f) {
+      if (this.colorOverride || this.layer.fill.type !== 'gradient') return this.colorOf(g);
+      const G = this.renderer._gradient(this.layer, this.W, this.H);
+      const pat = G.patternFor(this.ctx);
+      const det = a * d - b * c;
+      if (!pat || !det) return this.colorOf(g);
+      // A pattern lives in user space, so anchor it with M⁻¹·G (G maps the strip to frame px).
+      const ia = d / det, ib = -b / det, ic = -c / det, id = a / det;
+      const ie = (c * f - d * e) / det, iff = (b * e - a * f) / det;
+      const m = G.m;
+      pat.setTransform({
+        a: ia * m[0] + ic * m[1], b: ib * m[0] + id * m[1],
+        c: ia * m[2] + ic * m[3], d: ib * m[2] + id * m[3],
+        e: ia * m[4] + ic * m[5] + ie, f: ib * m[4] + id * m[5] + iff,
+      });
+      return pat;
     }
 
     /** Canvas font string for this layer at a weight (variable fonts animate smoothly). */
@@ -126,6 +168,9 @@
       const ctx = this.ctx;
       if (this._font === f && ctx.font === this._fontSeen) return;
       ctx.font = f;
+      // Layout measures with kerning 'normal', which (unlike the default 'auto') also kerns
+      // across word spaces; drawing must match or every word after a space shifts.
+      if (KERN && ctx.fontKerning !== 'normal') ctx.fontKerning = 'normal';
       this._font = f;
       this._fontSeen = ctx.font;
     }
@@ -175,7 +220,7 @@
       }
 
       ctx.setTransform(a, b, c, d, x, y);
-      const color = o.color || this.colorOf(g);
+      const color = o.color || this._paint(g, a, b, c, d, x, y);
       if (this.strokeMode === 'outline') {
         ctx.strokeStyle = color;
         ctx.lineWidth = this.strokeW;
@@ -205,9 +250,19 @@
       this._setFont(o.weight != null ? this.font(o.weight) : this.layout.font);
       if ('letterSpacing' in ctx) ctx.letterSpacing = this.layout.tracking.toFixed(2) + 'px';
       ctx.globalAlpha = alpha;
-      ctx.setTransform(cos * sx, sin * sx, (cos * tk - sin) * sy, (sin * tk + cos) * sy, x, y);
+      const ma = cos * sx, mb = sin * sx, mc = (cos * tk - sin) * sy, md = (sin * tk + cos) * sy;
       const ox = -line.width / 2, oy = this.layout.capH / 2;
-      const color = o.color || this.colorOf({ vi: line.index });
+      const ex = this.extrude;
+      if (ex) {
+        // Same screen-space extrusion as drawGlyph, behind the whole run.
+        for (let k = ex.steps; k >= 1; k--) {
+          ctx.setTransform(ma, mb, mc, md, x + ex.dx * k * sx, y + ex.dy * k * sy);
+          ctx.fillStyle = ex.colors[k - 1];
+          ctx.fillText(line.text, ox, oy);
+        }
+      }
+      ctx.setTransform(ma, mb, mc, md, x, y);
+      const color = o.color || this._paint({ vi: line.index, cx: x - this.cx, cy: y - this.cy }, ma, mb, mc, md, x, y);
       if (this.strokeMode === 'outline') {
         ctx.strokeStyle = color;
         ctx.lineWidth = this.strokeW;
@@ -230,9 +285,13 @@
       this.ctx.globalAlpha = this.alpha;
     }
 
-    /** A cleared frame-sized scratch buffer { canvas, ctx } (pooled by id; valid until the next call with that id). */
-    buffer(id = 0) {
-      return this.renderer._scratch(id, this.W, this.H);
+    /**
+     * A cleared scratch buffer { canvas, ctx }, pooled by id and valid until the next call with
+     * that id. Frame-sized by default; pass w, h for a small one (cheap blur pyramids, glyph
+     * stamps). Copying a full frame per glyph is what makes blur effects slow.
+     */
+    buffer(id = 0, w = this.W, h = this.H) {
+      return this.renderer._scratch(id, Math.max(1, Math.round(w)), Math.max(1, Math.round(h)));
     }
 
     /** Run fn with f.ctx temporarily pointing at another context (e.g. a buffer), so drawGlyph targets it. */
@@ -242,6 +301,7 @@
       this._font = null;
       ctx.lineJoin = 'round';
       ctx.miterLimit = 2;
+      if (KERN) ctx.fontKerning = 'normal';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
       try { fn(ctx); } finally {
@@ -320,26 +380,69 @@
     _pathFor(layer, W, H, p) {
       if (!layer.path) return null;
       const a = TM.Path.sample(layer.path, W, H);
+      // Path keyframes: A → keys… over the loop, 'pingpong' (default; one key = the classic
+      // A → B → A) or 'cycle', with per-key eases. See TM.Path.sequence.
       const pm = layer.pathMorph;
-      if (pm && pm.enabled && pm.target) {
-        const b = TM.Path.sample(pm.target, W, H);
-        return TM.Path.morph(a, b, TM.ease(pm.ease)(pingpong(p)));
-      }
-      return a;
+      const keys = pm && pm.enabled ? TM.Path.morphKeys(pm) : [];
+      if (!keys.length) return a;
+      return TM.Path.sequence([a].concat(keys.map((k) => TM.Path.sample(k, W, H))), pm, p);
+    }
+
+    /**
+     * A layer's gradient fill in frame space: `m` maps a small ramp strip to frame px (the ramp
+     * fills its middle half; canvas gradients clamp, so the end colours carry on beyond the
+     * frame), `patternFor(ctx)` gives that context's pattern, `colorAt(x, y)` a solid sample.
+     */
+    _gradient(layer, W, H) {
+      const fill = layer.fill;
+      const key = fill.color + fill.color2 + fill.angle + ':' + W + 'x' + H;
+      if (!this._grads) this._grads = new Map();
+      let G = this._grads.get(key);
+      if (G) return G;
+      const a = fill.angle * DEG, dx = Math.sin(a), dy = -Math.cos(a);
+      const len = Math.max(1, Math.abs(W * dx) + Math.abs(H * dy));
+      const x0 = W / 2 - (dx * len) / 2, y0 = H / 2 - (dy * len) / 2;
+      const S = 512, k = len / (S / 2);
+      const strip = makeCanvas(S, 1);
+      const sg = strip.getContext('2d');
+      const ramp = sg.createLinearGradient(S / 4, 0, (S * 3) / 4, 0);
+      ramp.addColorStop(0, fill.color);
+      ramp.addColorStop(1, fill.color2);
+      sg.fillStyle = ramp;
+      sg.fillRect(0, 0, S, 1);
+      const patterns = new WeakMap();
+      G = {
+        // strip (u, v) → frame: p0 + (u - S/4)·k·axis + v·normal
+        m: [dx * k, dy * k, -dy, dx, x0 - (S / 4) * k * dx, y0 - (S / 4) * k * dy],
+        patternFor(ctx) {
+          let p = patterns.get(ctx);
+          if (p === undefined) { p = ctx.createPattern(strip, 'repeat'); patterns.set(ctx, p); }
+          return p;
+        },
+        colorAt: (x, y) => TM.color.mix(fill.color, fill.color2, clamp(((x - x0) * dx + (y - y0) * dy) / len, 0, 1)),
+      };
+      if (this._grads.size > 8) this._grads.clear();
+      this._grads.set(key, G);
+      return G;
     }
 
     _scratch(id, W, H) {
       if (!this._scratchPool) this._scratchPool = new Map();
       let b = this._scratchPool.get(id);
-      if (!b || b.canvas.width !== W || b.canvas.height !== H) {
+      if (!b) {
         const canvas = makeCanvas(W, H);
         b = { canvas, ctx: canvas.getContext('2d') };
         this._scratchPool.set(id, b);
+      } else if (b.canvas.width !== W || b.canvas.height !== H) {
+        // Resize in place: no new canvas per size change, and the context state resets below anyway.
+        b.canvas.width = W;
+        b.canvas.height = H;
       }
       b.ctx.setTransform(1, 0, 0, 1, 0, 0);
       b.ctx.globalAlpha = 1;
       b.ctx.globalCompositeOperation = 'source-over';
       b.ctx.clearRect(0, 0, W, H);
+      if (KERN) b.ctx.fontKerning = 'normal';
       return b;
     }
 
@@ -368,7 +471,7 @@
       ctx.shadowBlur = 0;
       this._background(ctx, scene.bg, W, H);
       scene.layers.forEach((layer, i) => {
-        if (layer.visible !== false) this._renderLayer(layer, i, t, W, H);
+        if (layer.visible !== false) this._renderLayer(typeset(layer, scene), i, t, W, H);
       });
       this._post(ctx, scene, t, W, H);
       this.stats.renders++;
@@ -401,7 +504,11 @@
     _drawPreset(lctx, layer, index, preset, t, W, H, echo, alpha, colorOverride) {
       const scene = this.scene;
       const dur = scene.duration;
-      const tl = mod(t, dur);
+      // Layer timing: delay shifts the layer's start, cycles speeds it up by whole loops (so
+      // the scene still loops seamlessly), and 'once' plays a single pass then holds its end.
+      const tm = layer.time;
+      const lt = tm ? (t - tm.delay) * tm.cycles : t;
+      const tl = tm && tm.mode === 'once' ? clamp(lt, 0, dur * (1 - 1e-6)) : mod(lt, dur);
       const L = this._layout(layer, W, H, preset);
       const f = this.frame;
       const seed = (scene.seed + index * 1013) | 0;
@@ -431,6 +538,7 @@
         colorOverride,
         paletteShift: 0,
         extrude: this._extrudeFor(layer, L.sizePx, W, H),
+        bg: scene.bg,
         cache: null,
       });
       f.cache = this._setupFor(layer, preset, f);
@@ -507,18 +615,6 @@
         lctx.drawImage(this._accum, 0, 0);
       } else {
         this._drawPasses(lctx, layer, index, preset, t, W, H);
-      }
-
-      if (layer.fill.type === 'gradient') {
-        const a = layer.fill.angle * DEG, dx = Math.sin(a), dy = -Math.cos(a);
-        const len = Math.abs(W * dx) + Math.abs(H * dy);
-        const g = lctx.createLinearGradient(W / 2 - (dx * len) / 2, H / 2 - (dy * len) / 2, W / 2 + (dx * len) / 2, H / 2 + (dy * len) / 2);
-        g.addColorStop(0, layer.fill.color);
-        g.addColorStop(1, layer.fill.color2);
-        lctx.globalCompositeOperation = 'source-in';
-        lctx.fillStyle = g;
-        lctx.fillRect(0, 0, W, H);
-        lctx.globalCompositeOperation = 'source-over';
       }
 
       const unit = Math.min(W, H);
@@ -610,11 +706,50 @@
     }
   }
 
+  /**
+   * The family a layer is drawn with: its variable-axis instance (width, optical size) for the
+   * text's size at the scene's own resolution, so every render size draws the same letterforms.
+   */
+  function familyFor(layer, scene) {
+    const side = scene && scene.size ? Math.min(scene.size.w, scene.size.h) : 1080;
+    return TM.fonts.resolve(layer.font, layer.type.size * side);
+  }
+
+  /** The layer as presets see it: font.family already names the instance to draw with. */
+  function typeset(layer, scene) {
+    const family = familyFor(layer, scene);
+    return family === layer.font.family ? layer : Object.assign({}, layer, { font: Object.assign({}, layer.font, { family }) });
+  }
+
   TM.Renderer = Renderer;
   TM.Frame = Frame;
+  Renderer.familyFor = familyFor;
+  Renderer.typeset = typeset;
 
-  /** Resolve once every font a scene uses is ready (never rejects). */
-  TM.prepare = function (scene) {
-    return Promise.all((scene.layers || []).map((l) => TM.fonts.ensure(l.font.family, l.font.weight))).then(() => scene);
+  /**
+   * Resolve once every font a scene uses is ready (never rejects): each layer's instance, the
+   * subsets its text needs, and any extra instances its preset draws with (preset.fonts).
+   *   opts.timeout   longest wait per font in ms (default 15 s); loads continue past it and a
+   *                  late font re-renders through TM.fonts.onChange
+   *   opts.extras    'wait' (default; exports) or 'background': start the preset's extra
+   *                  instances without waiting for them (a cold embed shows frame 0 sooner)
+   */
+  TM.prepare = function (scene, opts = {}) {
+    const jobs = [];
+    (scene.layers || []).forEach((l) => {
+      const main = familyFor(l, scene);
+      jobs.push(TM.fonts.ensure(main, l.font.weight, l.text, opts.timeout));
+      const preset = TM.getPreset(l.preset);
+      if (preset && typeof preset.fonts === 'function') {
+        let extra = [];
+        try { extra = preset.fonts(l, scene) || []; } catch (e) { console.warn('[TM] preset.fonts failed:', e); }
+        new Set(extra).forEach((fam) => {
+          if (fam === main) return;
+          const job = TM.fonts.ensure(fam, l.font.weight, l.text, opts.timeout);
+          if (opts.extras !== 'background') jobs.push(job);
+        });
+      }
+    });
+    return Promise.all(jobs).then(() => scene);
   };
 })(typeof window !== 'undefined' ? window : globalThis);

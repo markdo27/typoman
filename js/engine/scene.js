@@ -13,6 +13,7 @@
   const MAX_LAYERS = 6;
   const MAX_TEXT = 400;
   const MAX_NODES = 96;
+  const MAX_KEYS = 4; // path keyframes after the main path: A → B → C → D → E
 
   const ASPECTS = [
     ['16:9', 'Landscape 16:9', 1920, 1080],
@@ -31,12 +32,13 @@
       text: 'TYPE IN\nMOTION',
       preset: 'path-flow',
       params: {},
-      font: { family: 'Anton', weight: 400 },
+      // width: wdth % and opsz: 'auto' | number apply to families with those variable axes.
+      font: { family: 'Anton', weight: 400, width: 100, opsz: 'auto' },
       type: { size: 0.16, tracking: 0, leading: 0.95, align: 'center', case: 'upper', slant: 0 },
       fill: { type: 'solid', color: '#ffffff', color2: '#00e5ff', angle: 90, palette: ['#ffffff', '#a3a2ff', '#00e5ff'] },
       stroke: { mode: 'none', width: 0.035, color: '#000000' },
       path: null,
-      pathMorph: { enabled: false, target: null, ease: 'smooth' },
+      pathMorph: { enabled: false, target: null, ease: 'smooth', keys: [], eases: [], mode: 'pingpong' },
       fx: {
         echo: { count: 0, spacing: 0.035, fade: 0.55, palette: false },
         blur: 0,
@@ -45,6 +47,8 @@
         extrude: { depth: 0, angle: 45, color: '#000000' },
       },
       anchor: { x: 0.5, y: 0.5 },
+      // Per-layer timing: start later, run whole cycles faster, or play once and hold.
+      time: { delay: 0, cycles: 1, mode: 'loop' },
     };
     return overrides ? merge(layer, overrides) : layer;
   }
@@ -65,9 +69,12 @@
 
   // ───────────────────────────── helpers ─────────────────────────────
   const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+  // Keys that would reach an object's prototype; JSON.parse makes "__proto__" an own key.
+  const UNSAFE_KEY = new Set(['__proto__', 'constructor', 'prototype']);
   function merge(base, over) {
     if (!isObj(over)) return base;
     for (const k of Object.keys(over)) {
+      if (UNSAFE_KEY.has(k)) continue;
       if (isObj(base[k]) && isObj(over[k])) merge(base[k], over[k]);
       else base[k] = over[k];
     }
@@ -78,6 +85,8 @@
     return Number.isFinite(n) ? clamp(n, lo, hi) : d;
   };
   const int = (v, d, lo, hi) => Math.round(num(v, d, lo, hi));
+  /** Optical size: a pinned number, or 'auto' (follow the text size) for anything else. */
+  const opszOf = (v) => ((typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && /^\s*\d+(\.\d+)?\s*$/.test(v)) ? int(v, 14, 1, 1000) : 'auto');
   const bool = (v, d) => (typeof v === 'boolean' ? v : d);
   const color = (v, d) => (TM.color.isHex(v) ? v.toLowerCase() : d);
   const pick = (v, list, d) => (list.includes(v) ? v : d);
@@ -108,6 +117,30 @@
     const out = { closed: bool(p.closed, false) && nodes.length > 2, nodes };
     if (typeof p.preset === 'string' && PRESET_ID.test(p.preset)) out.preset = p.preset;
     return out;
+  }
+
+  /**
+   * Path keyframes. keys[] holds up to MAX_KEYS morph targets (B, C, …) visited after the main
+   * path A each loop; `ease` eases A → B and eases[i] eases the step out of keys[i].
+   * mode 'pingpong' plays A → … → last and back (with one key, the classic A → B → A);
+   * 'cycle' returns from the last key straight to A. `target` always mirrors keys[0], so old
+   * scenes and links (target only) keep working, and code that sets just `target` still
+   * edits keys[0]. Code that edits keys[] must set target = keys[0] too.
+   */
+  function cleanMorph(pm, aspect) {
+    pm = isObj(pm) ? pm : {};
+    const keys = (Array.isArray(pm.keys) ? pm.keys.slice(0, MAX_KEYS) : []).map((k) => cleanPath(k, aspect)).filter(Boolean);
+    const target = cleanPath(pm.target, aspect);
+    if (target) keys[0] = target;
+    const eases = Array.isArray(pm.eases) ? pm.eases : [];
+    return {
+      enabled: bool(pm.enabled, false),
+      target: keys[0] || null,
+      ease: ease(pm.ease, 'smooth'),
+      keys,
+      eases: keys.map((_, i) => ease(eases[i], 'smooth')),
+      mode: pick(pm.mode, ['pingpong', 'cycle'], 'pingpong'),
+    };
   }
 
   /** Sanitise preset params against the preset's declared schema. */
@@ -142,7 +175,8 @@
   function normalizeLayer(src, index, aspect) {
     const d = defaultLayer();
     const s = isObj(src) ? src : {};
-    const presetId = TM.getPreset(s.preset) ? s.preset : TM.getPreset(d.preset) ? d.preset : TM.presetOrder[0] || d.preset;
+    // typeof first: TM.getPreset(['wave']) would coerce the array to the key 'wave'.
+    const presetId = typeof s.preset === 'string' && TM.getPreset(s.preset) ? s.preset : TM.getPreset(d.preset) ? d.preset : TM.presetOrder[0] || d.preset;
     const preset = TM.getPreset(presetId);
     const family = TM.fonts.has(s.font && s.font.family) ? s.font.family : d.font.family;
     const f = s.fill || {}, st = s.stroke || {}, ty = s.type || {}, fx = s.fx || {};
@@ -159,7 +193,14 @@
       text: cleanText(s.text, d.text),
       preset: presetId,
       params: cleanParams(presetId, s.params),
-      font: { family, weight: TM.fonts.clampWeight(family, num(s.font && s.font.weight, 400, 1, 1000)) },
+      font: {
+        family,
+        weight: TM.fonts.clampWeight(family, num(s.font && s.font.weight, 400, 1, 1000)),
+        // Kept as asked (within any family's range) so switching fonts and back keeps the intent;
+        // each family clamps it to its own axis when drawing.
+        width: Math.round(num(s.font && s.font.width, 100, 25, 200)),
+        opsz: opszOf(s.font && s.font.opsz),
+      },
       type: {
         size: num(ty.size, d.type.size, 0.01, 1.5),
         tracking: num(ty.tracking, d.type.tracking, -0.3, 2),
@@ -181,11 +222,7 @@
         color: color(st.color, d.stroke.color),
       },
       path,
-      pathMorph: {
-        enabled: bool(pm.enabled, false),
-        target: cleanPath(pm.target, aspect),
-        ease: ease(pm.ease, 'smooth'),
-      },
+      pathMorph: cleanMorph(pm, aspect),
       fx: {
         echo: {
           count: int(fx.echo && fx.echo.count, 0, 0, 12),
@@ -208,6 +245,11 @@
         },
       },
       anchor: { x: num(s.anchor && s.anchor.x, 0.5, -0.5, 1.5), y: num(s.anchor && s.anchor.y, 0.5, -0.5, 1.5) },
+      time: {
+        delay: num(s.time && s.time.delay, 0, 0, 600),
+        cycles: int(s.time && s.time.cycles, 1, 1, 8),
+        mode: pick(s.time && s.time.mode, ['loop', 'once'], 'loop'),
+      },
     };
   }
 
@@ -226,12 +268,15 @@
       if (seen.has(l.id)) l.id = 'l' + (i + 1) + '-' + seen.size;
       seen.add(l.id);
     });
+    const fps = FPS_OPTIONS.includes(+s.fps) ? +s.fps : d.fps;
     return {
       v: 1,
       name: cleanText(s.name, d.name).replace(/\n/g, ' ').slice(0, 60) || d.name,
       size: { w, h },
-      duration: num(s.duration, d.duration, 0.5, 60),
-      fps: FPS_OPTIONS.includes(+s.fps) ? +s.fps : d.fps,
+      // A whole number of frames per loop: exports render round(duration × fps) frames, so a
+      // fractional count would restart the motion a fraction of a frame early (a hitch).
+      duration: Math.round(num(s.duration, d.duration, 0.5, 60) * fps) / fps,
+      fps,
       seed: int(s.seed, d.seed, 0, 999999),
       bg: {
         type: pick(bg.type, ['solid', 'linear', 'radial', 'transparent'], d.bg.type),
@@ -276,7 +321,8 @@
       base.params = TM.presetDefaults(l.preset);
       // Untouched preset paths travel as just their id; they're regenerated on decode.
       const slim = { ...l, path: l.path && l.path.preset ? { preset: l.path.preset } : l.path };
-      if (l.pathMorph && l.pathMorph.target && l.pathMorph.target.preset) slim.pathMorph = { ...l.pathMorph, target: { preset: l.pathMorph.target.preset } };
+      // Path keyframes travel in keys[] (target is rebuilt from keys[0]); preset keys as their id.
+      if (l.pathMorph && l.pathMorph.keys.length) slim.pathMorph = { ...l.pathMorph, target: undefined, keys: l.pathMorph.keys.map((k) => (k.preset ? { preset: k.preset } : k)) };
       const m = diff(slim, base) || {};
       m.preset = l.preset; // always explicit
       return m;
@@ -301,19 +347,37 @@
 
   /** Run bytes through a (de)compression stream, aborting once the output passes `limit` bytes. */
   async function pipe(bytes, stream, limit = Infinity) {
-    const reader = new Blob([bytes]).stream().pipeThrough(stream).getReader();
+    // Feed the transform 1 KB at a time while reading its output: a whole-input write would let
+    // a deflate bomb inflate (to 100+ MB) inside one transform step, before the cap is checked.
+    // Deflate expands at most ~1032:1, so peak memory stays near `limit` plus ~1 MB.
+    const writer = stream.writable.getWriter();
+    const reader = stream.readable.getReader();
     const chunks = [];
-    let total = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.length;
-      if (total > limit) {
-        reader.cancel().catch(() => {});
-        throw new Error('Scene too large');
+    let total = 0, stop = false;
+    const feed = (async () => {
+      try {
+        for (let i = 0; i < bytes.length && !stop; i += 1024) {
+          await writer.ready;
+          await writer.write(bytes.subarray(i, i + 1024));
+        }
+        if (!stop) await writer.close();
+      } catch (e) { /* the read side reports the failure */ }
+    })();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.length;
+        if (total > limit) throw new Error('Scene too large');
+        chunks.push(value);
       }
-      chunks.push(value);
+    } catch (e) {
+      stop = true;
+      reader.cancel().catch(() => {});
+      writer.abort().catch(() => {});
+      throw e;
     }
+    await feed;
     const out = new Uint8Array(total);
     let o = 0;
     for (const c of chunks) { out.set(c, o); o += c.length; }
@@ -348,6 +412,47 @@
 
   const clone = (scene) => JSON.parse(JSON.stringify(scene));
 
+  /**
+   * Apply a curated look (from a preset's `looks`) to layer `index`. A look may set bg, post,
+   * and layer font / type / fill / stroke / fx / params / anchor / path (a path preset id or
+   * definition). The user's text is never changed. The result is normalised.
+   */
+  /**
+   * Apply a curated look to layer `index`. A look is a complete style, so the result never
+   * depends on what came before it: effects, stroke, motion params and post (grain, vignette)
+   * start from their defaults, then take the look's values. Font, type, fill, background,
+   * anchor and timing change only where the look names them. Like the text, a hand-drawn path
+   * (one without path.preset) is the user's work and is never replaced.
+   */
+  function applyLook(scene, index, look) {
+    const s = clone(scene);
+    const l = s.layers[Math.max(0, Math.min(s.layers.length - 1, index | 0))];
+    if (!l || !isObj(look)) return normalize(s);
+    const d = defaultLayer();
+    if (isObj(look.bg)) merge(s.bg, look.bg);
+    s.post = merge(clone(defaults().post), isObj(look.post) ? clone(look.post) : {});
+    if (typeof look.preset === 'string' && TM.getPreset(look.preset)) l.preset = look.preset;
+    const L = isObj(look.layer) ? look.layer : {};
+    l.params = TM.presetDefaults(l.preset);
+    l.fx = clone(d.fx);
+    l.stroke = clone(d.stroke);
+    for (const k of ['font', 'type', 'fill', 'stroke', 'fx', 'params', 'anchor', 'time']) {
+      if (isObj(L[k])) l[k] = merge(isObj(l[k]) ? l[k] : {}, clone(L[k]));
+    }
+    if (Array.isArray(L.fill && L.fill.palette)) l.fill.palette = L.fill.palette.slice();
+    const aspect = s.size.w / s.size.h;
+    const custom = isObj(l.path) && !l.path.preset;
+    if (!custom) {
+      if (typeof L.path === 'string') l.path = TM.Path.preset(L.path, aspect);
+      else if (isObj(L.path)) l.path = clone(L.path);
+      if (isObj(L.pathMorph)) {
+        l.pathMorph = merge(isObj(l.pathMorph) ? l.pathMorph : {}, clone(L.pathMorph));
+        if (typeof L.pathMorph.target === 'string') l.pathMorph.target = TM.Path.preset(L.pathMorph.target, aspect);
+      }
+    }
+    return normalize(s);
+  }
+
   TM.Scene = {
     defaults,
     defaultLayer,
@@ -355,6 +460,7 @@
     normalizeLayer,
     cleanParams,
     minify,
+    applyLook,
     encode,
     decode,
     clone,
@@ -363,5 +469,6 @@
     FPS_OPTIONS,
     MAX_LAYERS,
     MAX_TEXT,
+    MAX_KEYS,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

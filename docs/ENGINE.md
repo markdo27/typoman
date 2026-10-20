@@ -42,19 +42,52 @@ vendor/*          pinned third-party code (MIT), served locally
   bg:{ type:'solid'|'linear'|'radial'|'transparent', color, color2, angle },
   post:{ grain 0..1, vignette 0..1 },
   layers:[{ id, name, visible, text /*\n = new line*/, preset, params:{…per preset schema…},
-    font:{ family, weight }, type:{ size /*× unit*/, tracking /*em*/, leading, align, case, slant /*deg*/ },
+    font:{ family, weight, width /*wdth %, default 100*/, opsz /*'auto' | number*/ },
+    type:{ size /*× unit*/, tracking /*em*/, leading, align, case, slant /*deg*/ },
     fill:{ type:'solid'|'gradient'|'palette', color, color2, angle, palette:[hex…] },
     stroke:{ mode:'none'|'outline'|'both', width /*em*/, color },
     path:{ closed, preset?, nodes:[{x,y,ix,iy,ox,oy,k}] } | null,   // normalised 0..1, handles relative
-    pathMorph:{ enabled, target: path|null, ease },                  // path A→B→A over the loop
+    pathMorph:{ enabled, keys:[path…] /*≤ 4*/, eases:[ease…], ease, mode:'pingpong'|'cycle',
+                target /*= keys[0]*/ },                             // path keyframes over the loop
     fx:{ echo:{count,spacing,fade,palette}, blur 0..1, glow:{amount,color},
          shadow:{amount,angle,distance,color}, extrude:{depth,angle,color} },
-    anchor:{ x, y } }] }
+    anchor:{ x, y },
+    time:{ delay /*s*/, cycles /*1..8 whole loops*/, mode:'loop'|'once' /*once = play a pass, hold its end*/ } }] }
 ```
 
 `path.preset` is set while the path is an untouched preset shape. Editors **must delete
 it** when the user edits the path, which marks it as custom so it survives preset and
 aspect switches.
+
+### Variable fonts: width and optical size
+
+Canvas text can only set weight, so `font.width` (the `wdth` axis) and `font.opsz` are
+drawn through **instances**. These are aliases such as `"Roboto Flex ~w75o144"` whose faces
+reuse the family's Google font files with a fixed `stretch` and `"opsz"` variation. Faces
+that share a URL share one decoded font, so an instance costs about a font-family lookup.
+Families declare their axes in the catalogue (`TM.fonts.axes(family)` →
+`{ wdth?: [min, max], opsz?: [min, max] }`). Each family clamps `width` to its own range
+when drawing, and the scene keeps the value as asked, so switching fonts and back keeps the
+user's intent.
+
+- **Presets see none of this.** The renderer hands `render(f)` the layer with
+  `f.layer.font.family` already set to the instance. `drawGlyph`, `TM.text.layout(…)` and
+  `TM.text.advance(…)` called with that family all draw the right letterforms.
+- **`opsz: 'auto'`** is the text's size at the **scene's** resolution
+  (`type.size × min(size.w, size.h)`), snapped to a few stops. The browser's own auto
+  optical sizing follows *device* pixels instead, so a preview and an export would draw
+  different letterforms and widths. Pinning makes every render size match.
+- **`TM.fonts.resolve(font, designPx)`** returns the family to draw a `{ family, weight,
+  width, opsz }` with, and creates and loads the instance on first use. It draws in the base
+  family until then. `TM.fonts.ladder(family, 'wdth')` gives up to 49 evenly spaced widths
+  for presets that sweep the axis, and `TM.fonts.baseOf(instance)` the catalogue family
+  behind an instance.
+- **`preset.fonts(layer, scene)`** (optional) lists the extra instance families a preset
+  draws with. `TM.prepare` loads them before frame 0, so exports never catch an instance
+  mid-load. Stack returns its width ladder this way.
+- Without the `FontFace` `variationSettings` descriptor, a family is requested without its
+  `opsz` axis. Google then serves it pinned at the default, so it is still stable, just not
+  size-aware.
 
 ## Preset contract
 
@@ -68,8 +101,20 @@ TM.registerPreset({
   params: [ TM.P.range('amp', 'Amplitude', 0, 1, 0.01, 0.5, { group: 'Motion' }), … ],
   setup(f) { return cache },  // optional; re-run only when text/font/type/params/path/size change
   render(f) { … },
+  fonts(layer, scene) { return [family, …] },  // optional: extra font instances render() draws with
+  looks: [                    // optional, up to 8 curated starting points shown in the gallery
+    { name: 'Neon Night', bg: { type: 'solid', color: '#07000f' },
+      layer: { font: { family: 'Monoton' }, fill: { type: 'palette', palette: ['#ff00e5', '#00f0ff'] },
+               fx: { glow: { amount: 0.6, color: '#ff00e5' } }, params: { … }, path: 'circle' } },
+  ],
 });
 ```
+
+`TM.Scene.applyLook(scene, layerIndex, look)` applies a look as a complete style, so the
+result never depends on what came before. Effects, stroke, motion params and post start from
+their defaults, then take the look's values. Font, type, fill, background, anchor and timing
+change only where the look names them. It never touches the user's text, and never replaces
+a hand-drawn path (one without `path.preset`).
 
 Param builders (`js/engine/core.js`): `TM.P.range | select | toggle | color | ease`,
 `TM.P.stagger()`, `TM.P.order()`, and `TM.P.sequence(opts)`. The last one gives the
@@ -86,7 +131,7 @@ Any param may take `group: 'Name'` (inspector sub-heading), `hint` and
 | `f.W`, `f.H`, `f.unit` | buffer size in px; unit = min(W, H) |
 | `f.cx`, `f.cy` | layer anchor in px (text block centre) |
 | `f.layout`, `f.glyphs`, `f.lines`, `f.size` | text layout (see below), font size px |
-| `f.params`, `f.layer`, `f.seed`, `f.cache` | params, layer JSON, seed, `setup()` result |
+| `f.params`, `f.layer`, `f.seed`, `f.cache`, `f.bg` | params, layer JSON, seed, `setup()` result, scene background `{ type, color, color2, angle }` |
 | `f.path` | `TM.Path.SampledPath` in px (morph applied) or null |
 | `f.echo`, `f.alpha` | echo index (0 = main pass) and alpha multiplier |
 
@@ -105,10 +150,19 @@ shaped run, so Arabic keeps its joined forms. They are placed right to left and 
 - `f.rank(g, order)` gives 0..1, `f.stagger(p, r, amount)` gives 0..1, and `f.seq(g)`
   gives `{ kin, kout, vin, vout, visible, r }`.
 - `f.colorOf(g)`, `f.font(weight)` and `f.ease(spec)`.
+- **Fills paint glyph ink only.** `drawGlyph` and `drawLine` fill with `f.textPaint(g)`. That
+  is the layer colour, or, for gradient fills, a pattern that keeps the gradient fixed in
+  frame space under any transform. A preset that draws text itself calls `f.textPaint(g)`
+  right after setting its transform (Stack does). Decor (tiles, bands, carets, fringes,
+  guides) keeps whatever colour the preset gives it: pass an explicit `color`, or use
+  `f.colorOf(g)`. That returns a CSS colour string, for gradients the gradient's colour at
+  the glyph, so colour maths on it works. Pass no `color` to get the smooth gradient; a
+  colour computed from `colorOf` is a flat sample.
 - `f.identity()` resets the transform to frame px, for drawing your own shapes. Use
   `f.colorOf({vi:0})` as their colour.
 - `f.rand`, `f.srand`, `f.noise` and `f.loopNoise(salt, freq)`.
-- `f.buffer(id)` returns a cleared, frame-sized scratch `{ canvas, ctx }`, pooled per id.
+- `f.buffer(id, w?, h?)` returns a cleared scratch `{ canvas, ctx }`, pooled per id. It is
+  frame-sized by default; pass a small size for blur pyramids or glyph stamps.
   `f.drawInto(ctx, fn)` points `f.ctx` (and so `drawGlyph`) at another context while
   `fn` runs; this is how Glitch composes its channel and slice passes.
 
@@ -116,6 +170,23 @@ shaped run, so Arabic keeps its joined forms. They are placed right to left and 
 `{ x, y, angle, tx, ty, nx, ny, inside }` (it wraps when closed and extrapolates past the
 ends of open paths). Also `path.atU(u)`, `path.resample(n)`, `path.trace(ctx, s0, s1)` and
 `TM.Path.preset(id, aspect)`, `fromPoints`, `fromPolyline`, `morph`, `toSVG`, `sample`.
+
+**Path keyframes.** `layer.pathMorph.keys` holds up to 4 morph targets (B, C, …) that the
+main path A visits each loop. `ease` eases A → B, and `eases[i]` eases the step out of
+`keys[i]`. In `'pingpong'` (the default) the path plays A → … → last and back; with one key
+that is the classic A → B → A. In `'cycle'` it plays A → … → last → A, and every step takes
+an equal share of the loop. `target` mirrors `keys[0]`, so old scenes and links keep working.
+Code that edits `keys` must also set `target = keys[0]`. The renderer calls
+`TM.Path.sequence([A, …keys], pathMorph, p)`, and `TM.Path.keyTime(i, n, mode)` gives the
+loop progress at which shape i is reached.
+
+**Collision-free text on paths.**
+- `path.offset(d)` gives the parallel curve d px to the normal side (negative = left of
+  travel). Use it for lanes and for glyphs sitting above or below the line.
+- `path.spaced(h)` re-parameterises the arc length so text gets `h·|turn|` of extra room at
+  bends (curvature smoothed over ±h).
+- Lay glyph centres out on `path.offset(centreOffset).spaced(capH / 2)` and letters stop
+  colliding on concave curves and at sharp corners (Path Flow does this).
 
 **Easing.** `TM.ease(spec)` takes a name from `TM.EASINGS` or a cubic-bézier
 `[x1, y1, x2, y2]`. Signature curves include `glide`, `smooth`, `snap`, `overshoot`,
@@ -142,7 +213,12 @@ deflate-raw base64url). It goes in `#c=…` on `index.html` (to remix) and on `e
   `setSize(w, h)`, `select(i)`, `replace(scene)`, `undo()`, `redo()`, and
   `on('change'|'select'|'ui'|'history'|'view', fn)`.
 - `store.ui.editPath` (bool) says whether the on-canvas path editor is active.
-  `store.ui.pathTarget` is `'a' | 'b'` (main path or morph target).
+  `store.ui.pathTool` is `'edit' | 'pen' | 'draw'`. `store.ui.pathTarget` is the index of the
+  edited shape: 0 is the main path A and i is `pathMorph.keys[i - 1]` (`'a'` and `'b'` still
+  work). `store.ui.pathSel` lists the selected node indices.
+  `TM.Studio.pathKeys` gives `list(layer)`, `index(store)`, `def(layer, i)`,
+  `write(layer, i, def)` (keeps `target` = keys[0]) and `focus(store, i)`, which also parks
+  the playhead where the loop reaches shape i.
 - `TM.Studio.registerPanel({ id, title, order, when?(store), build(store, body) → { update() } })`
   adds an inspector panel. An id matching a built-in panel replaces it. Built-in ids and
   orders: `text` 10, `motion` 20, `path` 30, `color` 40, `fx` 50, `canvas` 60.

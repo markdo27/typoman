@@ -124,5 +124,11 @@
       items.sort((a, b) => b.z - a.z); // far first
       for (const it of items) f.drawGlyph(it.g, it.o);
     },
+
+    looks: [
+      { name: 'Saturn', bg: { type: 'radial', color: '#1b0a2e', color2: '#07000f' }, layer: { font: { family: 'Syne', weight: 800 }, fill: { type: 'palette', palette: ['#ffb547', '#ffe3a3', '#ff5e5b'] }, params: { rings: 3, tilt: 70, spacing: 0.18 } } },
+      { name: 'Badge', bg: { type: 'solid', color: '#f4f1ea' }, layer: { font: { family: 'Space Grotesk', weight: 700 }, fill: { type: 'solid', color: '#141414' }, params: { tilt: 0, wobble: 0, bank: 0, separator: 'star' }, path: 'circle' } },
+      { name: 'Heart orbit', bg: { type: 'solid', color: '#ffd6e0' }, layer: { font: { family: 'Fraunces', weight: 900 }, fill: { type: 'palette', palette: ['#ff3e6c', '#2b0a3d'] }, params: { tilt: 48, rings: 3, spacing: 0.2, core: false }, path: 'heart' } },
+    ],
   });
 })(window.TM);

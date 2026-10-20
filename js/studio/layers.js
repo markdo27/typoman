@@ -58,7 +58,7 @@
 
     signature() {
       const s = this.store.scene;
-      return [this.store.selected, s.bg.color, s.bg.type, ...s.layers.map((l) => [l.id, l.name, l.text, l.visible, l.preset, l.font.family, l.fill.type, l.fill.color, l.fill.palette[0]].join('\u0001'))].join('\u0002');
+      return [this.store.selected, s.bg.color, s.bg.type, ...s.layers.map((l) => [l.id, l.name, l.text, l.visible, l.preset, l.font.family, l.fill.type, l.fill.color, l.fill.palette[0], l.time.delay, l.time.cycles, l.time.mode].join('\u0001'))].join('\u0002');
     }
 
     render(force) {
@@ -110,7 +110,7 @@
       },
       h('span', { class: 'grip', 'aria-hidden': 'true' }, UI.icon('grip')),
       chip,
-      h('span', { class: 'layer-text' }, nameEl, h('span', { class: 'layer-meta' }, (preset ? preset.name : layer.preset) + ' · ' + Studio.fontLabel(layer.font.family))),
+      h('span', { class: 'layer-text' }, nameEl, h('span', { class: 'layer-meta' }, [(preset ? preset.name : layer.preset), Studio.fontLabel(layer.font.family), Studio.timingNote ? Studio.timingNote(layer, true) : ''].filter(Boolean).join(' · '))),
       eye);
       row.addEventListener('pointerdown', (e) => this.onPointerDown(e, row, i));
       row.addEventListener('dblclick', (e) => { if (!e.target.closest('.eye')) this.rename(i); });

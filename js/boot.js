@@ -38,10 +38,17 @@
     'js/presets/orbit.js',
     'js/presets/tunnel.js',
     'js/presets/lens.js',
+    'js/presets/spotlight.js',
+    'js/presets/ribbon.js',
+    'js/presets/magnet.js',
+    'js/presets/kaleido.js',
+    'js/presets/kinetic-grid.js',
+    'js/presets/melt.js',
   ];
 
   // ── Presets: reveal, glitch & dimensional family (owner: preset team B) ──
   var PRESETS_B = [
+    'js/presets/motion-kit.js',
     'js/presets/scramble.js',
     'js/presets/typewriter.js',
     'js/presets/split-flap.js',
@@ -50,6 +57,12 @@
     'js/presets/glitch.js',
     'js/presets/cylinder.js',
     'js/presets/flip.js',
+    'js/presets/sequence.js',
+    'js/presets/strobe-cut.js',
+    'js/presets/outline-draw.js',
+    'js/presets/focus-pull.js',
+    'js/presets/shutter.js',
+    'js/presets/zoom-through.js',
   ];
 
   // ── Export & embed runtime (owner: export team) ──

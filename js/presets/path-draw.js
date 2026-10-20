@@ -35,38 +35,38 @@
     return out;
   }
   /**
-   * A lane offset by `up` px beside the path (a parallel curve), sampled with its own arc length.
-   * The normal is averaged over a window that grows with the offset, so concave corners (the dip
-   * of a heart, a star's inner vertex) round off instead of folding the lane back on itself.
+   * The text lane `up` px beside the path, on the engine's parallel curve with bend-aware
+   * spacing, path.offset(-up).spaced(capH / 2), so letters stop colliding on concave bends and
+   * at sharp corners. Tabulated by lane arc length together with the matching base-path arc
+   * length (nearest base sample, walked forward), so the pen still reaches each letter on time.
    */
   const laneCache = new WeakMap();
-  function laneTable(path, up) {
+  function laneTable(path, up, capH) {
     let byUp = laneCache.get(path);
     if (!byUp) laneCache.set(path, (byUp = new Map()));
-    const key = up.toFixed(2);
+    const key = up.toFixed(2) + '|' + capH.toFixed(1);
     let t = byUp.get(key);
     if (t) return t;
-    const Lp = path.length, h = Math.abs(up) * 0.8;
-    let topY = Infinity, topI = 0;
-    const s = new Float32Array(M + 1), l = new Float32Array(M + 1), x = new Float32Array(M + 1), y = new Float32Array(M + 1);
+    const lane = path.offset(-up).spaced(capH / 2);
+    const Ll = lane.length;
+    const l = new Float32Array(M + 1), s = new Float32Array(M + 1), x = new Float32Array(M + 1), y = new Float32Array(M + 1);
+    const bx = path.xs, by = path.ys, bn = path.n, bcum = path.cum;
+    let j = 0, topY = Infinity, topI = 0;
     for (let i = 0; i <= M; i++) {
-      s[i] = (Lp * i) / M;
-      const c = path.at(Math.min(s[i], Lp - 1e-3));
-      let nx = 0, ny = 0;
-      for (let j = -2; j <= 2; j++) {
-        const q = j ? path.at(Math.min(Math.max(s[i] + j * h, 0), Lp - 1e-3)) : c;
-        nx += q.nx;
-        ny += q.ny;
+      l[i] = (Ll * i) / M;
+      const q = lane.at(path.closed ? Math.min(l[i], Ll - 1e-3) : l[i]);
+      x[i] = q.x;
+      y[i] = q.y;
+      let best = Infinity, bi = j;
+      for (let k = Math.max(0, j - 8), e = Math.min(bn, j + 96); k < e; k++) {
+        const dx = bx[k] - q.x, dy = by[k] - q.y, d = dx * dx + dy * dy;
+        if (d < best) { best = d; bi = k; }
       }
-      const nl = Math.hypot(nx, ny) || 1;
-      x[i] = c.x - (nx / nl) * up;
-      y[i] = c.y - (ny / nl) * up;
-      // Advance projected on the path direction: where the lane would fold back (a sharp
-      // concave corner) it has almost no length, so letters step over the knot, not into it.
-      if (i) l[i] = l[i - 1] + Math.max(0.05 * (s[i] - s[i - 1]), (x[i] - x[i - 1]) * c.tx + (y[i] - y[i - 1]) * c.ty);
-      if (c.y < topY) { topY = c.y; topI = i; }
+      j = bi;
+      s[i] = Math.max(i ? s[i - 1] : 0, bcum[bi]);
+      if (q.y < topY) { topY = q.y; topI = i; }
     }
-    t = { s, l, x, y, length: l[M], top: l[topI] };
+    t = { s, l, x, y, length: Ll, top: l[topI] };
     if (byUp.size > 16) byUp.clear();
     byUp.set(key, t);
     return t;
@@ -161,7 +161,7 @@
       for (let pass = 0; pass < 2; pass++) {
         let fit = 1;
         L.lines.forEach((line, li) => {
-          if (line.width > 0) fit = Math.min(fit, (laneTable(path, upOf(li, k)).length * (path.closed ? 0.98 : 0.92)) / line.width);
+          if (line.width > 0) fit = Math.min(fit, (laneTable(path, upOf(li, k), L.capH * k).length * (path.closed ? 0.98 : 0.92)) / line.width);
         });
         k = Math.min(1, fit);
       }
@@ -169,7 +169,7 @@
       L.lines.forEach((line, li) => {
         if (!line.glyphs.length) return;
         const up = upOf(li, k);
-        const lane = laneTable(path, up);
+        const lane = laneTable(path, up, L.capH * k);
         const Ll = lane.length;
         const w = line.width * k;
         const x0 = L.glyphs[line.glyphs[0]].x;
@@ -219,6 +219,12 @@
         }
       });
     },
+
+    looks: [
+      { name: 'Signature', bg: { type: 'solid', color: '#f4f1ea' }, layer: { font: { family: 'Caveat', weight: 700 }, fill: { type: 'solid', color: '#141414' }, type: { case: 'none' }, params: { width: 0.02, tilt: 8 } } },
+      { name: 'Blueprint', bg: { type: 'solid', color: '#03132e' }, layer: { font: { family: 'JetBrains Mono', weight: 600 }, fill: { type: 'solid', color: '#4cc9f0' }, params: { stroke: 'dashed', side: 'below' }, path: 'circle' } },
+      { name: 'Marker', bg: { type: 'solid', color: '#ffd6e0' }, layer: { font: { family: 'Permanent Marker', weight: 400 }, fill: { type: 'solid', color: '#2b0a3d' }, params: { stroke: 'dots', width: 0.05, popEase: 'springSnappy' }, path: 'arc' } },
+    ],
   });
 
   function drawStroke(f, path, s0, s1, P) {

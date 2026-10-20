@@ -126,6 +126,100 @@ const results = await page.evaluate(async () => {
     return bands;
   })();
 
+  // Layer timing: a delay shifts the loop; 'once' plays a single pass and holds its end.
+  const timing = (() => {
+    const hashAt = (sc, t) => { const d = pixels(sc, t).data; let h = 0; for (let i = 0; i < d.length; i += 7) h = (h * 31 + d[i]) | 0; return h; };
+    const plain = sceneFor('rise');
+    const delayed = sceneFor('rise', (l) => { l.time = { delay: 1, cycles: 1, mode: 'loop' }; });
+    const once = sceneFor('rise', (l) => { l.time = { delay: 0.5, cycles: 1, mode: 'once' }; });
+    const looked = TM.Scene.applyLook(plain, 0, { name: 'x', bg: { color: '#111111' }, layer: { font: { family: 'Fraunces' }, params: { tilt: 20 } } });
+    return {
+      delayShifts: hashAt(delayed, 2.2) === hashAt(plain, 1.2),
+      onceHolds: hashAt(once, plain.duration * 3) === hashAt(once, plain.duration * 5),
+      onceWaits: hashAt(once, 0.2) === hashAt(once, 0.4),
+      lookApplies: looked.bg.color === '#111111' && looked.layers[0].font.family === 'Fraunces' && looked.layers[0].params.tilt === 20 && looked.layers[0].text === plain.layers[0].text,
+      // The same look over two different prior states gives the same style (no inherited blur,
+      // glow or extrude), and a hand-drawn path survives it.
+      lookReproducible: (() => {
+        const look = { name: 'x', bg: { color: '#202020' }, layer: { font: { family: 'Fraunces' }, params: { speed: 2 } } };
+        const messy = sceneFor('path-flow', (l) => { l.fx.blur = 0.4; l.fx.glow.amount = 0.4; l.fx.extrude.depth = 0.5; l.stroke.mode = 'outline'; l.params.speed = 3; });
+        const a = TM.Scene.applyLook(sceneFor('path-flow'), 0, look).layers[0], b = TM.Scene.applyLook(messy, 0, look).layers[0];
+        const same = JSON.stringify([a.fx, a.stroke, a.params]) === JSON.stringify([b.fx, b.stroke, b.params]);
+        const drawn = sceneFor('path-flow', (l) => { l.path = TM.Path.fromPoints([{ x: 0.1, y: 0.5 }, { x: 0.4, y: 0.2 }, { x: 0.9, y: 0.6 }], false); });
+        const kept = TM.Scene.applyLook(drawn, 0, Object.assign({}, look, { layer: Object.assign({}, look.layer, { path: 'circle' }) })).layers[0].path;
+        return same && !kept.preset && kept.nodes.length === drawn.layers[0].path.nodes.length;
+      })(),
+    };
+  })();
+
+  // Variable axes: width swaps in the typeface's own narrow/wide designs, optical size is pinned
+  // so every render size draws the same letterforms, and Stack's rows stay inside the margins.
+  const axes = await (async () => {
+    const inkW = (scene, Wd, Hd, t) => {
+      const c = document.createElement('canvas');
+      const r = new TM.Renderer(c, { quality: 'full' });
+      r.setScene(scene);
+      r.resize(Wd, Hd);
+      r.render(t);
+      const d = c.getContext('2d').getImageData(0, 0, Wd, Hd).data;
+      let x0 = Wd, x1 = -1;
+      for (let y = 0; y < Hd; y++) for (let x = 0; x < Wd; x++) { const i = (y * Wd + x) * 4; if (d[i] > 200 && d[i + 1] > 200) { if (x < x0) x0 = x; if (x > x1) x1 = x; } }
+      return x1 < 0 ? 0 : x1 - x0 + 1;
+    };
+    const rise = (font) => sceneFor('rise', (l) => { l.text = 'Hamburg'; l.font = font; l.fill = { type: 'solid', color: '#ffffff' }; });
+    const narrow = rise({ family: 'Roboto Flex', weight: 700, width: 40 });
+    const wide = rise({ family: 'Roboto Flex', weight: 700, width: 140 });
+    const serif = rise({ family: 'Fraunces', weight: 400 });
+    const stack = sceneFor('stack', (l) => { l.font = { family: 'Science Gothic', weight: 700 }; l.fill = { type: 'solid', color: '#ffffff' }; });
+    await Promise.all([narrow, wide, serif, stack].map((sc) => TM.prepare(sc)));
+    const t = narrow.duration * 0.5;
+    const wN = inkW(narrow, 960, 540, t), wW = inkW(wide, 960, 540, t);
+    // The family the renderer draws Fraunces (opsz axis) with must keep the same width per px at
+    // any device size; the browser's auto opsz shifts it by ~5.5% between 81 and 162 px. Hinted
+    // text (Linux CI) rounds small-size advances by ~0.4%, so the limit sits between the two.
+    const fam = TM.Renderer.familyFor(serif.layers[0], serif);
+    const mctx = document.createElement('canvas').getContext('2d');
+    if ('textRendering' in mctx) mctx.textRendering = 'geometricPrecision';
+    const perPx = [40, 81, 162, 324].map((px) => { mctx.font = TM.fonts.fontString(fam, 400, px); return mctx.measureText('Hamburg').width / px; });
+    const opszRatio = fam !== 'Fraunces' && document.fonts.check(TM.fonts.fontString(fam, 400, 64)) ? Math.max(...perPx) / Math.min(...perPx) : 0;
+    const availW = 960 - 2 * stack.layers[0].params.margin * 540;
+    let widest = 0;
+    for (const u of [0.1, 0.35, 0.6, 0.85]) widest = Math.max(widest, inkW(stack, 960, 540, stack.duration * u));
+    return { widthOk: wN > 0 && wW > wN * 1.5, opszRatio, stackInside: widest > 0 && widest <= availW + 2, widest, availW };
+  })();
+
+  // Kerning: glyphs drawn one by one at their layout positions must match the line drawn as one
+  // native run (kern pairs AV, To, WA, LT). Round 2 found every kern applied one pair late.
+  const kerning = await (async () => {
+    const out = {};
+    for (const family of ['Inter Tight', 'Playfair Display']) {
+      await TM.fonts.ensure(family, 700, 'AVATAR To WAVY LT');
+      const L = TM.text.layout({ text: 'AVATAR To WAVY LT', family, weight: 700, sizePx: 120, tracking: 0, leading: 1, align: 'left', case: 'none' });
+      const Wd = Math.ceil(L.width) + 40, Hd = 180;
+      // Kerning 'normal' as the renderer draws (it also kerns across word spaces, unlike 'auto').
+      const draw = (fn) => { const c = document.createElement('canvas'); c.width = Wd; c.height = Hd; const g = c.getContext('2d'); g.font = L.font; g.fontKerning = 'normal'; g.fillStyle = '#fff'; fn(g); return g.getImageData(0, 0, Wd, Hd).data; };
+      const x0 = 20 - L.lines[0].x;
+      const glyphs = draw((g) => L.glyphs.forEach((gl) => { if (!gl.isSpace) g.fillText(gl.ch, x0 + gl.x, 140); }));
+      const native = draw((g) => g.fillText(L.lines[0].text, 20, 140));
+      let diff = 0, ink = 0;
+      for (let i = 3; i < glyphs.length; i += 4) { diff += Math.abs(glyphs[i] - native[i]); ink += native[i]; }
+      out[family] = ink ? diff / ink : 1;
+    }
+    return out;
+  })();
+
+  // Every catalogue family must load: a bad axis declaration makes Google answer 400 and the
+  // font silently falls back to a generic face (Round 2: Big Shoulders Display).
+  const fontLoads = await (async () => {
+    const failed = [];
+    await Promise.all(TM.FONTS.filter((f) => !f.custom).map(async (f) => {
+      const css = await fetch(TM.fonts.cssUrl([f.family])).then((r) => r.ok, () => false);
+      const ok = css && (await TM.fonts.ensure(TM.fonts.resolve({ family: f.family, weight: 400 }, 120), 400));
+      if (!ok) failed.push(f.family);
+    }));
+    return { total: TM.FONTS.filter((f) => !f.custom).length, failed };
+  })();
+
   // Sanitiser fuzz: garbage must normalise to a valid scene without throwing.
   const garbage = [null, 42, 'x', [], { layers: 'nope' }, { size: { w: -5, h: 1e9 }, fps: 7, duration: 'abc' },
     { layers: [{ text: 5, preset: '<script>', font: { family: 'Comic Sans' }, fill: { color: 'red' }, path: { nodes: [{ x: 'a' }] } }] },
@@ -144,7 +238,7 @@ const results = await page.evaluate(async () => {
   const close = (a, b) => (typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) < 1e-3
     : a && typeof a === 'object' ? b && typeof b === 'object' && Object.keys({ ...a, ...b }).every((k) => close(a[k], b[k])) : a === b);
   const roundTrip = close(s0, s1);
-  return { presets: out, fuzzOk, roundTrip, lineBands };
+  return { presets: out, fuzzOk, roundTrip, lineBands, timing, axes, fontLoads, kerning };
 });
 
 await browser.close();
@@ -166,6 +260,24 @@ const lb = results.lineBands;
 const linesOk = lb.length >= 2 && Math.min(lb[0], lb[1]) / Math.max(lb[0], lb[1]) > 0.6;
 console.log(`multi-line font integrity: ${linesOk ? 'ok' : 'FAIL'} (line ink heights ${lb.slice(0, 2).join(' / ')} px)`);
 if (!linesOk) fails.push('second line lost its font (font cache vs save/restore)');
+const tmg = results.timing;
+console.log(`layer timing: delay ${tmg.delayShifts ? 'ok' : 'FAIL'} · once/hold ${tmg.onceHolds && tmg.onceWaits ? 'ok' : 'FAIL'} · looks ${tmg.lookApplies ? 'ok' : 'FAIL'} · looks reproducible + keep drawn paths ${tmg.lookReproducible ? 'ok' : 'FAIL'}`);
+if (!tmg.lookReproducible) fails.push('applyLook depends on prior state or replaced a drawn path');
+if (!tmg.delayShifts || !tmg.onceHolds || !tmg.onceWaits) fails.push('layer timing semantics broken');
+if (!tmg.lookApplies) fails.push('applyLook failed');
+const kern = Object.entries(results.kerning);
+const kernOk = kern.every(([, v]) => v < 0.03);
+console.log(`kerning (per-glyph vs native run): ${kernOk ? 'ok' : 'FAIL'} (${kern.map(([f, v]) => f + ' ' + (v * 100).toFixed(2) + '%').join(' · ')} of ink differs)`);
+if (!kernOk) fails.push('per-glyph layout loses kerning');
+const fl = results.fontLoads;
+console.log(`catalogue fonts: ${fl.total - fl.failed.length}/${fl.total} load${fl.failed.length ? ' · FAILED: ' + fl.failed.join(', ') : ''}`);
+if (fl.failed.length) fails.push(`fonts that never load: ${fl.failed.join(', ')}`);
+const ax = results.axes;
+const opszOk = ax.opszRatio > 0 && ax.opszRatio - 1 < 0.015;
+console.log(`variable axes: width ${ax.widthOk ? 'ok' : 'FAIL'} · optical size pinned ${opszOk ? 'ok' : 'FAIL'} (width/px spread ${((ax.opszRatio - 1) * 100).toFixed(3)}% over 40–324 px) · stack inside margins ${ax.stackInside ? 'ok' : 'FAIL'} (${ax.widest} / ${Math.round(ax.availW)} px)`);
+if (!ax.widthOk) fails.push('width axis does not change the letterforms');
+if (!opszOk) fails.push('optical size depends on render resolution');
+if (!ax.stackInside) fails.push('stack rows overflow the frame margins');
 if (!results.roundTrip) fails.push('encode/decode round trip failed');
 const errs = consoleErrors.filter((e) => !/favicon/.test(e));
 if (errs.length) { console.log('\nconsole errors:\n  ' + errs.join('\n  ')); fails.push(`${errs.length} console error(s)`); }

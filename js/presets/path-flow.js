@@ -28,6 +28,7 @@
       TM.P.range('gap', 'Gap (em)', 0, 3, 0.05, 0.6, { group: 'Layout', showIf: { mode: 'fill' } }),
       TM.P.select('lanes', 'Extra lines', [['same', 'Parallel'], ['alternate', 'Alternate direction']], 'alternate', { group: 'Layout' }),
       TM.P.select('align', 'Sit on path', [['baseline', 'Baseline'], ['center', 'Centered']], 'center', { group: 'Layout' }),
+      TM.P.range('bendSpacing', 'Bend spacing', 0, 1.5, 0.05, 1, { group: 'Layout', hint: 'Extra room on curves and corners so letters never collide' }),
       TM.P.select('guide', 'Show path', [['none', 'Hidden'], ['line', 'Line'], ['dashed', 'Dashed'], ['dots', 'Dots']], 'none', { group: 'Layout' }),
     ],
 
@@ -38,18 +39,21 @@
     },
 
     render(f) {
-      const path = f.path;
-      if (!path || path.length < 1) return;
+      const base = f.path;
+      if (!base || base.length < 1) return;
       const P = f.params, L = f.layout, size = f.size;
       const ctx = f.ctx;
       const lanes = L.lines.length;
       const laneGap = L.lineGap;
 
-      if (P.guide !== 'none') drawGuide(f, path, P.guide);
+      if (P.guide !== 'none') drawGuide(f, base, P.guide);
 
       L.lines.forEach((line, li) => {
         if (!line.glyphs.length) return;
+        // Each lane is laid out along the parallel curve through its glyphs' centres, so
+        // spacing opens up on convex bends and tightens on concave ones instead of colliding.
         const laneOffset = (li - (lanes - 1) / 2) * laneGap;
+        const path = base.offset(laneOffset + (P.align === 'baseline' ? -L.capH / 2 : 0)).spaced(L.capH * 0.5 * P.bendSpacing);
         const dir = P.lanes === 'alternate' && li % 2 === 1 ? -1 : 1;
         const first = L.glyphs[line.glyphs[0]];
         const x0 = first.x;
@@ -67,13 +71,13 @@
           }
           const shift = mod(P.offset * path.length + dir * P.speed * f.p * unit, unit);
           for (let r = -1; r < reps + 1; r++) {
-            const base = r * unit + shift;
+            const start = r * unit + shift;
             for (const gi of line.glyphs) {
               const g = L.glyphs[gi];
-              place(f, path, g, base + (g.x - x0) + g.w / 2, laneOffset, null);
+              place(f, path, g, start + (g.x - x0) + g.w / 2, null);
             }
             if (f.cache.sep) {
-              place(f, path, { ch: f.cache.sep, w: f.cache.sepW, vi: -1, isSpace: false, x: 0 }, base + line.width + gapPx / 2 + f.cache.sepW / 2, laneOffset, f.cache.sep);
+              place(f, path, { ch: f.cache.sep, w: f.cache.sepW, vi: -1, isSpace: false, x: 0 }, start + line.width + gapPx / 2 + f.cache.sepW / 2, f.cache.sep);
             }
           }
         } else {
@@ -94,14 +98,14 @@
           }
           for (const gi of line.glyphs) {
             const g = L.glyphs[gi];
-            place(f, path, g, s0 + (g.x - x0) + g.w / 2, laneOffset, null);
+            place(f, path, g, s0 + (g.x - x0) + g.w / 2, null);
           }
         }
       });
     },
   });
 
-  function place(f, path, g, s, laneOffset, ch) {
+  function place(f, path, g, s, ch) {
     if (g.isSpace) return;
     const P = f.params, size = f.size;
     let alpha = 1;
@@ -114,7 +118,7 @@
     // Corner-safe tangent: averaged over about a glyph so letters swing round sharp corners.
     const win = P.cornerSmooth * size * 0.6;
     const pt = win > 0.5 && path.atSmooth ? path.atSmooth(s, win * 2) : path.at(s);
-    let off = laneOffset;
+    let off = 0;
     if (P.wave > 0) {
       off += Math.sin(TAU * (s / (P.waveLength * size) - P.waveSpeed * f.p)) * P.wave * size * 0.5;
     }
@@ -125,7 +129,7 @@
       rot: pt.angle * clamp(P.rotate, 0, 1),
       alpha,
       ch: ch || undefined,
-      anchor: P.align === 'baseline' ? 'baseline' : 'center',
+      anchor: 'center',
     });
   }
 

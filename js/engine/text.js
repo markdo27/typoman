@@ -1,8 +1,9 @@
 /* TYPOMAN engine — text layout.
  *
  * Splits text into grapheme clusters (so emoji and accented letters stay whole) and lays
- * them out line by line. Glyph x positions come from measuring each line *prefix*, so the
- * font's kerning survives even though presets draw every glyph separately.
+ * them out line by line. Glyph x positions come from measuring each line *prefix* minus the
+ * glyph's own advance, so the font's kerning survives even though presets draw every glyph
+ * separately.
  *
  * Layout space: pixels, origin at the visual centre of the text block, y down. A glyph's
  * `y` is its baseline; `cy` is the vertical centre of its cap-height box.
@@ -28,11 +29,32 @@
     return { parts: line.match(/\s+|\S+/gu) || [], rtl };
   }
 
+  // Title case keeps short articles, conjunctions and prepositions lowercase unless they open or
+  // close a line ("Type in Motion", "Made for the Web").
+  const MINOR = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'en', 'for', 'if', 'in', 'nor', 'of', 'on', 'or', 'per', 'so', 'the', 'to', 'up', 'via', 'vs', 'yet']);
+  function titleCase(text) {
+    return text.split('\n').map((line) => {
+      const words = line.toLowerCase().split(/(\s+)/u);
+      const real = words.map((w, i) => (/\S/u.test(w) ? i : -1)).filter((i) => i >= 0);
+      const first = real[0], last = real[real.length - 1];
+      return words.map((w, i) => {
+        if (!/\S/u.test(w)) return w;
+        const bare = w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+        if (i !== first && i !== last && MINOR.has(bare)) return w;
+        // Hyphenated compounds follow the same rule inside: "state-of-the-art" → "State-of-the-Art".
+        return w.split(/([\-‐])/u).map((part, j) => {
+          if (j % 2 || (j > 0 && MINOR.has(part.replace(/[^\p{L}\p{N}]+/gu, '')))) return part;
+          return part.replace(/^([^\p{L}\p{N}]*)(\p{L})/u, (m, p, c) => p + c.toUpperCase());
+        }).join('');
+      }).join('');
+    }).join('\n');
+  }
+
   function applyCase(text, mode) {
     switch (mode) {
       case 'upper': return text.toUpperCase();
       case 'lower': return text.toLowerCase();
-      case 'title': return text.toLowerCase().replace(/(^|[\s\-])(\S)/gu, (m, a, b) => a + b.toUpperCase());
+      case 'title': return titleCase(text);
       default: return text;
     }
   }
@@ -79,11 +101,16 @@
 
     lineTexts.forEach((lineText, li) => {
       const { parts, rtl } = clustersFor(lineText);
+      // prefix[k] = kerned width of clusters 0..k-1; adv[k] = cluster k's own advance. Cluster k's
+      // pen position is prefix[k+1] - adv[k]: that includes its kern with the cluster before it
+      // (prefix[k] alone would apply every kern one pair late).
       const prefix = new Float64Array(parts.length + 1);
+      const adv = new Float64Array(parts.length);
       let acc = '';
       for (let k = 0; k < parts.length; k++) {
         acc += parts[k];
         prefix[k + 1] = ctx.measureText(acc).width;
+        adv[k] = ctx.measureText(parts[k]).width;
       }
       const lineW = prefix[parts.length] + Math.max(0, parts.length - 1) * track;
       maxW = Math.max(maxW, lineW);
@@ -101,8 +128,8 @@
           word: wordIndex,
           isSpace,
           // RTL lines read right to left: mirror each cluster's slot within the line.
-          x: rtl ? lineW - (prefix[k + 1] + k * track) : prefix[k] + k * track,
-          w: prefix[k + 1] - prefix[k],
+          x: rtl ? lineW - (prefix[k + 1] + k * track) : prefix[k + 1] - adv[k] + k * track,
+          w: adv[k],
           y: 0,
           cx: 0,
           cy: 0,

@@ -8,7 +8,10 @@
 .path-overlay[data-pe-cursor="point"] { cursor: pointer; }
 .path-overlay[data-pe-cursor="move"] { cursor: move; }
 .path-overlay[data-pe-cursor="grabbing"] { cursor: grabbing; }
-.path-overlay[data-pe-cursor="draw"], .path-overlay[data-pe-drawing] { cursor: crosshair; }
+.path-overlay[data-pe-cursor="draw"], .path-overlay[data-pe-cursor="pen"] { cursor: crosshair; }
+.path-overlay[data-pe-cursor="close"] { cursor: pointer; }
+/* While editing, the pasteboard around the artboard is part of the editor (off-frame points). */
+.editing-path .stage { touch-action: none; }
 
 .pe, .pe * { pointer-events: none; }
 .pe path, .pe polyline, .pe circle, .pe rect { vector-effect: non-scaling-stroke; }
@@ -34,6 +37,12 @@
 .pe-anchor.is-sel { fill: var(--accent, #2f4bff); stroke: #fff; stroke-width: 1.5; }
 .pe-anchor.is-hot:not(.is-sel) { fill: #dfe4ff; }
 
+.pe-anchor.is-closable { stroke: #2fd17c; stroke-width: 2; }
+.pe-anchor.is-closable.is-hot { fill: #2fd17c; }
+/* Off-screen points and handles are pinned to the stage edge, with an arrow toward them. */
+.pe-anchor.is-off, .pe-knob.is-off { stroke-dasharray: 2.5 1.5; }
+.pe-off { fill: #fff; stroke: rgba(0, 0, 0, .55); stroke-width: 1; stroke-linejoin: round; }
+.pe-rubber { fill: none; stroke: rgba(255, 255, 255, .85); stroke-width: 1; stroke-dasharray: 4 3; }
 .pe-insert { fill: rgba(47, 75, 255, .35); stroke: #fff; stroke-width: 1.25; }
 .pe-marquee { fill: rgba(47, 75, 255, .14); stroke: var(--accent-hi, #5b72ff); stroke-width: 1; stroke-dasharray: 4 3; }
 .pe-guides { fill: none; stroke: #ff4dd2; stroke-width: 1; stroke-dasharray: 4 3; }
@@ -62,19 +71,25 @@
 .pe-bar svg { width: 17px; height: 17px; }
 .pe-bar .pe-done { background: var(--text, #ededf2); color: #000; padding: 0 9px 0 7px; }
 .pe-bar .pe-done:hover:not(:disabled) { background: #fff; color: #000; }
-.pe-abs { display: flex; gap: 2px; padding-right: 3px; margin-right: 1px; border-right: 1px solid var(--line-2, #30303a); }
+.pe-abs, .pe-tools { display: flex; gap: 2px; padding-right: 3px; margin-right: 1px; border-right: 1px solid var(--line-2, #30303a); }
+.pe-bar .pe-finish { background: var(--accent, #2f4bff); color: #fff; padding: 0 9px 0 7px; }
+.pe-bar .pe-finish:hover:not(:disabled) { background: var(--accent-hi, #5b72ff); color: #fff; }
 .pe-abs .pe-ab { min-width: 26px; font: 700 12px/1 var(--mono, ui-monospace, monospace); }
 .pe-sep { width: 1px; height: 18px; background: var(--line-2, #30303a); margin: 0 3px; flex: none; }
-.pe-hint { padding: 0 6px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.pe-hint { flex: 0 1 auto; padding: 0 6px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 230px; }
 @media (max-width: 860px) {
-  .pe-bar { bottom: 6px; }
+  /* One compact row on phones: Show all is automatic on entry, double-tap toggles point type. */
+  .pe-bar { bottom: 6px; padding: 2px; gap: 1px; max-width: calc(100% - 8px); }
+  .pe-bar button { min-width: 28px; height: 28px; padding: 0 4px; }
+  .pe-bar [data-act="showall"], .pe-bar [data-act="kind"], .pe-hint { display: none; }
+  .pe-abs .pe-ab { min-width: 22px; }
   .pe-bar.at-top { top: 6px; }
-  .pe-bar .pe-done span { display: none; }
+  .pe-bar .pe-done span, .pe-bar .pe-finish span { display: none; }
   .pe-hint { max-width: 150px; }
 }
 
 /* ── Path panel ── */
-.pp-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.pp-modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .pp-modes .btn { width: 100%; }
 /* The shell hides .btn labels on narrow screens (for the top bar); panel buttons keep them. */
 .pp-modes .btn span, .pp-pair .btn span { display: inline; }
@@ -110,3 +125,21 @@
 .pp-pair .btn svg { width: 16px; height: 16px; }
 .pp-note { margin: 0; color: var(--text-3, #6e6e7a); font-size: 11.5px; line-height: 1.45; }
 .pp-note kbd { font: 600 10.5px/1 var(--mono, ui-monospace, monospace); color: var(--text-2, #a6a6b2); border: 1px solid var(--line-2, #30303a); border-bottom-width: 2px; border-radius: 4px; padding: 1px 4px; }
+
+/* Path keyframes: one card per shape of the morph (A, then keys B, C…) */
+.pp-keys { display: flex; flex-direction: column; gap: 6px; }
+.pp-key { display: grid; grid-template-columns: 26px 54px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 6px 6px 6px 7px; border: 1px solid var(--line-2, #30303a); border-radius: 8px; background: var(--panel-2, #17171c); }
+.pp-key.on { border-color: var(--accent, #2f4bff); box-shadow: 0 0 0 1px var(--accent, #2f4bff); }
+.pp-key-letter { width: 26px; height: 26px; padding: 0; border-radius: 6px; border: 1px solid var(--line-2, #30303a); background: transparent; color: var(--text, #ededf2); font: 700 12px/1 var(--mono, ui-monospace, monospace); }
+.pp-key-letter:hover { border-color: var(--text-3, #6e6e7a); }
+.pp-key.on .pp-key-letter { background: var(--accent, #2f4bff); border-color: var(--accent, #2f4bff); color: #fff; }
+.pp-key-thumb { color: var(--text-2, #a6a6b2); line-height: 0; }
+.pp-key.on .pp-key-thumb { color: #fff; }
+.pp-key-name { min-width: 0; font-size: 12px; font-weight: 600; color: var(--text, #ededf2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-key-name small { display: block; margin-top: 2px; font-weight: 500; font-size: 10.5px; color: var(--text-3, #6e6e7a); }
+.pp-key-acts { display: flex; gap: 1px; }
+.pp-key-acts button { width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 5px; background: transparent; color: var(--text-2, #a6a6b2); }
+.pp-key-acts button:hover:not(:disabled) { background: var(--panel-3, #1e1e25); color: var(--text, #ededf2); }
+.pp-key-acts button:disabled { opacity: .3; cursor: default; }
+.pp-key-acts svg { width: 14px; height: 14px; }
+.pp-key > .ctl { grid-column: 1 / -1; }

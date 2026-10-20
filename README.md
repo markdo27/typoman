@@ -10,18 +10,30 @@ No install, no account, no build step. It's static files on GitHub Pages.
 
 ## What you can do
 
-- **Animate type with 17 motion presets**, grouped as path, kinetic, reveal, glitch and
-  dimensional. Every preset staggers by letter, word or line, with easing curves you can
-  edit (signature curves, springs, or your own cubic-bézier).
+- **Animate type with 29 motion presets**, grouped as path, kinetic, reveal, glitch,
+  dimensional and generative: from Path Flow, Ribbon and Orbit to Split Flap, Focus Pull,
+  Kaleido and Melt. Every preset staggers by letter, word or line, with easing curves you
+  can edit (signature curves, springs, or your own cubic-bézier).
+- **Start from a look.** 87 curated looks (colour, font, motion and timing, designed per
+  preset) are one click away in the **Inspiration** view. Applying a look never touches
+  your text, and **Remix** mixes curated looks with fresh rolls.
 - **Shape the motion path.** Pick one of 22 shapes (wave, arc, circle, spiral, infinity,
-  heart, …), then drag anchors and handles on the canvas, double-click to add points, or
-  draw freehand. Paths can also **morph** from one shape to another over the loop.
-- **Use real typography.** There are 50 curated Google Fonts (including variable fonts
-  whose weight animates smoothly), and you can upload your own. Kerning is preserved,
-  emoji are safe, and you get multi-line, tracking, leading, case, slant, outline, and
-  gradient or palette fills.
+  heart, …), then drag anchors and handles on the canvas, draw with the **pen tool**, or
+  draw freehand. Points can sit outside the frame so type can fly in from off-screen. Text
+  keeps even spacing through tight bends. **Path keyframes** move a path through up to five
+  shapes, A → B → C → D → E, in a cycle or ping-pong, with an ease per step.
+- **Time each layer.** Up to six text layers, each with its own motion, on timeline lanes.
+  Drag a lane to delay it, play it up to 8× per loop, or play it once and hold.
+- **Use real typography.** There are 54 curated Google Fonts, and you can upload your own.
+  Variable fonts animate their weight smoothly, and fonts with **width** and **optical
+  size** axes (Roboto Flex, Science Gothic, Fraunces, …) expose them as controls. Optical
+  size follows the text's size in the scene, so previews and exports draw identical
+  letterforms. **Stack** fills the frame through the width axis, condensing tall rows and
+  expanding short ones instead of stretching letters. Kerning is preserved, emoji are
+  safe, and Arabic and Hebrew text runs right to left. You get multi-line, tracking,
+  leading, case, slant, outline, and gradient or palette fills.
 - **Layer effects:** echo trails, motion blur, glow, drop shadow, 3D extrude, film grain
-  and vignette. Stack up to six text layers, each with its own motion.
+  and vignette.
 - **Export:** frame-accurate MP4 (H.264, with AV1/VP9 fallbacks), WebM (with
   transparency where supported), GIF, a PNG frame, or a PNG sequence. Exports are rendered
   offline frame by frame, so they match the preview exactly at any resolution, up to 4K.
@@ -48,11 +60,13 @@ The studio's **Embed** button generates both snippets with your scene filled in.
 |---|---|
 | `Space` | Play / pause |
 | `←` `→` | Step one frame (`Shift` = 10) |
-| `P` | Edit the path on the canvas |
+| `P` | Edit the path on the canvas (then `D` draws freehand, `Enter`/`Esc` finishes the pen) |
 | `G` | Safe-area guides |
 | `F` | Clean preview (hide the UI) |
 | `N` | New layer |
-| `R` | Remix (random preset, font and palette) |
+| `[` `]` | Select the layer below / above |
+| `/` | Search presets |
+| `R` | Remix (a curated look or a fresh roll; lock what to keep) |
 | `⌘/Ctrl Z`, `⇧⌘Z` | Undo / redo |
 | `⌘/Ctrl E` | Export |
 | `?` | Shortcut help |
@@ -104,7 +118,8 @@ across eight criteria, scored by a three-judge jury each round. See
 | Round | Overall band |
 |---|---|
 | 0: original V3 demo | 3.5 |
-| 1: rebuilt studio | **7.0** |
+| 1: rebuilt studio | 7.0 |
+| 2: more presets, looks, pen tool, path keyframes, layer timing, width & optical size | **7.5** |
 
 ## License
 
