@@ -9,9 +9,10 @@
  * every preset in one browsable grid. Either way a look is applied with TM.Scene.applyLook.
  *
  * Thumbnails render *your* text and style. The hovered / focused card animates at full rate;
- * the rest drift gently while visible (IntersectionObserver), sharing one renderer and a
- * per-frame time budget; still under prefers-reduced-motion, where each card shows its most
- * legible frame. Keyboard: arrow keys move within a grid, Enter / Space apply, "/" searches.
+ * the rest drift gently while visible (IntersectionObserver) and the stage plays, sharing one
+ * renderer and a per-frame time budget; still while the stage is paused and under
+ * prefers-reduced-motion, where each card shows its most legible frame. Keyboard: arrow keys
+ * move within a grid, Enter / Space apply, "/" searches.
  */
 (function (TM) {
   'use strict';
@@ -81,6 +82,8 @@
         if (!d || (d.reason !== 'preset' && d.reason !== 'font-preview')) this.scheduleThumbs();
       });
       store.on('select', () => { this.markActive(); if (this.store.layer.preset !== this._looksFor) this.renderLooks(true); this.scheduleThumbs(80); });
+      // Paused stage: idle cards stop animating and settle on their most legible frame.
+      store.on('ui', (p) => { if ('playing' in p && !store.ui.playing) this.scheduleThumbs(120); });
       this.scheduleThumbs(50);
     }
 
@@ -433,7 +436,8 @@
         if (now - c.last >= 1000 / HOVER_FPS) { c.last = now; this.drawThumb(this.hover, t); }
       }
       // Gentle idle animation: visible cards, round-robin, capped frame rate and time budget.
-      if (UI.reducedMotion() || now < this.busyUntil || document.body.classList.contains('scrubbing') || this.root.offsetParent === null) return;
+      // Only while the stage plays: a paused studio shouldn't burn ~80 thumbnail renders a second.
+      if (!this.store.ui.playing || document.hidden || UI.reducedMotion() || now < this.busyUntil || document.body.classList.contains('scrubbing') || this.root.offsetParent === null) return;
       if (!this.queue.length) this.queue = [...this.visible];
       while (this.queue.length && performance.now() - start < BUDGET_MS) {
         const id = this.queue.shift();
