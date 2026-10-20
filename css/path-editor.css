@@ -12,6 +12,11 @@
 .path-overlay[data-pe-cursor="close"] { cursor: pointer; }
 /* While editing, the pasteboard around the artboard is part of the editor (off-frame points). */
 .editing-path .stage { touch-action: none; }
+/* …so hovering an off-frame point over the pasteboard shows the same cursors. */
+.editing-path .stage[data-pe-cursor="point"], .editing-path .stage[data-pe-cursor="close"] { cursor: pointer; }
+.editing-path .stage[data-pe-cursor="move"] { cursor: move; }
+.editing-path .stage[data-pe-cursor="grabbing"] { cursor: grabbing; }
+.editing-path .stage[data-pe-cursor="draw"], .editing-path .stage[data-pe-cursor="pen"] { cursor: crosshair; }
 
 .pe, .pe * { pointer-events: none; }
 .pe path, .pe polyline, .pe circle, .pe rect { vector-effect: non-scaling-stroke; }
@@ -53,18 +58,26 @@
 .pe-tag { font: 700 10px/1 var(--mono, ui-monospace, monospace); fill: #fff; stroke: rgba(0, 0, 0, .55); stroke-width: 2.5px; paint-order: stroke; text-anchor: middle; }
 .pe-tag-ghost { fill: rgba(255, 255, 255, .7); }
 
-/* ── floating toolbar (inside the artboard, only while editing) ── */
+/* ── floating toolbar (only while editing) ──
+ * A child of the artboard, but sized and placed against the visible stage by path-editor.js
+ * (_placeBar: inline left / top / max-width, data-fit 0–3), so it may float over the pasteboard
+ * beside a narrow 9:16 artboard instead of clipping. The rules here are the fallback. */
 .pe-bar {
   position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 4;
-  display: flex; align-items: center; gap: 2px; padding: 3px; max-width: calc(100% - 12px);
+  width: max-content; display: flex; align-items: center; gap: 2px; padding: 3px; max-width: calc(100% - 12px);
   background: rgba(17, 17, 21, .94); border: 1px solid var(--line-2, #30303a); border-radius: 10px;
   box-shadow: 0 10px 28px rgba(0, 0, 0, .45); color: var(--text-2, #a6a6b2); font: 600 12px/1 var(--ui, system-ui, sans-serif);
 }
 .pe-bar.at-top { top: 10px; bottom: auto; }
 .pe-bar button {
   display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 30px; min-width: 30px; padding: 0 6px;
-  border: 0; border-radius: 7px; background: transparent; color: inherit; font: inherit;
+  border: 0; border-radius: 7px; background: transparent; color: inherit; font: inherit; flex: none;
 }
+/* Compact layouts, only when the visible stage is too narrow for the full bar. */
+.pe-bar:is([data-fit="1"], [data-fit="2"], [data-fit="3"]) .pe-hint { display: none; }
+.pe-bar:is([data-fit="2"], [data-fit="3"]) :is(.pe-done, .pe-finish) span { display: none; }
+.pe-bar[data-fit="3"] :is([data-act="showall"], [data-act="kind"]) { display: none; }
+.pe-bar[data-fit="3"] { flex-wrap: wrap; justify-content: center; }
 .pe-bar button:hover:not(:disabled) { background: var(--panel-3, #1e1e25); color: var(--text, #ededf2); }
 .pe-bar button.on { background: var(--accent, #2f4bff); color: #fff; }
 .pe-bar button:disabled { opacity: .35; cursor: default; }

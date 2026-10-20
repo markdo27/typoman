@@ -52,7 +52,7 @@
       store.on('select', () => { this.refreshSelection(); this.updateEmpty(); });
       store.on('ui', (patch) => {
         if ('zoom' in patch || 'clean' in patch) this.layout(true);
-        if ('editPath' in patch || 'clean' in patch) this.refreshSelection();
+        if ('editPath' in patch || 'clean' in patch) { this.refreshSelection(); this.board.style.cursor = ''; } // the path editor owns the cursor while editing
         if ('time' in patch) this.dirty = true;
       });
       this.watchDpr();
