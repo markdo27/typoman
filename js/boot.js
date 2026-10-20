@@ -70,6 +70,7 @@
 
   // ── Export & embed runtime (owner: export team) ──
   var EXPORT = [
+    'js/engine/safety.js', // photosensitivity check (studio and export only, not standalone files)
     'js/export/core.js',
     'js/export/codecs.js',
     'js/export/frames.js',

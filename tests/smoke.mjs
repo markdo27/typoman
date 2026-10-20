@@ -232,6 +232,25 @@ const results = await page.evaluate(async () => {
     return { total: TM.FONTS.filter((f) => !f.custom).length, failed };
   })();
 
+  // Photosensitivity check (WCAG 2.3.1): a full-frame 2 Hz strobe passes, 4 Hz fails, a tiny
+  // flashing spot passes, and a bar sweeping 5 times a second is 5 flashes, not one per frame.
+  const safety = await (async () => {
+    TM.registerPreset({ id: 'smoke-strobe', params: [TM.P.range('hz', 'hz', 0, 30, 0.5, 2), TM.P.range('area', 'area', 0, 1, 0.01, 1), TM.P.range('sweeps', 'sweeps', 0, 20, 1, 0)], render(f) {
+      f.identity(); f.ctx.fillStyle = '#ffffff';
+      if (f.params.sweeps) { const x = ((f.p * f.params.sweeps) % 1) * f.W * 1.2 - f.W * 0.1; f.ctx.fillRect(x - f.W * 0.05, 0, f.W * 0.1, f.H); return; }
+      if (Math.floor(f.t * f.params.hz * 2 + 1e-6) % 2) return;
+      const a = Math.sqrt(f.params.area); f.ctx.fillRect((f.W * (1 - a)) / 2, (f.H * (1 - a)) / 2, f.W * a, f.H * a);
+    } });
+    const check = async (params) => {
+      const s = TM.Scene.defaults(); s.duration = 4; s.bg = { type: 'solid', color: '#000000' };
+      s.layers[0].preset = 'smoke-strobe'; s.layers[0].params = Object.assign(TM.presetDefaults('smoke-strobe'), params);
+      return TM.Safety.flashes(TM.Scene.normalize(s));
+    };
+    const [hz2, hz4, spot, bar, plain] = [await check({ hz: 2 }), await check({ hz: 4 }), await check({ hz: 6, area: 0.01 }), await check({ sweeps: 20 }), await TM.Safety.flashes(sceneFor('rise'))];
+    delete TM.presets['smoke-strobe']; TM.presetOrder.splice(TM.presetOrder.indexOf('smoke-strobe'), 1);
+    return { ok: hz2.ok && hz2.flashes === 2 && !hz4.ok && hz4.flashes === 4 && spot.ok && bar.flashes === 5 && plain.ok, hz2: hz2.flashes, hz4: hz4.flashes, bar: bar.flashes };
+  })();
+
   // Sanitiser fuzz: garbage must normalise to a valid scene without throwing.
   const garbage = [null, 42, 'x', [], { layers: 'nope' }, { size: { w: -5, h: 1e9 }, fps: 7, duration: 'abc' },
     { layers: [{ text: 5, preset: '<script>', font: { family: 'Comic Sans' }, fill: { color: 'red' }, path: { nodes: [{ x: 'a' }] } }] },
@@ -250,7 +269,7 @@ const results = await page.evaluate(async () => {
   const close = (a, b) => (typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) < 1e-3
     : a && typeof a === 'object' ? b && typeof b === 'object' && Object.keys({ ...a, ...b }).every((k) => close(a[k], b[k])) : a === b);
   const roundTrip = close(s0, s1);
-  return { presets: out, fuzzOk, roundTrip, lineBands, timing, axes, fontLoads, kerning };
+  return { presets: out, fuzzOk, roundTrip, lineBands, timing, axes, fontLoads, kerning, safety };
 });
 
 await browser.close();
@@ -282,6 +301,9 @@ const kern = Object.entries(results.kerning);
 const kernOk = kern.every(([, v]) => v < 0.03);
 console.log(`kerning (per-glyph vs native run): ${kernOk ? 'ok' : 'FAIL'} (${kern.map(([f, v]) => f + ' ' + (v * 100).toFixed(2) + '%').join(' · ')} of ink differs)`);
 if (!kernOk) fails.push('per-glyph layout loses kerning');
+const sf = results.safety;
+console.log(`photosensitivity check: ${sf.ok ? 'ok' : 'FAIL'} (2 Hz strobe ${sf.hz2}/s · 4 Hz ${sf.hz4}/s · fast bar ${sf.bar}/s)`);
+if (!sf.ok) fails.push('flash detector miscounts (TM.Safety)');
 const fl = results.fontLoads;
 console.log(`catalogue fonts: ${fl.total - fl.failed.length}/${fl.total} load${fl.failed.length ? ' · FAILED: ' + fl.failed.join(', ') : ''}`);
 if (fl.failed.length) fails.push(`fonts that never load: ${fl.failed.join(', ')}`);

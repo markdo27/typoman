@@ -261,6 +261,17 @@ r.render(seconds);           // background → layers (echo, blur, gradient, sha
 deflate-raw base64url). It goes in `#c=…` on `index.html` (to remix) and on `embed.html`
 (to play).
 
+**Photosensitivity.** `await TM.Safety.flashes(scene, { maxFrames, signal })` (loaded with
+the export group, so in the studio but not in embeds or standalone files) renders the loop at
+192 px, at the scene's frame rate, and counts flashes as WCAG 2.3.1 defines them. A general
+flash is a pair of opposing luminance changes of at least 10% where the darker state is below
+0.80; a red flash involves saturated red. A change counts only when it covers a quarter of
+some 10° field (a third of the frame by a third, the full-screen case). It resolves
+`{ ok, flashes, red, worstAt, frames, limit: 3 }`: the worst one-second window's flashes
+per second, and when that window starts. Fast motion counts too, so a bar sweeping the frame
+five times a second is five flashes. Await `TM.prepare(scene)` first. It takes about 0.2–1 s
+for a 4 s loop, and yields to the page as it goes.
+
 ## Studio API (for panels, editors and dialogs)
 
 - `TM.Studio.store`: `scene`, `layer`, `preset`, `selected`, `ui` and `setUI(patch)`.
