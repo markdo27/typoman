@@ -10,7 +10,7 @@
  * across a reload. Phone 390×844 with touch: the same core flows by tap.
  *
  * Selectors prefer roles, labels and ids over styling classes, and copy is matched loosely.
- * Features still being built on another branch are R.known placeholders (see KNOWN UI below).
+ * Round 3 controls (templates, italic, ligatures, mattes, transform keys, springs, flash note) are checked too.
  *
  *   npm run test:studio
  *   PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node tests/studio.mjs
@@ -213,13 +213,13 @@ await run(async (cleanup) => {
 
   R.section('the flash warning');
   {
-    // Strobe Cut at its fastest beat flashes above WCAG 2.3.1's 3 a second (TM.Safety measures
-    // it); the studio should say so. Today the Motion panel asks preset.flashes(), which no
-    // preset has since TM.Safety took over, so the note can't show: in progress (UI-flash).
-    await S(page, () => { const st = TM.Studio.store; st.setPreset('strobe-cut'); const p = TM.getPreset('strobe-cut').params.find((x) => x.key === 'beats'); st.updateLayer((l) => { l.params.beats = p.max; }); });
+    // Strobe Cut is flash-safe by default; with "Allow fast strobe" on at its fastest beat it
+    // flashes above WCAG 2.3.1's 3 a second (TM.Safety measures it), and the Motion panel's
+    // background check must say so.
+    await S(page, () => { const st = TM.Studio.store; st.setPreset('strobe-cut'); const p = TM.getPreset('strobe-cut').params.find((x) => x.key === 'beats'); st.updateLayer((l) => { l.params.beats = p.max; l.params.fastFlash = true; }); });
     const measured = await S(page, async () => (TM.Safety && TM.Safety.flashes ? (await TM.Safety.flashes(TM.Studio.store.scene)).flashes : null));
-    const shown = await until(page, () => [...document.querySelectorAll('#inspector [role="note"]')].some((w) => !w.hidden && /flash/i.test(w.textContent)), null, 2000);
-    R.known('UI-flash', 'a fast strobe shows a photosensitivity note in the Motion panel', shown, `TM.Safety measures ${measured == null ? '?' : measured.toFixed(1)} flashes/s`);
+    const shown = await until(page, () => [...document.querySelectorAll('#inspector [role="note"]')].some((w) => !w.hidden && /flash/i.test(w.textContent)), null, 15000);
+    R.check('a fast strobe shows a photosensitivity note in the Motion panel', measured > 3 && shown, `TM.Safety measures ${measured == null ? '?' : measured.toFixed(1)} flashes/s, note ${shown ? 'shown' : 'missing'}`);
     await S(page, () => TM.Studio.store.undo());
   }
 
@@ -424,25 +424,24 @@ await run(async (cleanup) => {
     R.check('desktop: no console errors', errs.length === 0, errs.slice(0, 4).join(' | '));
   }
 
-  // Features the studio team is building on another branch. Each passes once its control shows
-  // up; then "looks fixed" asks for it to become a real interaction check.
-  R.section('KNOWN UI (in progress elsewhere)');
+  // Round 3 controls are present where users look for them.
+  R.section('Round 3 controls');
   {
     const has = (re) => S(page, (src) => {
       const re = new RegExp(src, 'i');
-      const names = [...document.querySelectorAll('#inspector [aria-label], #inspector label, #inspector .lbl, #inspector .sec-title, #gallery [role="tab"], .topbar button')]
+      const names = [...document.querySelectorAll('#inspector [aria-label], #inspector label, #inspector .lbl, #inspector .sec-title, #gallery [role="tab"], .topbar button, .layer-tools button')]
         .map((el) => el.getAttribute('aria-label') || el.textContent);
       return names.some((n) => re.test(n));
     }, re.source);
     await S(page, () => TM.Studio.store.setPreset('rise'));
-    R.known('UI-templates', 'starter templates can be picked in the studio', await has(/template/));
-    R.known('UI-italic', 'an Italic toggle in the Text panel', await has(/italic/));
-    R.known('UI-ligatures', 'a Ligatures toggle in the Text panel', await has(/ligature/));
-    R.known('UI-matte', 'track matte controls for a layer', await has(/matte/));
-    R.known('UI-transform', 'transform keys for a layer', await has(/transform|keyframe/));
+    R.check('starter templates can be picked in the studio', await has(/template/));
+    R.check('an Italic toggle in the Text panel', await has(/italic/));
+    R.check('a Ligatures toggle in the Text panel', await has(/ligature/));
+    R.check('track matte controls for a layer', await has(/matte/));
+    R.check('transform keys for a layer', await has(/transform|keyframe/));
     await page.locator('#inspector [data-panel="motion"]').getByRole('button', { name: /Open curve editor/ }).first().click();
     const spring = await S(page, () => [...document.querySelectorAll('.pop [aria-label], .pop label, .pop .lbl')].some((el) => /stiffness|damping|bounciness|mass/i.test(el.getAttribute('aria-label') || el.textContent)));
-    R.known('UI-springs', 'custom spring controls in the curve editor', spring);
+    R.check('custom spring controls in the curve editor', spring);
     await page.keyboard.press('Escape');
   }
   await ctx.close();

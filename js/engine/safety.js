@@ -107,7 +107,7 @@
 
   /**
    * Analyse a normalised scene (fonts should be ready: await TM.prepare first).
-   * opts: { maxFrames (default 900), signal (AbortSignal) }
+   * opts: { maxFrames (default 900), signal (AbortSignal), yieldMs (work per slice, default 4) }
    * Resolves { ok, flashes, red, worstAt, frames, limit }: flashes per second in the worst
    * one-second window, general and red, and when that window starts (s).
    */
@@ -119,11 +119,13 @@
     const H = aspect >= 1 ? Math.max(G, Math.round((G * 8) / aspect)) : G * 8;
     const canvas = document.createElement('canvas');
     canvas.width = W; canvas.height = H;
+    // Ask for a readback-friendly context before the renderer creates one (the first call wins).
+    const ctx = canvas.getContext('2d', { alpha: true, willReadFrequently: true });
     const r = new TM.Renderer(canvas, { quality: 'full' });
     r.setScene(scene);
     r.resize(W, H);
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const cells = G * G;
+    const yieldMs = opts.yieldMs > 0 ? opts.yieldMs : 4; // short slices keep playback smooth meanwhile
     const lum = new Float32Array(cells * n), red = new Float32Array(cells * n);
     let last = performance.now();
     for (let k = 0; k < n; k++) {
@@ -150,7 +152,7 @@
         }
       }
       // Yield now and then so the page stays responsive.
-      if (performance.now() - last > 12) { await new Promise((res) => setTimeout(res, 0)); last = performance.now(); }
+      if (performance.now() - last > yieldMs) { await new Promise((res) => setTimeout(res, 0)); last = performance.now(); }
     }
     const hitsG = new Int8Array(cells * n), hitsR = new Int8Array(cells * n);
     transitions(lum, n, 0.1, (a, b) => Math.min(a, b) < 0.8, hitsG);
