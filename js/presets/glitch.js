@@ -261,7 +261,7 @@
 
   // ── photosensitivity ──
   // Every glitch frame redraws the damage (flicker, slices, smear, split, block dropouts), all
-  // sized by the type. When half the text's ink is a large area (MotionKit.FLASH), any glitch
+  // sized by the type. When the type is big enough to fill 10° fields (MotionKit.FLASH), any glitch
   // frame inside a burst or a flicker window can be a large luminance transition, so with fast
   // flashing off the glitch clock slows until no second holds more than three flashes.
   // Normal-sized type keeps its rate: one glitch frame changes too little of the frame.
@@ -283,8 +283,12 @@
     const inks = K.inkColors(layer), backs = K.backdrops(bg);
     let ink = 0;
     for (const g of L.glyphs) if (!g.isSpace) ink += K.inkOf(fr.layer.font.family, fr.layer.font.weight, g.ch, L.sizePx);
-    ink *= K.inkSpread(layer) / (fr.W * fr.H);
-    if (!K.swing(ink * 0.5, inks, backs)) return { hz: P.rate, rate: 0 }; // too little ink to flash
+    ink *= K.inkSpread(layer);
+    // Measured with TM.Safety: glitch frames flash 10° fields once the type is big enough for its
+    // strokes to fill them, about an eighth of the frame in ink (every look sits at 3 to 6 %, and
+    // measures 1.5 flashes a second or fewer); type that big can change a field twice in one
+    // glitch frame. Low-contrast type cannot flash.
+    if (ink / (fr.W * fr.H) < 0.12 || !K.swing(1, inks, backs)) return { hz: P.rate, rate: 0 };
     // Where the glitch runs: the bursts (timed as render times them) and the flicker windows.
     const { inDur, outDur } = K.windows(P);
     const flickers = P.timing !== 'loop';
@@ -301,13 +305,13 @@
       let was = active((steps - 0.5) / steps);
       for (let s = 0; s < steps; s++) {
         const now = active((s + 0.5) / steps);
-        if (now || was) times.push((s / steps) * fr.pass); // a glitch frame starts or ends here
+        if (now || was) times.push((s / steps) * fr.pass, (s / steps) * fr.pass); // a glitch frame starts or ends here: two changes
         was = now;
       }
       return K.flashRate(times, fr.pass);
     };
     let hz = P.rate, rate = rateAt(hz);
-    if (!P.fastFlash) while (rate > K.FLASH.perSec && hz > 1) { hz = Math.max(1, Math.floor(hz * 0.8)); rate = rateAt(hz); }
+    if (!P.fastFlash) while (rate > K.FLASH.perSec - 0.5 && hz > 1) { hz = Math.max(1, Math.floor(hz * 0.8)); rate = rateAt(hz); }
     return { hz, rate };
   }
 })(window.TM);
