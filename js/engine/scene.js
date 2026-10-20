@@ -50,6 +50,12 @@
       anchor: { x: 0.5, y: 0.5 },
       // Per-layer timing: start later, run whole cycles faster, or play once and hold.
       time: { delay: 0, cycles: 1, mode: 'loop' },
+      // Track matte: show this layer only inside ('alpha') or outside ('alphaInvert') the ink of
+      // the layer below it. That layer becomes the matte and is hidden unless `show`.
+      matte: { mode: 'none', show: false },
+      // Transform keyframes on top of any preset, over the layer's own loop: offsets in frame
+      // fractions, scale, rotation in degrees, opacity; each key eases into the next.
+      transform: { enabled: false, keys: [] },
     };
     return overrides ? merge(layer, overrides) : layer;
   }
@@ -263,7 +269,28 @@
         cycles: int(s.time && s.time.cycles, 1, 1, 8),
         mode: pick(s.time && s.time.mode, ['loop', 'once'], 'loop'),
       },
+      matte: {
+        mode: pick(s.matte && s.matte.mode, ['none', 'alpha', 'alphaInvert'], 'none'),
+        show: bool(s.matte && s.matte.show, false),
+      },
+      transform: cleanTransform(s.transform),
     };
+  }
+
+  const MAX_TKEYS = 16;
+  /** Transform keyframes: up to 16, sorted by time, every value clamped. */
+  function cleanTransform(tr) {
+    const src = isObj(tr) && Array.isArray(tr.keys) ? tr.keys.slice(0, MAX_TKEYS) : [];
+    const keys = src.filter(isObj).map((k) => ({
+      t: num(k.t, 0, 0, 1),
+      x: num(k.x, 0, -2, 2),
+      y: num(k.y, 0, -2, 2),
+      scale: num(k.scale, 1, 0, 10),
+      rot: num(k.rot, 0, -3600, 3600),
+      opacity: num(k.opacity, 1, 0, 1),
+      ease: ease(k.ease, 'smooth'),
+    })).sort((a, b) => a.t - b.t);
+    return { enabled: bool(tr && tr.enabled, false) && keys.length > 0, keys };
   }
 
   /** Fill defaults and sanitise an untrusted scene object. Always returns a valid scene. */

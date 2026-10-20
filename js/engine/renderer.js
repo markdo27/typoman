@@ -475,9 +475,35 @@
       ctx.shadowColor = 'rgba(0,0,0,0)';
       ctx.shadowBlur = 0;
       this._background(ctx, scene.bg, W, H);
-      scene.layers.forEach((layer, i) => {
-        if (layer.visible !== false) this._renderLayer(typeset(layer, scene), i, t, W, H);
-      });
+      // Track mattes: a layer whose upper neighbour uses it as a matte renders offscreen (shown
+      // only if that matte asks for it; still usable when hidden, as in After Effects), and the
+      // matted layer is cut by it. Two buffers ping-pong, so a layer can be both cut and a matte.
+      const layers = scene.layers;
+      let matte = null; // { canvas, index, slot }: pixels of the layer the next one is matted by
+      for (let i = 0; i < layers.length; i++) {
+        const layer = layers[i], next = layers[i + 1];
+        const feeds = !!(next && next.visible !== false && next.matte && next.matte.mode !== 'none');
+        if (layer.visible === false && !feeds) { matte = null; continue; }
+        const L = typeset(layer, scene);
+        const own = layer.matte && layer.matte.mode !== 'none' && matte && matte.index === i - 1 ? matte : null;
+        if (!own && !feeds) {
+          this._renderLayer(L, i, t, W, H, ctx);
+          matte = null;
+          continue;
+        }
+        const slot = own ? own.slot ^ 1 : 0;
+        const tgt = this._matteBuffer(slot, W, H);
+        this._renderLayer(L, i, t, W, H, tgt.ctx);
+        if (own) {
+          tgt.ctx.setTransform(1, 0, 0, 1, 0, 0);
+          tgt.ctx.globalAlpha = 1;
+          tgt.ctx.globalCompositeOperation = layer.matte.mode === 'alphaInvert' ? 'destination-out' : 'destination-in';
+          tgt.ctx.drawImage(own.canvas, 0, 0);
+          tgt.ctx.globalCompositeOperation = 'source-over';
+        }
+        if (layer.visible !== false && (!feeds || next.matte.show)) ctx.drawImage(tgt.canvas, 0, 0);
+        matte = feeds ? { canvas: tgt.canvas, index: i, slot } : null;
+      }
       this._post(ctx, scene, t, W, H);
       this.stats.renders++;
       if (t0) this.stats.lastMs = performance.now() - t0;
@@ -506,14 +532,65 @@
       ctx.fillRect(0, 0, W, H);
     }
 
+    /**
+     * A layer's own loop time at scene time t. Delay shifts its start, cycles speed it up by
+     * whole loops (so the scene still loops seamlessly), and 'once' plays a single pass then
+     * holds its end.
+     */
+    _layerTime(layer, t) {
+      const dur = this.scene.duration;
+      const tm = layer.time;
+      const lt = tm ? (t - tm.delay) * tm.cycles : t;
+      return tm && tm.mode === 'once' ? clamp(lt, 0, dur * (1 - 1e-6)) : mod(lt, dur);
+    }
+
+    /**
+     * The layer's transform keyframes at time t: { a, b, c, d, e, f, opacity } (a matrix about
+     * its anchor, in frame px) or null. Each key eases into the next; outside the first and last
+     * keys their values hold.
+     */
+    _transformAt(layer, t, W, H) {
+      const tr = layer.transform;
+      if (!tr || !tr.enabled || !tr.keys.length) return null;
+      const p = this._layerTime(layer, t) / this.scene.duration;
+      const ks = tr.keys;
+      let v;
+      if (p <= ks[0].t) v = ks[0];
+      else if (p >= ks[ks.length - 1].t) v = ks[ks.length - 1];
+      else {
+        let k = 0;
+        while (k < ks.length - 2 && p > ks[k + 1].t) k++;
+        const A = ks[k], B = ks[k + 1];
+        const u = B.t > A.t ? TM.ease(A.ease)((p - A.t) / (B.t - A.t)) : 1;
+        const lerp = (key) => A[key] + (B[key] - A[key]) * u;
+        v = { x: lerp('x'), y: lerp('y'), scale: lerp('scale'), rot: lerp('rot'), opacity: clamp(lerp('opacity'), 0, 1) };
+      }
+      const ax = layer.anchor.x * W, ay = layer.anchor.y * H;
+      const r = v.rot * DEG, c = Math.cos(r) * v.scale, sn = Math.sin(r) * v.scale;
+      // translate(anchor + offset) · rotate · scale · translate(-anchor)
+      const tx = ax + v.x * W, ty = ay + v.y * H;
+      return { a: c, b: sn, c: -sn, d: c, e: tx - (c * ax - sn * ay), f: ty - (sn * ax + c * ay), opacity: v.opacity };
+    }
+
+    /** One of two offscreen frame buffers for track mattes (allocated on first use). */
+    _matteBuffer(slot, W, H) {
+      if (!this._mattes) this._mattes = [null, null];
+      let m = this._mattes[slot];
+      if (!m || m.canvas.width !== W || m.canvas.height !== H) {
+        const canvas = makeCanvas(W, H);
+        m = this._mattes[slot] = { canvas, ctx: canvas.getContext('2d') };
+      }
+      m.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      m.ctx.globalAlpha = 1;
+      m.ctx.globalCompositeOperation = 'source-over';
+      m.ctx.clearRect(0, 0, W, H);
+      return m;
+    }
+
     _drawPreset(lctx, layer, index, preset, t, W, H, echo, alpha, colorOverride) {
       const scene = this.scene;
       const dur = scene.duration;
-      // Layer timing: delay shifts the layer's start, cycles speeds it up by whole loops (so
-      // the scene still loops seamlessly), and 'once' plays a single pass then holds its end.
-      const tm = layer.time;
-      const lt = tm ? (t - tm.delay) * tm.cycles : t;
-      const tl = tm && tm.mode === 'once' ? clamp(lt, 0, dur * (1 - 1e-6)) : mod(lt, dur);
+      const tl = this._layerTime(layer, t);
       const L = this._layout(layer, W, H, preset);
       const f = this.frame;
       const seed = (scene.seed + index * 1013) | 0;
@@ -590,10 +667,10 @@
       }
     }
 
-    _renderLayer(layer, index, t, W, H) {
+    _renderLayer(layer, index, t, W, H, target = this.ctx) {
       const preset = TM.getPreset(layer.preset);
       if (!preset) return;
-      const ctx = this.ctx, lctx = this._lctx;
+      const ctx = target, lctx = this._lctx;
       lctx.setTransform(1, 0, 0, 1, 0, 0);
       lctx.clearRect(0, 0, W, H);
 
@@ -626,6 +703,14 @@
 
       const unit = Math.min(W, H);
       const fx = layer.fx;
+      // Transform keyframes move the finished layer (with its shadow and glow) as one piece.
+      const xf = this._transformAt(layer, t, W, H);
+      if (xf) {
+        if (!(xf.opacity > 0.001) || Math.abs(xf.a * xf.d - xf.b * xf.c) < 1e-9) return;
+        ctx.save();
+        ctx.setTransform(xf.a, xf.b, xf.c, xf.d, xf.e, xf.f);
+        ctx.globalAlpha = xf.opacity;
+      }
       if (fx.shadow.amount > 0) {
         const a = fx.shadow.angle * DEG, dist = fx.shadow.distance * unit;
         this._softPass(ctx, TM.color.rgba(fx.shadow.color, 0.25 + 0.75 * fx.shadow.amount), Math.max(1, fx.shadow.amount * unit * 0.035), Math.cos(a) * dist, Math.sin(a) * dist);
@@ -635,6 +720,7 @@
         for (let k = 0; k < passes; k++) this._softPass(ctx, fx.glow.color, unit * (0.012 + fx.glow.amount * 0.05) * (k + 1), 0, 0);
       }
       ctx.drawImage(this._layer, 0, 0);
+      if (xf) ctx.restore();
     }
 
     /**

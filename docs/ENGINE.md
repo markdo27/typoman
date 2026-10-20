@@ -53,8 +53,21 @@ vendor/*          pinned third-party code (MIT), served locally
     fx:{ echo:{count,spacing,fade,palette}, blur 0..1, glow:{amount,color},
          shadow:{amount,angle,distance,color}, extrude:{depth,angle,color} },
     anchor:{ x, y },
-    time:{ delay /*s*/, cycles /*1..8 whole loops*/, mode:'loop'|'once' /*once = play a pass, hold its end*/ } }] }
+    time:{ delay /*s*/, cycles /*1..8 whole loops*/, mode:'loop'|'once' /*once = play a pass, hold its end*/ },
+    matte:{ mode:'none'|'alpha'|'alphaInvert', show /*also draw the matte layer*/ },
+    transform:{ enabled, keys:[{ t /*0..1 of the layer's loop*/, x, y /*frame fractions*/, scale, rot /*deg*/, opacity, ease }] /*≤ 16*/ } }] }
 ```
+
+**Track mattes.** A layer whose `matte.mode` isn't `'none'` shows only inside
+(`'alpha'`) or outside (`'alphaInvert'`) the ink of the layer directly below it. That layer
+renders offscreen as the matte. As in After Effects, it isn't drawn itself unless
+`matte.show` is set, and it still works when its eye toggle is off. Chains (a matted layer
+acting as the matte for the next one) work too.
+
+**Transform keyframes** move a finished layer, with its shadow and glow, on top of whatever
+its preset does. Position offsets are in frame fractions, rotation turns about the layer's
+anchor, and opacity fades. Keys follow the layer's own timing (`time`), each eases into the
+next, and values hold before the first key and after the last.
 
 `path.preset` is set while the path is an untouched preset shape. Editors **must delete
 it** when the user edits the path, which marks it as custom so it survives preset and
