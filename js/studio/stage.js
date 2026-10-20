@@ -183,7 +183,8 @@
         return { x: 0, y: 0, w: this.view.cssW, h: this.view.cssH, fills: true };
       }
       const unit = Math.min(W, H);
-      const opts = { text: layer.text, family: TM.Renderer.familyFor(layer, this.store.scene), weight: layer.font.weight, sizePx: Math.max(1, layer.type.size * unit), tracking: layer.type.tracking, leading: layer.type.leading, align: layer.type.align, case: layer.type.case };
+      const typed = TM.Renderer.typeset(layer, this.store.scene); // the instance and wrap the renderer uses
+      const opts = { text: TM.Renderer.wrapFor(typed, W, H, preset), family: typed.font.family, weight: layer.font.weight, sizePx: Math.max(1, layer.type.size * unit), tracking: layer.type.tracking, leading: layer.type.leading, align: layer.type.align, case: layer.type.case };
       let L = TM.text.layout(opts);
       if (preset.fit && L.width > 0) {
         const maxW = W * (preset.fitWidth || 0.9), maxH = H * (preset.fitHeight || 0.86);

@@ -357,7 +357,7 @@
     _layout(layer, W, H, preset) {
       const unit = Math.min(W, H);
       const opts = {
-        text: layer.text,
+        text: wrapFor(layer, W, H, preset),
         family: layer.font.family,
         weight: layer.font.weight,
         sizePx: Math.max(1, layer.type.size * unit),
@@ -808,6 +808,25 @@
     return TM.fonts.resolve(layer.font, layer.type.size * side);
   }
 
+  /**
+   * The text a layer lays out with: for presets that fit their block to the frame, lines that
+   * would shrink are re-wrapped into balanced lines when that lets the type grow (type.wrap
+   * 'auto'). Depends only on the text, font and frame aspect, so every render size agrees.
+   */
+  function wrapFor(layer, W, H, preset) {
+    if (!preset || !preset.fit || layer.type.wrap === 'off' || !/\s/.test(layer.text || '')) return layer.text;
+    const unit = Math.min(W, H), size = Math.max(1e-6, layer.type.size * unit);
+    const key = [layer.text, layer.font.family, layer.font.weight, layer.type.tracking, layer.type.leading, layer.type.case, layer.type.size, (W / H).toFixed(4), preset.fitWidth, preset.fitHeight, TM.fonts.version()].join('\u0001');
+    const hit = wrapCache.get(key);
+    if (hit !== undefined) return hit;
+    const out = TM.text.wrapToFit({ text: layer.text, family: layer.font.family, weight: layer.font.weight, tracking: layer.type.tracking, leading: layer.type.leading, case: layer.type.case },
+      (W * (preset.fitWidth || 0.9)) / size, (H * (preset.fitHeight || 0.86)) / size);
+    if (wrapCache.size > 200) wrapCache.clear();
+    wrapCache.set(key, out);
+    return out;
+  }
+  const wrapCache = new Map();
+
   /** The layer as presets see it: font.family already names the instance to draw with. */
   function typeset(layer, scene) {
     const family = familyFor(layer, scene);
@@ -818,6 +837,7 @@
   TM.Frame = Frame;
   Renderer.familyFor = familyFor;
   Renderer.typeset = typeset;
+  Renderer.wrapFor = wrapFor;
 
   /**
    * Resolve once every font a scene uses is ready (never rejects): each layer's instance, the

@@ -44,7 +44,7 @@ vendor/*          pinned third-party code (MIT), served locally
   layers:[{ id, name, visible, text /*\n = new line*/, preset, params:{…per preset schema…},
     font:{ family, weight, width /*wdth %, default 100*/, opsz /*'auto' | number*/,
            axes /*{ TAG: value } for any other axis the family has: slnt, XROT, YEAR, MORF…*/ },
-    type:{ size /*× unit*/, tracking /*em*/, leading, align, case, slant /*deg*/ },
+    type:{ size /*× unit*/, tracking /*em*/, leading, align, case, slant /*deg*/, wrap:'auto'|'off' },
     fill:{ type:'solid'|'gradient'|'palette', color, color2, angle, palette:[hex…] },
     stroke:{ mode:'none'|'outline'|'both', width /*em*/, color },
     path:{ closed, preset?, nodes:[{x,y,ix,iy,ox,oy,k}] } | null,   // normalised 0..1, handles relative
@@ -57,6 +57,12 @@ vendor/*          pinned third-party code (MIT), served locally
     matte:{ mode:'none'|'alpha'|'alphaInvert', show /*also draw the matte layer*/ },
     transform:{ enabled, keys:[{ t /*0..1 of the layer's loop*/, x, y /*frame fractions*/, scale, rot /*deg*/, opacity, ease }] /*≤ 16*/ } }] }
 ```
+
+**Auto-wrap.** For presets that fit their block to the frame (`fit: true`), `type.wrap:
+'auto'` re-wraps lines that would otherwise shrink. It tries up to 8 balanced lines, broken at
+spaces, and keeps the arrangement with the largest type (the fewest lines within 10 % of it).
+It decides at a fixed reference size against the frame's aspect, so every render size wraps
+the same way (`TM.Renderer.wrapFor(layer, W, H, preset)`).
 
 **Track mattes.** A layer whose `matte.mode` isn't `'none'` shows only inside
 (`'alpha'`) or outside (`'alphaInvert'`) the ink of the layer directly below it. That layer

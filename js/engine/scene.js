@@ -35,7 +35,8 @@
       // width: wdth % and opsz: 'auto' | number apply to families with those variable axes;
       // axes: { TAG: value } pins any other axis (slnt, XROT, YEAR, MORF, …) a family has.
       font: { family: 'Anton', weight: 400, width: 100, opsz: 'auto', axes: {} },
-      type: { size: 0.16, tracking: 0, leading: 0.95, align: 'center', case: 'upper', slant: 0 },
+      // wrap: 'auto' re-wraps lines that would otherwise shrink to fit the frame; 'off' keeps them.
+      type: { size: 0.16, tracking: 0, leading: 0.95, align: 'center', case: 'upper', slant: 0, wrap: 'auto' },
       fill: { type: 'solid', color: '#ffffff', color2: '#00e5ff', angle: 90, palette: ['#ffffff', '#a3a2ff', '#00e5ff'] },
       stroke: { mode: 'none', width: 0.035, color: '#000000' },
       path: null,
@@ -227,6 +228,7 @@
         align: pick(ty.align, ['left', 'center', 'right'], d.type.align),
         case: pick(ty.case, ['none', 'upper', 'lower', 'title'], d.type.case),
         slant: num(ty.slant, 0, -30, 30),
+        wrap: pick(ty.wrap, ['auto', 'off'], 'auto'),
       },
       fill: {
         type: pick(f.type, ['solid', 'gradient', 'palette'], d.fill.type),

@@ -238,5 +238,75 @@
     return v;
   }
 
-  TM.text = { layout, advance, graphemes, applyCase };
+  /**
+   * Balanced re-wrap for text that would shrink to fit a frame. Lines (after case) are split
+   * at spaces into up to 8 lines, each split re-balancing the widest line so its pieces have the
+   * smallest possible longest piece, and the arrangement giving the largest type wins. Decisions are made at a fixed reference size against the frame's aspect
+   * (maxW, maxH in units of the type size), so every render size wraps the same way.
+   * Returns the text with '\n' at the chosen breaks (or the text unchanged).
+   */
+  function wrapToFit(opts, maxW, maxH) {
+    const R = 100;
+    const ctx = measureCtx();
+    ctx.font = TM.fonts.fontString(opts.family, opts.weight, R);
+    if ('fontKerning' in ctx) ctx.fontKerning = 'normal';
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    const track = (opts.tracking || 0) * R;
+    const width = (s) => ctx.measureText(s).width + Math.max(0, graphemes(s).length - 1) * track;
+    const capH = ctx.measureText('H').actualBoundingBoxAscent || R * 0.7;
+    const lead = R * (opts.leading || 1);
+    const src = applyCase(String(opts.text || ''), opts.case).replace(/\r/g, '').split('\n');
+    // Each source line: its words, and the breaks currently chosen within it.
+    const lines = src.map((t) => ({ words: t.split(/\s+/).filter(Boolean), parts: 1 }));
+    const pieces = (ln) => balance(ln.words, ln.parts, width);
+    const fit = () => {
+      const all = lines.flatMap((ln) => (ln.words.length ? pieces(ln) : ['']));
+      const bw = Math.max(1, ...all.map((p) => width(p)));
+      const bh = (all.length - 1) * lead + capH;
+      return { all, k: Math.min(1, (maxW * R) / bw, (maxH * R) / bh) };
+    };
+    const first = fit();
+    if (first.k >= 0.999) return opts.text;
+    // Try every line count up to 8 (splitting the widest line each time; a gain can appear only
+    // after a few splits, once a long word pair separates), then take the largest type, but the
+    // fewest lines that come within 10 % of it.
+    const tries = [first];
+    for (let total = first.all.length; total < 8; total++) {
+      let pick = null, widest = -1;
+      for (const ln of lines) {
+        if (ln.parts >= ln.words.length) continue;
+        const w = Math.max(...pieces(ln).map((p) => width(p)));
+        if (w > widest) { widest = w; pick = ln; }
+      }
+      if (!pick) break;
+      pick.parts++;
+      tries.push(fit());
+    }
+    const top = Math.max(...tries.map((x) => x.k));
+    const best = tries.find((x) => x.k >= top / 1.1);
+    return best.k > first.k * 1.08 ? best.all.join('\n') : opts.text;
+  }
+
+  /** Split words into n lines minimising the longest line (binary search on a greedy fill). */
+  function balance(words, n, width) {
+    if (n <= 1) return [words.join(' ')];
+    const greedy = (limit) => {
+      const out = [];
+      let cur = '';
+      for (const w of words) {
+        const next = cur ? cur + ' ' + w : w;
+        if (cur && width(next) > limit) { out.push(cur); cur = w; } else cur = next;
+      }
+      if (cur) out.push(cur);
+      return out;
+    };
+    let lo = Math.max(...words.map((w) => width(w))), hi = width(words.join(' '));
+    for (let it = 0; it < 24 && hi - lo > 0.5; it++) {
+      const mid = (lo + hi) / 2;
+      if (greedy(mid).length <= n) hi = mid; else lo = mid;
+    }
+    return greedy(hi);
+  }
+
+  TM.text = { layout, advance, graphemes, applyCase, wrapToFit };
 })(typeof window !== 'undefined' ? window : globalThis);
