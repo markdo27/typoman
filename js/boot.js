@@ -29,6 +29,7 @@
     'js/presets/stack.js',
     'js/presets/axis-wave.js',
     'js/presets/phrase-morph.js',
+    'js/presets/particles.js',
   ];
 
   // ── Presets: path & loop family (owner: preset team A) ──
