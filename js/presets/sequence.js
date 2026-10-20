@@ -43,7 +43,7 @@
       TM.P.range('fill', 'Fill the frame', 0, 1, 0.01, 0.75, { group: 'Framing' }),
       TM.P.range('drift', 'Camera drift', 0, 1, 0.01, 0.5, { group: 'Framing' }),
       TM.P.toggle('blur', 'Whip blur', true, { group: 'Framing' }),
-      TM.P.toggle('fastFlash', 'Allow fast flashing', false, { group: 'Safety', hint: 'A zoom-through sweeps big strokes across the frame. Off keeps it to 3 flashes per second or fewer (WCAG 2.3.1): zooms that come too fast become pushes' }),
+      TM.P.toggle('fastFlash', 'Allow fast flashing', false, { group: 'Safety', hint: 'Fast camera moves sweep big strokes across the frame. Off keeps it to 3 flashes per second or fewer (WCAG 2.3.1): letters fade to a safe ghost while they rush past (all but the one a zoom dives through), and zooms that come too fast become pushes' }),
     ],
 
     setup(f) {
@@ -72,7 +72,8 @@
       const ease = TM.ease(P.ease, 'snap');
       const st = P.stagger;
       const cx = f.cx, cy = f.cy;
-      const moves = planFor(C, f); // moves[k]: the move into shot k
+      const plan = planFor(C, f), moves = plan.moves; // moves[k]: the move into shot k
+      const pass = K.passOf(f);
       const moveAt = (b) => moves[((b % N) + N) % N];
       // The build-in: letter windows of length w, spread so the last one ends with the move.
       const w = Math.max(0.12, (1 - st) * 0.5), spread = st > 0 ? Math.min(st, 1 - w) : 0;
@@ -110,9 +111,26 @@
           const cs = Math.cos(m.rot), sn = Math.sin(m.rot);
           // Whip pans: a speed smear scaled by the move's speed.
           const v = move === 'whip' && P.blur && role !== 'hold' ? clamp(K.slope(ease, u) / 3) : 0;
+          // Flicker guard (fast flashing off): letters that would sweep stroke after stroke
+          // across the frame fade to a ghost too faint to flash. In a zoom, all but the portal
+          // letter once the dive starts, and the next shot until it nears its size; in a whip,
+          // the shot while it pans faster than about two letters a second.
+          let ghost = 0, keep = null;
+          if (plan.ghost < 1 && role !== 'hold') {
+            if (move === 'zoom') {
+              if (role === 'out') { ghost = smoothstep(1, Math.pow(ratio, 0.08), m.scale); keep = shot.portal.glyphs; }
+              else ghost = 1 - smoothstep(Math.pow(ratio, -0.2), Math.pow(ratio, -0.04), m.scale);
+            } else if (move === 'whip') {
+              const pitch = (shot.w * S) / Math.max(1, shot.glyphs.length);
+              const speed = (f.W * 1.15 * K.slope(ease, u)) / Math.max(1e-3, P.trans * (pass / N)); // px/s
+              ghost = smoothstep(1.5, 3, speed / Math.max(1, pitch));
+            }
+          }
+          const dim = 1 + (plan.ghost - 1) * ghost;
           for (let j = 0; j < shot.glyphs.length; j++) {
             const g = L.glyphs[shot.glyphs[j]];
-            const alpha = m.alpha * (role === 'in' && spread > 0 ? smoothstep(shot.ranks[j] * spread, shot.ranks[j] * spread + w, u) : 1);
+            const alpha = m.alpha * (role === 'in' && spread > 0 ? smoothstep(shot.ranks[j] * spread, shot.ranks[j] * spread + w, u) : 1) *
+              (ghost > 0 && !(keep && keep.includes(shot.glyphs[j])) ? dim : 1);
             if (alpha <= 0.002) continue;
             const ox = g.cx - ax, oy = g.cy - ay;
             const x = cx + px + m.dx + (ox * cs - oy * sn) * S;
@@ -145,35 +163,49 @@
   }
 
   // ── photosensitivity ──
-  // A zoom-through sweeps the portal letter's strokes across the frame: measured, up to two or
-  // three large luminance transitions in the middle of the move (see MotionKit.FLASH), so it is
-  // modelled as three. Push, roll and whip measure none. Low-contrast type cannot flash.
-  const flashy = (layer, bg) => K.swing(0.5, K.inkColors(layer), K.backdrops(bg));
-  /** The move into each shot; with fast flashing off, a zoom that would break three flashes a second becomes a push. */
+  // Measured with TM.Safety (10° fields). With the flicker guard on, a zoom-through still sweeps
+  // the portal letter's strokes across the frame (up to six large transitions in a field, bunched
+  // early in the move); a whip, push or roll swaps one shot for the next, one transition.
+  // Unguarded, a zoom sweeps its letters (up to eight) and a whip pans stroke after stroke past
+  // (up to twelve). With fast flashing off, a zoom that would break three flashes a second
+  // becomes a push. Low-contrast type cannot flash.
+  const flashy = (layer, bg) => K.swing(1, K.inkColors(layer), K.backdrops(bg));
+  const spots = (n, a, b) => Array.from({ length: n }, (_, i) => a + ((b - a) * i) / Math.max(1, n - 1));
+  const MOVE_SAFE = { zoom: spots(6, 0.25, 0.5), whip: [0.5], push: [0.5], roll: [0.5] };
+  const MOVE_FAST = { zoom: spots(8, 0.25, 0.5), whip: spots(12, 0.1, 0.9), push: [0.5], roll: [0.5] };
+  /** The move into each shot, and the flash rate they make. */
   function movesPlan(P, N, pass, canFlash) {
-    const slot = 1 / N, T = P.trans * slot;
+    const slot = 1 / N, T = P.trans * slot, table = P.fastFlash ? MOVE_FAST : MOVE_SAFE;
     const moves = [];
     for (let k = 0; k < N; k++) moves.push(P.move === 'mix' ? MOVES[k % MOVES.length] : P.move);
-    let times = [];
-    if (canFlash) {
-      for (let k = 0; k < N; k++) {
-        if (moves[k] !== 'zoom') continue;
-        const dive = [0.4, 0.6, 0.8].map((u) => ((k - 0.5) * slot - T / 2 + u * T) * pass);
-        if (!P.fastFlash && K.flashRate(times.concat(dive), pass) > K.FLASH.perSec) { moves[k] = 'push'; continue; }
-        times = times.concat(dive);
-      }
+    if (!canFlash || N < 2) return { moves, rate: 0 };
+    const at = (k, us) => us.map((u) => ((k - 0.5) * slot - T / 2 + u * T) * pass);
+    // Every move as it would be without zooms (a zoom counted as the push it can become), then
+    // each zoom in order, kept where the loop still fits.
+    const own = moves.map((mv, k) => at(k, table[mv === 'zoom' ? 'push' : mv]));
+    for (let k = 0; k < N; k++) {
+      if (moves[k] !== 'zoom') continue;
+      const cand = own.slice();
+      cand[k] = at(k, table.zoom);
+      if (P.fastFlash || K.flashRate([].concat(...cand), pass) <= K.FLASH.perSec) own[k] = cand[k];
+      else moves[k] = 'push';
     }
-    return { moves, rate: K.flashRate(times, pass) };
+    return { moves, rate: K.flashRate([].concat(...own), pass) };
   }
   function planFor(C, f) {
     const key = JSON.stringify([f.layer.fill, f.bg, f.layer.time, f.dur]);
-    let moves = C.plans.get(key);
-    if (!moves) {
-      moves = movesPlan(f.params, C.shots.length, K.passOf(f), flashy(f.layer, f.bg)).moves;
+    let plan = C.plans.get(key);
+    if (!plan) {
+      const P = f.params;
+      plan = {
+        moves: movesPlan(P, C.shots.length, K.passOf(f), flashy(f.layer, f.bg)).moves,
+        // How far flickering letters fade (to where they can no longer flash; 1 = no guard).
+        ghost: P.fastFlash ? 1 : K.ghostAlpha(K.inkColors(f.layer), K.backdrops(f.bg)) * 0.8,
+      };
       if (C.plans.size > 12) C.plans.clear();
-      C.plans.set(key, moves);
+      C.plans.set(key, plan);
     }
-    return moves;
+    return plan;
   }
 
   /**
