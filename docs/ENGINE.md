@@ -275,7 +275,17 @@ loop progress at which shape i is reached.
 - `path.spaced(h)` re-parameterises the arc length so text gets `h·|turn|` of extra room at
   bends (curvature smoothed over ±h).
 - Lay glyph centres out on `path.offset(centreOffset).spaced(capH / 2)` and letters stop
-  colliding on concave curves and at sharp corners (Path Flow does this).
+  colliding on concave curves and at sharp corners. This is the simple way.
+- **Collision-free lanes (Path Flow).**
+  - `path.rounded(minR, comfortR, opts)` rolls a ball along the inside of each bend and gives a
+    smoothed *carrier*: no bend is tighter than the text can follow, and fillets are kept only
+    while the drawn path stays close.
+  - `carrier.lane(d)` is an exact parallel curve of it, so lanes can never cross, and
+    `lane.srcAt(u)` maps back to arc length on the drawn path (for timing).
+  - `lane.tracked({ top, bottom, width, rotate, smooth, spread, amount, cap })` warps distance
+    so neighbouring glyphs never touch on the concave side, adding only the room needed.
+  - For path keyframes, round each key shape once and morph the rounded shapes. JSDoc in
+    `path.js`.
 
 **Easing.** `TM.ease(spec)` takes a name from `TM.EASINGS`, a cubic-bézier
 `[x1, y1, x2, y2]`, or a custom spring `'spring(stiffness, damping)'` (stiffness 10–1000,
