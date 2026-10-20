@@ -295,15 +295,18 @@
      *   corners but never cuts off a star's points or flattens a shape.
      * opts.limit: the same bound for the hard radii (default: none). Where even those would
      *   move the curve further, the bend is left for the spacing to cope with.
+     * opts.unwind: let the hard radii cut out loops too tight to follow (a bridge that turns a
+     *   whole turn less than what it replaces). Off by default: a loop drawn on purpose stays,
+     *   and so does every turn of a spiral. Useful for the in-between shapes of a morph.
      * Cached per options.
      */
     rounded(left, right, opts = {}) {
       const q = (v) => (v > 0.5 ? Math.round(v * 2) / 2 : 0);
       const lh = q(left), rh = q(right), pref = opts.prefer || [];
       const ls = Math.max(lh, q(pref[0])), rs = Math.max(rh, q(pref[1]));
-      const reach = Math.max(0, opts.reach || 0), limit = opts.limit > 0 ? opts.limit : Infinity;
+      const reach = Math.max(0, opts.reach || 0), limit = opts.limit > 0 ? opts.limit : Infinity, unwind = !!opts.unwind;
       if (this.n < 4 || this.length < 2 || !(ls || rs)) return this;
-      const key = [lh, rh, ls, rs, Math.round(reach), Math.round(Math.min(limit, 1e6))].join('|');
+      const key = [lh, rh, ls, rs, Math.round(reach), Math.round(Math.min(limit, 1e6)), unwind].join('|');
       if (!this._rounded) this._rounded = new Map();
       const hit = this._rounded.get(key);
       if (hit) return hit;
@@ -315,7 +318,7 @@
       // compete for the same stretch (a wave too tight for the block) neither side wins it all.
       for (let k = 1; k <= 2; k++) {
         const order = k % 2 ? [[1, rh], [-1, lh]] : [[-1, lh], [1, rh]];
-        for (const [side, r] of order) if (r) P = roll(P, side, (r * k) / 2, limit, step, P0);
+        for (const [side, r] of order) if (r) P = roll(P, side, (r * k) / 2, limit, step, P0, unwind);
       }
       if (P.closed) P = grow(P, lh, rh, step);
       // Comfort radii in four steps, each fillet kept only within reach of the original path.
@@ -527,17 +530,23 @@
     return worst;
   }
 
-  /** Signed turning per px at every vertex (positive turns toward +normal, i.e. clockwise on screen). */
+  /**
+   * Signed turning at every vertex: `turn` in radians and `k` per px (positive turns toward
+   * +normal, i.e. clockwise on screen).
+   */
   function curvatures(P) {
-    const { xs, ys, closed } = P, n = xs.length, k = new Float64Array(n);
+    const { xs, ys, closed } = P, n = xs.length, k = new Float64Array(n), turn = new Float64Array(n);
     for (let i = 0; i < n; i++) {
       if (!closed && (i === 0 || i === n - 1)) continue;
       const a = i ? i - 1 : n - 1, b = i + 1 < n ? i + 1 : 0;
       const ux = xs[i] - xs[a], uy = ys[i] - ys[a], vx = xs[b] - xs[i], vy = ys[b] - ys[i];
       const lu = Math.hypot(ux, uy), lv = Math.hypot(vx, vy);
-      if (lu > 1e-9 && lv > 1e-9) k[i] = Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy) / ((lu + lv) / 2);
+      if (lu > 1e-9 && lv > 1e-9) {
+        turn[i] = Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy);
+        k[i] = turn[i] / ((lu + lv) / 2);
+      }
     }
-    return k;
+    return { k, turn };
   }
 
   /** Unit normals pointing to `side` (+1: +normal, −1: the other side). */
@@ -578,7 +587,7 @@
       const f = fa + (sweep * q) / count;
       pts.push(cx + r * Math.cos(f), cy + r * Math.sin(f));
     }
-    return { cx, cy, pts };
+    return { cx, cy, pts, sweep };
   }
 
   /**
@@ -586,13 +595,13 @@
    * every stretch it can't touch by the ball's own arc: fillets in bends tighter than r, bridges
    * over notches it can't enter (within half a turn of the ball along the curve). A bridge is
    * kept only if no point of the original path P0 it replaces lies more than `reach` px off the
-   * ball. Returns P itself when nothing changes and { failed: true } when the ball fits nowhere
-   * (a loop too small for it).
+   * ball, and never cuts a loop out unless `unwind`. Returns P itself when nothing changes and
+   * { failed: true } when the ball fits nowhere (a loop too small for it).
    */
-  function roll(P, side, r, reach, step, P0) {
+  function roll(P, side, r, reach, step, P0, unwind) {
     const { xs, ys, closed } = P, n = xs.length, src = P.src;
     if (n < 4 || !(r > 0)) return P;
-    const kap = curvatures(P), kr = 1 / r;
+    const { k: kap, turn } = curvatures(P), kr = 1 / r;
     // Only points near something tighter than the ball can fail it.
     const m = Math.min(closed ? n >> 1 : n, Math.ceil((Math.PI * r) / step) + 2);
     const mark = new Int32Array(n + 1);
@@ -645,12 +654,20 @@
       let u = t;
       while (u < n && bad[at(u)]) u++;
       const a = t > 0 ? at(t - 1) : -1, b = u < n ? at(u) : closed ? g0 : -1;
-      const arc = a >= 0 && b >= 0 ? ballArc(P, nrm, side, a, b, r, step) : null;
+      let arc = a >= 0 && b >= 0 ? ballArc(P, nrm, side, a, b, r, step) : null;
       let sa = 0, sb = 0;
       if (arc) {
         sa = src[a];
         sb = src[b];
         if (closed && sb < sa) sb += L0;
+        // A fillet or a bridge over a notch turns as far as the stretch it replaces; one that
+        // differs by a whole turn would cut a loop out of the path (or a turn out of a spiral),
+        // which only `unwind` allows.
+        if (!unwind) {
+          let net = (turn[a] + turn[b]) / 2;
+          for (let v = t; v < u; v++) net += turn[at(v)];
+          if (Math.abs(net - arc.sweep) > Math.PI) arc = null;
+        }
       }
       if (arc && (reach === Infinity || !P0 || strayFrom(P0, sa, sb, arc.cx, arc.cy, r) <= reach)) {
         const pts = arc.pts, c = pts.length / 2;

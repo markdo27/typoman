@@ -69,7 +69,7 @@
       const L = f.layout, half = L.capH / 2, ctx = measurer();
       ctx.font = L.font;
       const lines = L.lines.map((line) => {
-        let top = 0, bottom = 0, wMin = Infinity;
+        let top = 0, bottom = 0, wMin = Infinity, wMax = 0;
         for (const gi of line.glyphs) {
           const g = L.glyphs[gi];
           if (g.isSpace) continue;
@@ -77,8 +77,9 @@
           top = Math.max(top, m.actualBoundingBoxAscent != null ? m.actualBoundingBoxAscent - half : half);
           bottom = Math.max(bottom, m.actualBoundingBoxDescent != null ? half + m.actualBoundingBoxDescent : half);
           wMin = Math.min(wMin, g.w);
+          wMax = Math.max(wMax, g.w);
         }
-        return { top, bottom, wMin: Number.isFinite(wMin) ? wMin : f.size / 2 };
+        return { top, bottom, wMin: Number.isFinite(wMin) ? wMin : f.size / 2, wMax };
       });
       return { sep, sepW, lines };
     },
@@ -95,8 +96,9 @@
         if (!line.glyphs.length) return;
         const path = G.lanes[li];
         const dir = P.lanes === 'alternate' && li % 2 === 1 ? -1 : 1;
-        const first = L.glyphs[line.glyphs[0]];
-        const x0 = first.x;
+        // The line's left edge: its first glyph for left-to-right lines, but right-to-left lines
+        // place their first (logical) word rightmost, so measure from the line itself.
+        const x0 = line.x;
 
         if (P.mode === 'fill') {
           // Repeat the line (+ separator) along the whole path. On closed paths the gap is
@@ -164,8 +166,18 @@
     if (hit && hit.key === key) return hit;
 
     // Lanes at their leading around the path (glyph centres), and how far the block reaches
-    // to each side, wave included. Lines without glyphs take no room.
-    const offs = L.lines.map((line, li) => (li - (n - 1) / 2) * L.lineGap + lift);
+    // to each side, wave included. Lines without glyphs take no room. Letters bobbing on the
+    // wave pass neighbours in the next lane up to a glyph apart along it, so the leading opens
+    // by however much more that relative bounce, 2·amp·sin(k·w/2), needs than it has.
+    let gap = L.lineGap;
+    if (amp > 0 && n > 1) {
+      const wl = Math.max(1, P.waveLength * size), wMax = Math.max(...lines.map((m) => m.wMax));
+      const bounce = 2 * amp * Math.sin(Math.min(Math.PI / 2, (Math.PI * wMax) / wl));
+      let clear = Infinity;
+      for (let j = 0; j + 1 < n; j++) clear = Math.min(clear, L.lineGap - lines[j].bottom - lines[j + 1].top);
+      gap += Math.max(0, bounce - Math.max(0, clear));
+    }
+    const offs = L.lines.map((line, li) => (li - (n - 1) / 2) * gap + lift);
     let T = 0, B = 0, ht = 0, hb = 0;
     L.lines.forEach((line, li) => {
       if (!line.glyphs.some((gi) => !L.glyphs[gi].isSpace)) return;
@@ -209,7 +221,7 @@
     const shapes = [L.path].concat(keys).map((d) => TM.Path.sample(d, f.W, f.H).rounded(left, right, opts));
     const c = TM.Path.sequence(shapes, pm, f.p);
     if (!c || c.n < 4) return base.rounded(left, right, opts);
-    return shapes.includes(c) || !tighter(c, left, right) ? c : c.rounded(left, right, { limit: opts.limit });
+    return shapes.includes(c) || !tighter(c, left, right) ? c : c.rounded(left, right, { limit: opts.limit, unwind: true });
   }
 
   /** Does the curve turn tighter than radius `left` toward −normal or `right` toward +normal? */
