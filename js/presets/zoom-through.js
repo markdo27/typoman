@@ -3,7 +3,7 @@
  * of one of its letters (the hole of an O, D, A…) and the next word grows out of that hole.
  *
  * Craft notes
- *  - Counters are found by rasterising candidate letters once (in setup) and taking the
+ *  - Counters are found by rasterising candidate letters once (MotionKit.portal) and taking the
  *    centroid of the largest enclosed hole, so the camera really threads the letter.
  *  - Zoom is exponential (one constant ratio per word), so every step feels the same speed;
  *    each step eases out of and into a reading pause, and an optional twist rolls the camera.
@@ -13,62 +13,6 @@
   'use strict';
   const K = TM.MotionKit;
   const { clamp, smoothstep, fract } = TM.math;
-  const CANDIDATE = /[ABDOPQRabdegopq04689@&%#]/;
-
-  /** Largest enclosed hole of ch, as an offset from the glyph's centre (px at `size`), or null. */
-  function counterOf(family, weight, ch, size, adv, capH) {
-    const S = 96, k = S / size;
-    const w = Math.ceil(adv * k + 16), h = Math.ceil(capH * k * 1.6 + 16);
-    const c = typeof document !== 'undefined' ? document.createElement('canvas') : new OffscreenCanvas(w, h);
-    c.width = w; c.height = h;
-    const ctx = c.getContext('2d', { willReadFrequently: true });
-    ctx.font = TM.fonts.fontString(family, weight, S);
-    const base = Math.round(8 + capH * k * 1.2);
-    ctx.fillStyle = '#000';
-    ctx.fillText(ch, 8, base);
-    const data = ctx.getImageData(0, 0, w, h).data;
-    const ink = new Uint8Array(w * h);
-    for (let i = 0; i < w * h; i++) ink[i] = data[i * 4 + 3] > 110 ? 1 : 0;
-    // Flood the outside from the border; whatever empty space is left is a counter.
-    const mark = new Int32Array(w * h).fill(0);
-    const stack = [];
-    const flood = (seed, id) => {
-      let n = 0, sx = 0, sy = 0;
-      stack.push(seed);
-      mark[seed] = id;
-      while (stack.length) {
-        const p = stack.pop();
-        n++; sx += p % w; sy += (p / w) | 0;
-        const x = p % w, y = (p / w) | 0;
-        for (const q of [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, y > 0 ? p - w : -1, y < h - 1 ? p + w : -1]) {
-          if (q >= 0 && !ink[q] && !mark[q]) { mark[q] = id; stack.push(q); }
-        }
-      }
-      return { n, x: sx / Math.max(1, n), y: sy / Math.max(1, n) };
-    };
-    for (let x = 0; x < w; x++) { if (!ink[x] && !mark[x]) flood(x, 1); const b = (h - 1) * w + x; if (!ink[b] && !mark[b]) flood(b, 1); }
-    for (let y = 0; y < h; y++) { const l = y * w, r = l + w - 1; if (!ink[l] && !mark[l]) flood(l, 1); if (!ink[r] && !mark[r]) flood(r, 1); }
-    let best = null, id = 2;
-    for (let p = 0; p < w * h; p++) {
-      if (ink[p] || mark[p]) continue;
-      const hole = flood(p, id);
-      if (hole.n > 12 && (!best || hole.n > best.n)) { best = hole; best.id = id; }
-      id++;
-    }
-    if (!best) return null;
-    // Hole extent, for how far the camera must zoom before the hole covers the frame.
-    let x0 = w, x1 = 0, y0 = h, y1 = 0;
-    for (let p = 0; p < w * h; p++) {
-      if (mark[p] !== best.id) continue;
-      const x = p % w, y = (p / w) | 0;
-      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
-    }
-    // Back to glyph-centre coordinates at the layout size.
-    return {
-      dx: (best.x - 8 - (adv * k) / 2) / k, dy: (best.y - (base - (capH * k) / 2)) / k,
-      area: best.n / (k * k), cw: (x1 - x0 + 1) / k, ch: (y1 - y0 + 1) / k,
-    };
-  }
 
   TM.registerPreset({
     id: 'zoom-through',
@@ -96,31 +40,10 @@
     setup(f) {
       const L = f.layout, P = f.params;
       const by = P.split === 'auto' ? (L.lines.filter((l) => l.glyphs.length).length > 1 ? 'lines' : 'words') : P.split;
-      const fam = f.layer.font.family, wt = f.layer.font.weight;
       const units = K.units(L, by).map((u) => {
         const fit = Math.min((f.W * 0.8) / Math.max(1, u.w), (f.H * 0.5) / Math.max(1, L.capH), 4);
-        // Portal: the biggest counter near the middle, else the gap nearest the middle.
-        let portal = null, score = -Infinity;
-        if (P.counters) {
-          for (const gi of u.glyphs) {
-            const g = L.glyphs[gi];
-            if (!CANDIDATE.test(g.ch)) continue;
-            const hole = counterOf(fam, wt, g.ch, L.sizePx, g.w, L.capH);
-            if (!hole) continue;
-            const sc = Math.sqrt(hole.area) / L.capH - Math.abs(g.cx - u.cx) / Math.max(1, u.w);
-            if (sc > score) { score = sc; portal = { x: g.cx + hole.dx, y: g.cy + hole.dy, cw: hole.cw, ch: hole.ch }; }
-          }
-        }
-        if (!portal) {
-          // No counter: thread the gap nearest the middle (open above and below).
-          let best = null, bd = Infinity;
-          for (let j = 0; j + 1 < u.glyphs.length; j++) {
-            const a = L.glyphs[u.glyphs[j]], b = L.glyphs[u.glyphs[j + 1]];
-            const gx = (a.x + a.w + b.x) / 2, d = Math.abs(gx - u.cx);
-            if (d < bd) { bd = d; best = { x: gx, y: (a.cy + b.cy) / 2, cw: Math.max(L.sizePx * 0.04, b.x - a.x - a.w + L.sizePx * 0.04), ch: Infinity }; }
-          }
-          portal = best || { x: u.cx, y: u.cy, cw: L.sizePx * 0.05, ch: Infinity };
-        }
+        // Portal: the biggest counter near the middle, else a gap between letters.
+        const portal = K.portal(f, L, u, P.counters);
         const scale = 1 + (fit - 1) * P.fill;
         // Zoom for the dive: just enough for the hole (an ellipse) to contain the whole frame.
         const need = Math.hypot(f.W / (portal.cw * scale), portal.ch === Infinity ? 0 : f.H / (portal.ch * scale));
