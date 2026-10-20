@@ -153,7 +153,9 @@
         let noiseColor = base, noiseAlpha = 1;
         if (!f.colorOverride) {
           if (P.look === 'accent') noiseColor = P.accent;
-          else if (P.look === 'palette') noiseColor = pal[(g.i + step) % pal.length];
+          // Palette noise changes colour every third step: a letter swapping bright and dark
+          // palette colours at the full rate is a flicker (WCAG 2.3.1 flashes, by TM.Safety).
+          else if (P.look === 'palette') noiseColor = pal[(g.i + Math.floor(step / 3)) % pal.length];
           else if (P.look === 'dim') noiseAlpha = 0.45;
         }
 

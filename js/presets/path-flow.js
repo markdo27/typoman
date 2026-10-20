@@ -62,6 +62,13 @@
       TM.P.select('guide', 'Show path', [['none', 'Hidden'], ['line', 'Line'], ['dashed', 'Dashed'], ['dots', 'Dots']], 'none', { group: 'Layout' }),
     ],
 
+    looks: [
+      { name: 'Ticker tape', bg: { type: 'solid', color: '#0b0b0b' }, layer: { font: { family: 'Space Mono', weight: 700 }, type: { case: 'upper', tracking: 0.02 }, fill: { type: 'solid', color: '#faff00' }, path: 'wave', params: { mode: 'fill', speed: 1, separator: 'slash', gap: 0.5, guide: 'dashed' } } },
+      { name: 'Record label', bg: { type: 'radial', color: '#2a1408', color2: '#0a0503' }, layer: { font: { family: 'Fraunces', weight: 600, italic: true }, type: { case: 'none' }, fill: { type: 'gradient', color: '#ffd28a', color2: '#ff7a3d', angle: 45 }, path: 'circle', params: { mode: 'fill', speed: -1, separator: 'star', gap: 0.8 } } },
+      { name: 'Blob marquee', bg: { type: 'solid', color: '#f2efe8' }, layer: { font: { family: 'Unbounded', weight: 800 }, type: { size: 0.085 }, fill: { type: 'palette', palette: ['#111111', '#ff3b00', '#0015ff'] }, path: 'blob', params: { mode: 'fill', speed: 1, separator: 'dot', cornerSmooth: 0.7 } } },
+      { name: 'Swoosh caption', bg: { type: 'linear', color: '#0015ff', color2: '#00b7ff', angle: 120 }, layer: { font: { family: 'Inter Tight', weight: 800 }, type: { case: 'none', size: 0.14 }, fill: { type: 'solid', color: '#ffffff' }, path: 'swoosh', params: { mode: 'still', wave: 0.4, waveLength: 5, waveSpeed: 1, align: 'baseline' } } },
+    ],
+
     setup(f) {
       const sep = SEPARATORS[f.params.separator] || '';
       const sepW = sep ? TM.text.advance(sep, f.layer.font.family, f.layer.font.weight, f.size) : 0;
