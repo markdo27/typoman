@@ -78,6 +78,8 @@
       store.on('change', () => { this.drawRuler(); this.renderLanes(); this.forceText(); });
       store.on('select', () => this.renderLanes(true));
       TM.fonts.onChange(() => this.renderLanes(true));
+      // The UI fonts load without blocking boot: redraw the ruler's labels once they arrive.
+      if (document.fonts && document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', () => this.drawRuler(true));
       this.sync();
       this.renderLanes(true);
     }
