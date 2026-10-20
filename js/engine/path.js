@@ -22,6 +22,9 @@
   const hyp = Math.hypot;
 
   // ───────────────────────────── sampled path ─────────────────────────────
+  // Caches a re-parameterised copy (spaced, tracked) must not share with its source.
+  const FRESH = { _offsets: null, _spaced: null, _phi: null, _rounded: null, _lanes: null, _tracked: null };
+
   class SampledPath {
     /** xs, ys: point coordinates in pixels. */
     constructor(xs, ys, closed) {
@@ -265,10 +268,221 @@
         cum[i] = cum[i - 1] + seg * Math.max(0.15, 1 - key * density);
       }
       const out = Object.create(SampledPath.prototype);
-      Object.assign(out, this, { cum, length: cum[m - 1], _offsets: null, _spaced: null, _phi: null });
+      Object.assign(out, this, { cum, length: cum[m - 1], ...FRESH });
       if (this._spaced.size > 16) this._spaced.clear();
       this._spaced.set(key, out);
       return out;
+    }
+
+    // ── Lanes for a block of text (Path Flow) ──
+    // rounded() gives a curve the block can follow, lane(d) its parallel curves, tracked() the
+    // spacing along one of them. Draw a lane's text with at()/atSmooth() of the tracked copy.
+
+    /**
+     * Bend-limited copy for laying a block of text along the path. `left` and `right` are radii
+     * in px: a bend whose centre of curvature lies left of travel (−normal, "above" a
+     * left-to-right path) keeps a radius of at least `left`, one curving the other way at least
+     * `right` (0 leaves that side alone). Where the path bends tighter, the copy follows a ball of
+     * that radius rolled along the inside of the bend: a circular fillet tangent to the path on
+     * both sides, and a notch the ball can't enter (a heart's cusp) is bridged. Everywhere else
+     * the copy is the path. So every parallel curve closer than those radii (lane(d)) is clean,
+     * with no cusps or loops, and lanes laid on them never cross. A closed path too small for
+     * the ball on its inside grows outward until the ball fits.
+     *
+     * opts.prefer = [left, right]: larger "comfort" radii, grown towards in steps. Each fillet
+     *   or bridge on the way is kept only while no point of the original path ends up more than
+     *   opts.reach px (default 0) from it, so comfort rounds a wave's crests and a zigzag's
+     *   corners but never cuts off a star's points or flattens a shape.
+     * opts.limit: the same bound for the hard radii (default: none). Where even those would
+     *   move the curve further, the bend is left for the spacing to cope with.
+     * opts.unwind: let the hard radii cut out loops too tight to follow (a bridge that turns a
+     *   whole turn less than what it replaces). Off by default: a loop drawn on purpose stays,
+     *   and so does every turn of a spiral. Useful for the in-between shapes of a morph.
+     * Cached per options.
+     */
+    rounded(left, right, opts = {}) {
+      const q = (v) => (v > 0.5 ? Math.round(v * 2) / 2 : 0);
+      const lh = q(left), rh = q(right), pref = opts.prefer || [];
+      const ls = Math.max(lh, q(pref[0])), rs = Math.max(rh, q(pref[1]));
+      const reach = Math.max(0, opts.reach || 0), limit = opts.limit > 0 ? opts.limit : Infinity, unwind = !!opts.unwind;
+      if (this.n < 4 || this.length < 2 || !(ls || rs)) return this;
+      const key = [lh, rh, ls, rs, Math.round(reach), Math.round(Math.min(limit, 1e6)), unwind].join('|');
+      if (!this._rounded) this._rounded = new Map();
+      const hit = this._rounded.get(key);
+      if (hit) return hit;
+      const radii = [lh, rh, ls, rs].filter((v) => v > 0);
+      const step = clamp(Math.min(...radii) / 16, 1, Math.max(1, Math.min(8, this.length / 24)));
+      const P0 = polyOf(this, step);
+      let P = P0;
+      // Hard radii in two growing steps, alternating sides, so where both sides' fillets
+      // compete for the same stretch (a wave too tight for the block) neither side wins it all.
+      for (let k = 1; k <= 2; k++) {
+        const order = k % 2 ? [[1, rh], [-1, lh]] : [[-1, lh], [1, rh]];
+        for (const [side, r] of order) if (r) P = roll(P, side, (r * k) / 2, limit, step, P0, unwind);
+      }
+      if (P.closed) P = grow(P, lh, rh, step);
+      // Comfort radii in four steps, each fillet kept only within reach of the original path.
+      for (let k = 1; k <= 4 && reach > 0 && (ls > lh || rs > rh); k++) {
+        const order = k % 2 ? [[1, rh, rs], [-1, lh, ls]] : [[-1, lh, ls], [1, rh, rs]];
+        for (const [side, a, b] of order) if (b > a) P = roll(P, side, a + ((b - a) * k) / 4, reach, step, P0);
+      }
+      const out = new SampledPath(Float32Array.from(P.xs), Float32Array.from(P.ys), this.closed);
+      // Where each point came from on this path: srcAt() on the copy, and on its lanes.
+      out.src = Float64Array.from(out.closed ? [...P.src, P.src[0] + this.length] : P.src);
+      if (this._rounded.size > 8) this._rounded.clear();
+      this._rounded.set(key, out);
+      return out;
+    }
+
+    /**
+     * Parallel curve d px along the normal (negative = left of travel), like offset(d), that also
+     * records where each point came from: `src` is the arc length on the source, read back with
+     * srcAt(), so every lane of a block can share a phase along it. The source is this path, or
+     * the path this one was rounded() from: a lane of a rounded copy maps straight back to the
+     * drawn path. On a rounded() curve and within its radii there are no loops to cut. Cached
+     * per d.
+     */
+    lane(d) {
+      const key = Math.round(d * 4) / 4;
+      if (!this._lanes) this._lanes = new Map();
+      const hit = this._lanes.get(key);
+      if (hit) return hit;
+      const n = this.n, xs = [], ys = [], src = [], from = this.src || this.cum;
+      let lx = 0, ly = 0;
+      for (let i = 0; i < n; i++) {
+        const x = this.xs[i] - this.ty[i] * key, y = this.ys[i] + this.tx[i] * key;
+        // Drop points that step backwards against the source direction (a cusp's swallowtail).
+        if (xs.length && (x - lx) * this.tx[i] + (y - ly) * this.ty[i] <= 1e-6) continue;
+        xs.push(x);
+        ys.push(y);
+        src.push(from[i]);
+        lx = x;
+        ly = y;
+      }
+      let out = this;
+      if (xs.length > 1) {
+        out = new SampledPath(Float32Array.from(xs), Float32Array.from(ys), this.closed);
+        // Closing segment: back to the first kept point, a whole source lap on.
+        if (out.closed) src.push(src[0] + (from[from.length - 1] - from[0]));
+        out.src = Float64Array.from(src);
+      }
+      if (this._lanes.size > 16) this._lanes.clear();
+      this._lanes.set(key, out);
+      return out;
+    }
+
+    /**
+     * Arc length on the source path at arc length s of a rounded() copy, a lane() or a tracked()
+     * copy of either (text distance, then). Plain paths return s.
+     */
+    srcAt(s) {
+      const src = this.src, L = this.length, cum = this.cum;
+      if (!src || L <= 1e-9) return s;
+      if (this.closed) s = mod(s, L);
+      else if (s <= 0) return src[0] + s;
+      else if (s >= L) return src[src.length - 1] + (s - L);
+      const i = this._index(s);
+      const seg = cum[i + 1] - cum[i];
+      return lerp(src[i], src[i + 1], seg > 1e-9 ? (s - cum[i]) / seg : 0);
+    }
+
+    /**
+     * Collision-free tracking for a run of glyphs centred on this curve (one lane). Returns a
+     * copy re-parameterised by text distance, like spaced(): text advances at
+     *   du/ds = 1/σ(s),  σ = 1 / (1 − h·|ω|), times a lean factor,
+     * with ω the glyphs' rotation rate along the curve (`rotate` × the tangent's turning,
+     * averaged over `smooth` px like atSmooth) and h their reach toward the inside of the bend:
+     * `top` (px above the glyph centres) where the curve turns left, `bottom` where it turns
+     * right. h·|ω| is exactly what the inner corners of neighbouring rigid glyph boxes lose, so
+     * every pair gets the room its own turning takes, on the concave side's account only, and
+     * straight stretches keep the layout's spacing. Where the drawn angle differs from the
+     * curve's (averaging turns glyphs early into a bend, rotate < 1 holds them back), the boxes
+     * lean against the curve, and a leaning pair needs its advance along the boxes' own axis
+     * (1/cos of the lean, but no more than its height over the sine; `width` is the narrowest
+     * advance).
+     * `spread` px eases σ in and out like a tracking curve: a max-filter followed by a
+     * triangle blur of the same reach, so it only ever adds room. `amount` scales the extra
+     * room, `cap` bounds σ. Cached per options.
+     */
+    tracked(o = {}) {
+      const top = Math.max(0, o.top || 0), bottom = Math.max(0, o.bottom || 0);
+      const rotate = o.rotate == null ? 1 : clamp(o.rotate, 0, 1), amount = o.amount == null ? 1 : Math.max(0, o.amount);
+      const smooth = Math.max(0, o.smooth || 0), spread = Math.max(0, o.spread || 0);
+      const cap = Math.max(1, o.cap || 3), width = Math.max(1, o.width || 1);
+      if (!(amount > 1e-3) || this.n < 3 || this.length < 1 || !(top + bottom > 0)) return this;
+      const key = [top, bottom, rotate, amount, smooth, spread, cap, width].map((v) => Math.round(v * 8) / 8).join('|');
+      if (!this._tracked) this._tracked = new Map();
+      const hit = this._tracked.get(key);
+      if (hit) return hit;
+      const L = this.length, closed = this.closed, n = this.n, cum = this.cum, last = cum.length - 1;
+      // A uniform grid along the curve: tangent angles at the nodes, turning per cell. A few px
+      // resolve any bend a block of text can follow (rounded() keeps them ≥ a glyph's reach).
+      const M = Math.max(8, Math.ceil(L / clamp(L / 640, 1, 4)));
+      const ds = L / M;
+      const ang = new Float64Array(M + 1);
+      for (let m = 0, i = 0; m <= M; m++) {
+        const s = m === M ? L : m * ds;
+        while (i < last - 1 && cum[i + 1] <= s) i++;
+        const j = i + 1 < n ? i + 1 : 0, seg = cum[i + 1] - cum[i];
+        const t = seg > 1e-9 ? clamp((s - cum[i]) / seg) : 0;
+        ang[m] = Math.atan2(lerp(this.ty[i], this.ty[j], t), lerp(this.tx[i], this.tx[j], t));
+      }
+      const d = new Float64Array(M);
+      for (let m = 0; m < M; m++) d[m] = angleDelta(ang[m], ang[m + 1]);
+      // The glyphs' rotation rate: the turning, averaged like atSmooth (a triangle over `smooth`
+      // px, i.e. two box passes of half that width), times `rotate`.
+      const half = Math.round(smooth / 2 / ds);
+      let w = new Float64Array(M);
+      for (let m = 0; m < M; m++) w[m] = (d[m] / ds) * rotate;
+      if (half > 0) w = boxFilter(boxFilter(w, half, closed), half, closed);
+      // Their lean against the curve: the drawn angle (rotate × the averaged tangent angle) less
+      // the curve's own. Averaging turns a glyph early into a bend; rotate < 1 holds it back.
+      let lean = null;
+      if (half > 0 || rotate < 1) {
+        const E = 2 * half, th = new Float64Array(M), ext = new Float64Array(M + 2 * E);
+        let acc = 0;
+        for (let m = 0; m < M; m++) { th[m] = acc + d[m] / 2; acc += d[m]; }
+        for (let t = 0; t < ext.length; t++) {
+          const m = t - E, lap = Math.floor(m / M);
+          ext[t] = closed ? th[m - lap * M] + lap * acc : th[clamp(m, 0, M - 1)];
+        }
+        const sm = half > 0 ? boxFilter(boxFilter(ext, half, false), half, false) : ext;
+        lean = new Float64Array(M);
+        for (let m = 0; m < M; m++) {
+          const a = sm[m + E] + ang[0];
+          lean[m] = angleDelta(th[m] + ang[0], rotate * Math.atan2(Math.sin(a), Math.cos(a)));
+        }
+      }
+      const H = top + bottom;
+      let sig = new Float64Array(M);
+      for (let m = 0; m < M; m++) {
+        const h = w[m] > 0 ? bottom : top;
+        let k = 1 / Math.max(1 / cap, 1 - h * Math.abs(w[m]));
+        if (lean) {
+          // A pair of boxes leaning by φ needs its advance along the boxes' own axis (1/cos φ),
+          // unless the lean already lifts one clear of the other (height over sin φ).
+          const c = Math.abs(Math.cos(lean[m])), sn = Math.abs(Math.sin(lean[m]));
+          if (sn > 1e-4) k *= Math.min(c > 1e-6 ? 1 / c : cap, Math.max(1, H / (width * sn)));
+        }
+        sig[m] = clamp(1 + amount * (k - 1), 1, cap);
+      }
+      // Max-filter, then a triangle (two boxes) of the same reach: smooth, and never below σ.
+      const R = Math.round(spread / ds), hb = R >> 1;
+      if (hb > 0) sig = boxFilter(boxFilter(maxFilter(sig, 2 * hb, closed), hb, closed), hb, closed);
+      // Integrate du = ds/σ and read it back at the curve's own samples.
+      const U = new Float64Array(M + 1);
+      for (let m = 0; m < M; m++) U[m + 1] = U[m] + ds / sig[m];
+      const out = new Float64Array(cum.length);
+      for (let i = 0; i <= last; i++) {
+        const x = cum[i] / ds, m = Math.min(M - 1, Math.max(0, Math.floor(x)));
+        out[i] = U[m] + ((x - m) * ds) / sig[m];
+      }
+      const res = Object.create(SampledPath.prototype);
+      Object.assign(res, this, { cum: out, length: out[last], ...FRESH });
+      res.src = this.src || cum;
+      if (this._tracked.size > 16) this._tracked.clear();
+      this._tracked.set(key, res);
+      return res;
     }
 
     /** Trace the path into a canvas context (no stroke/fill). Optional [s0, s1] sub-range. */
@@ -283,6 +497,273 @@
       }
       if (this.closed && s0 <= 0 && s1 >= this.length) ctx.closePath();
     }
+  }
+
+  // ─────────────────── lane geometry helpers (rounded / tracked) ───────────────────
+  // Polylines here are { xs, ys, src, closed }: Float64Array coordinates in px, and for every
+  // point the arc length on the original path it stands for (fillets interpolate it).
+
+  /** Uniform polyline copy of a sampled path, about `step` px between points. */
+  function polyOf(sp, step) {
+    const L = sp.length, closed = sp.closed, cum = sp.cum, last = cum.length - 1;
+    const n = Math.max(closed ? 8 : 4, Math.round(L / step) + (closed ? 0 : 1));
+    const xs = new Float64Array(n), ys = new Float64Array(n), src = new Float64Array(n);
+    const span = closed ? L / n : L / (n - 1);
+    for (let k = 0, i = 0; k < n; k++) {
+      const s = Math.min(k * span, L);
+      while (i < last - 1 && cum[i + 1] <= s) i++;
+      const j = i + 1 < sp.n ? i + 1 : 0, seg = cum[i + 1] - cum[i], t = seg > 1e-9 ? (s - cum[i]) / seg : 0;
+      xs[k] = lerp(sp.xs[i], sp.xs[j], t);
+      ys[k] = lerp(sp.ys[i], sp.ys[j], t);
+      src[k] = s;
+    }
+    return { xs, ys, src, closed, span, length: L };
+  }
+
+  /**
+   * How far the original path strays from a ball's surface over the stretch a bridge replaces
+   * (original arc length from sa to sb): the largest distance of an original point outside the
+   * ball (centre cx, cy, radius r) to it.
+   */
+  function strayFrom(P0, sa, sb, cx, cy, r) {
+    const n = P0.xs.length, span = P0.span;
+    if (P0.closed && sb < sa) sb += P0.length;
+    let k0 = Math.ceil(sa / span), k1 = Math.floor(sb / span), worst = 0;
+    if (!P0.closed) { k0 = Math.max(0, k0); k1 = Math.min(n - 1, k1); }
+    for (let k = k0; k <= k1; k++) {
+      const j = P0.closed ? ((k % n) + n) % n : k;
+      const d = Math.hypot(P0.xs[j] - cx, P0.ys[j] - cy) - r;
+      if (d > worst) worst = d;
+    }
+    return worst;
+  }
+
+  /**
+   * Signed turning at every vertex: `turn` in radians and `k` per px (positive turns toward
+   * +normal, i.e. clockwise on screen).
+   */
+  function curvatures(P) {
+    const { xs, ys, closed } = P, n = xs.length, k = new Float64Array(n), turn = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      if (!closed && (i === 0 || i === n - 1)) continue;
+      const a = i ? i - 1 : n - 1, b = i + 1 < n ? i + 1 : 0;
+      const ux = xs[i] - xs[a], uy = ys[i] - ys[a], vx = xs[b] - xs[i], vy = ys[b] - ys[i];
+      const lu = Math.hypot(ux, uy), lv = Math.hypot(vx, vy);
+      if (lu > 1e-9 && lv > 1e-9) {
+        turn[i] = Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy);
+        k[i] = turn[i] / ((lu + lv) / 2);
+      }
+    }
+    return { k, turn };
+  }
+
+  /** Unit normals pointing to `side` (+1: +normal, −1: the other side). */
+  function sideNormals(P, side) {
+    const { xs, ys, closed } = P, n = xs.length, nx = new Float64Array(n), ny = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const a = closed ? (i + n - 1) % n : Math.max(0, i - 1), b = closed ? (i + 1) % n : Math.min(n - 1, i + 1);
+      const dx = xs[b] - xs[a], dy = ys[b] - ys[a], l = Math.hypot(dx, dy) || 1;
+      nx[i] = (-dy / l) * side;
+      ny[i] = (dx / l) * side;
+    }
+    return { nx, ny };
+  }
+
+  /**
+   * The ball's arc between contact points a and b (exclusive): { cx, cy, pts: [x, y, …] }, or
+   * null when no ball of radius r touches both. It leaves a along the curve's own direction.
+   */
+  function ballArc(P, nrm, side, a, b, r, step) {
+    const { xs, ys } = P, { nx, ny } = nrm;
+    const ax = xs[a], ay = ys[a], bx = xs[b], by = ys[b];
+    const vx = bx - ax, vy = by - ay, len = Math.hypot(vx, vy), c = len / 2;
+    if (len < 1e-9 || c > r * 1.002) return null;
+    const hgt = Math.sqrt(Math.max(0, r * r - c * c));
+    const mx = (ax + bx) / 2, my = (ay + by) / 2, px = -vy / len, py = vx / len;
+    // Of the two centres touching a and b, the one where the balls at a and b sit.
+    const ex = (ax + bx + r * (nx[a] + nx[b])) / 2, ey = (ay + by + r * (ny[a] + ny[b])) / 2;
+    const k = (mx + px * hgt - ex) ** 2 + (my + py * hgt - ey) ** 2 <= (mx - px * hgt - ex) ** 2 + (my - py * hgt - ey) ** 2 ? 1 : -1;
+    const cx = mx + k * px * hgt, cy = my + k * py * hgt;
+    const fa = Math.atan2(ay - cy, ax - cx), fb = Math.atan2(by - cy, bx - cx);
+    let sweep = angleDelta(fa, fb);
+    // The curve's direction at a is (side·ny, −side·nx); the arc must leave a that way.
+    const tx = side * ny[a], ty = -side * nx[a];
+    if ((-Math.sin(fa) * tx + Math.cos(fa) * ty) * sweep < 0) sweep -= Math.sign(sweep || 1) * TAU;
+    const count = Math.max(1, Math.ceil((r * Math.abs(sweep)) / step));
+    const pts = [];
+    for (let q = 1; q < count; q++) {
+      const f = fa + (sweep * q) / count;
+      pts.push(cx + r * Math.cos(f), cy + r * Math.sin(f));
+    }
+    return { cx, cy, pts, sweep };
+  }
+
+  /**
+   * Roll a ball of radius r along one side of a polyline (+1: the +normal side) and replace
+   * every stretch it can't touch by the ball's own arc: fillets in bends tighter than r, bridges
+   * over notches it can't enter (within half a turn of the ball along the curve). A bridge is
+   * kept only if no point of the original path P0 it replaces lies more than `reach` px off the
+   * ball, and never cuts a loop out unless `unwind`. Returns P itself when nothing changes and
+   * { failed: true } when the ball fits nowhere (a loop too small for it).
+   */
+  function roll(P, side, r, reach, step, P0, unwind) {
+    const { xs, ys, closed } = P, n = xs.length, src = P.src;
+    if (n < 4 || !(r > 0)) return P;
+    const { k: kap, turn } = curvatures(P), kr = 1 / r;
+    // Only points near something tighter than the ball can fail it.
+    const m = Math.min(closed ? n >> 1 : n, Math.ceil((Math.PI * r) / step) + 2);
+    const mark = new Int32Array(n + 1);
+    let tight = false;
+    for (let i = 0; i < n; i++) {
+      if (!(side * kap[i] > kr)) continue;
+      tight = true;
+      const a = i - m, b = i + m + 1;
+      if (closed) {
+        if (2 * m + 1 >= n) { mark[0]++; mark[n]--; continue; }
+        const a2 = ((a % n) + n) % n, b2 = ((b % n) + n) % n;
+        mark[a2]++; mark[b2]--;
+        if (a2 >= b2) { mark[0]++; mark[n]--; }
+      } else { mark[Math.max(0, a)]++; mark[Math.min(n, b)]--; }
+    }
+    if (!tight) return P;
+    const nrm = sideNormals(P, side), { nx, ny } = nrm;
+    // Is any curve point inside the ball resting on point i? Near points are checked one by one
+    // (a swallowtail starts there), farther ones every few points: between two checks the curve
+    // can only dip a fraction of a px into the ball.
+    const r2 = r * r * (1 - 1e-3), bad = new Uint8Array(n), stride = Math.max(1, Math.floor(r / (8 * step)));
+    let nbad = 0;
+    for (let i = 0, run = 0; i < n; i++) {
+      run += mark[i];
+      if (run <= 0) continue;
+      const bx = xs[i] + r * nx[i], by = ys[i] + r * ny[i];
+      for (let o = 1; o <= m; o += o < 8 ? 1 : stride) {
+        let j = i - o, k = i + o;
+        if (closed) { if (j < 0) j += n; if (k >= n) k -= n; }
+        if (j >= 0) {
+          const dx = xs[j] - bx, dy = ys[j] - by;
+          if (dx * dx + dy * dy < r2) { bad[i] = 1; nbad++; break; }
+        }
+        if (k < n) {
+          const dx = xs[k] - bx, dy = ys[k] - by;
+          if (dx * dx + dy * dy < r2) { bad[i] = 1; nbad++; break; }
+        }
+      }
+    }
+    if (!nbad) return P;
+    if (nbad === n) return Object.assign({}, P, { failed: true });
+    let g0 = 0;
+    if (closed) while (bad[g0]) g0++;
+    const at = (t) => (closed ? (g0 + t) % n : t);
+    const ox = [], oy = [], os = [], L0 = P.length || (P0 ? P0.length : 0);
+    let changed = false;
+    for (let t = 0; t < n; ) {
+      const i = at(t);
+      if (!bad[i]) { ox.push(xs[i]); oy.push(ys[i]); os.push(src[i]); t++; continue; }
+      let u = t;
+      while (u < n && bad[at(u)]) u++;
+      const a = t > 0 ? at(t - 1) : -1, b = u < n ? at(u) : closed ? g0 : -1;
+      let arc = a >= 0 && b >= 0 ? ballArc(P, nrm, side, a, b, r, step) : null;
+      let sa = 0, sb = 0;
+      if (arc) {
+        sa = src[a];
+        sb = src[b];
+        if (closed && sb < sa) sb += L0;
+        // A fillet or a bridge over a notch turns as far as the stretch it replaces; one that
+        // differs by a whole turn would cut a loop out of the path (or a turn out of a spiral),
+        // which only `unwind` allows.
+        if (!unwind) {
+          let net = (turn[a] + turn[b]) / 2;
+          for (let v = t; v < u; v++) net += turn[at(v)];
+          if (Math.abs(net - arc.sweep) > Math.PI) arc = null;
+        }
+      }
+      if (arc && (reach === Infinity || !P0 || strayFrom(P0, sa, sb, arc.cx, arc.cy, r) <= reach)) {
+        const pts = arc.pts, c = pts.length / 2;
+        for (let q = 0; q < c; q++) {
+          ox.push(pts[2 * q]);
+          oy.push(pts[2 * q + 1]);
+          const s = lerp(sa, sb, (q + 1) / (c + 1));
+          os.push(closed && s >= L0 ? s - L0 : s);
+        }
+        changed = true;
+      } else for (let v = t; v < u; v++) { ox.push(xs[at(v)]); oy.push(ys[at(v)]); os.push(src[at(v)]); }
+      t = u;
+    }
+    if (!changed) return P;
+    // A closed curve restarts where the original started (lowest src), so src keeps rising
+    // along it and the curve's origin doesn't wander from roll to roll.
+    let z = 0;
+    if (closed) for (let q = 1; q < os.length; q++) if (os[q] < os[z]) z = q;
+    const rot = (a) => Float64Array.from(z ? a.slice(z).concat(a.slice(0, z)) : a);
+    return { xs: rot(ox), ys: rot(oy), src: rot(os), closed, length: P.length };
+  }
+
+  /** Parallel polyline d px along the normal, dropping points that step backwards. */
+  function offsetPoly(P, d) {
+    const { xs, ys, src, closed } = P, n = xs.length, { nx, ny } = sideNormals(P, 1), ox = [], oy = [], os = [];
+    for (let i = 0; i < n; i++) {
+      const x = xs[i] + nx[i] * d, y = ys[i] + ny[i] * d, k = ox.length;
+      if (k && (x - ox[k - 1]) * ny[i] - (y - oy[k - 1]) * nx[i] <= 1e-6) continue;
+      ox.push(x);
+      oy.push(y);
+      os.push(src[i]);
+    }
+    return ox.length > 3 ? { xs: Float64Array.from(ox), ys: Float64Array.from(oy), src: Float64Array.from(os), closed, length: P.length } : P;
+  }
+
+  /**
+   * A closed polyline whose inside can't hold its ball anywhere (a small circle under a tall
+   * block of text) is offset outward until it can, its outside bends kept clean as it grows.
+   */
+  function grow(P, lh, rh, step) {
+    for (let it = 0; it < 4; it++) {
+      const { xs, ys } = P, n = xs.length;
+      let A = 0, per = 0;
+      for (let i = 0, j = n - 1; i < n; j = i++) {
+        A += xs[j] * ys[i] - xs[i] * ys[j];
+        per += Math.hypot(xs[i] - xs[j], ys[i] - ys[j]);
+      }
+      // Screen y points down, so a positive area runs clockwise with its inside on +normal.
+      const inside = A > 0 ? 1 : -1, r = inside > 0 ? rh : lh, rOut = inside > 0 ? lh : rh;
+      if (!r || !(per > 0)) return P;
+      const test = roll(P, inside, r, Infinity, step, null);
+      if (!test.failed) return test;
+      const rin = Math.abs(A) / per; // = A_true · 2 / perimeter (A holds twice the area)
+      P = offsetPoly(P, -inside * Math.max(r * 1.02 - rin, r * 0.05));
+      if (rOut) P = roll(P, -inside, rOut, Infinity, step, null);
+      if (P.failed) return P;
+    }
+    return P;
+  }
+
+  /** Moving average over ±half samples in O(n): wraps on closed curves, clamps at open ends. */
+  function boxFilter(a, half, closed) {
+    const n = a.length;
+    if (!(half >= 1) || n < 2) return a;
+    const out = new Float64Array(n), w = 2 * half + 1;
+    const get = closed ? (j) => a[((j % n) + n) % n] : (j) => a[j < 0 ? 0 : j >= n ? n - 1 : j];
+    let s = 0;
+    for (let j = -half; j <= half; j++) s += get(j);
+    for (let m = 0; m < n; m++) {
+      out[m] = s / w;
+      s += get(m + half + 1) - get(m - half);
+    }
+    return out;
+  }
+
+  /** Largest value within ±R samples. */
+  function maxFilter(a, R, closed) {
+    const n = a.length, out = new Float64Array(n);
+    for (let m = 0; m < n; m++) {
+      let v = a[m];
+      if (closed || (m >= R && m + R < n)) {
+        for (let o = -R; o <= R; o++) { const x = a[closed ? (((m + o) % n) + n) % n : m + o]; if (x > v) v = x; }
+      } else {
+        for (let j = Math.max(0, m - R), e = Math.min(n - 1, m + R); j <= e; j++) if (a[j] > v) v = a[j];
+      }
+      out[m] = v;
+    }
+    return out;
   }
 
   // ───────────────────────────── bézier sampling ─────────────────────────────

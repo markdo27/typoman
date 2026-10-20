@@ -16,6 +16,7 @@
   var ENGINE = [
     'js/engine/core.js',
     'js/engine/fonts.js',
+    'js/engine/sfnt.js',
     'js/engine/text.js',
     'js/engine/path.js',
     'js/engine/scene.js',

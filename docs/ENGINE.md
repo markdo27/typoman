@@ -140,6 +140,18 @@ user's intent.
   Recursive's cursive forms switch on at its full slant. A slant the user pins in `font.axes`
   stays theirs, and a backward slant is always a skew.
 
+**Uploaded fonts** (`TM.fonts.addCustom(fileName, buffer)`) are read by `TM.sfnt.inspect`:
+the family is named from the file's own name table ("Caladea Bold (custom)") at its OS/2 weight,
+and a variable upload gets its weight range and every fvar axis, so the axis sliders and Axis Wave
+work on it. Instances draw from one shared blob URL. WOFF2 can't be read without a Brotli decoder
+and keeps the file name. Scenes saved under the older file-name family still resolve (an alias).
+
+**OpenType features.** `font.features` (`{ tnum: 1, ss01: 1, … }`) pins per-glyph features
+(figure styles, small caps, stylistic sets, character variants…) through the instance's
+`featureSettings`. `TM.fonts.features(family)` lists what a family has. Google serves most
+families without their optional features, so the catalogue lists only the figure styles found by
+drawing them (tnum, pnum, lnum); uploads list their GSUB features.
+
 **Ligatures.** Presets draw clusters one at a time, which would lose the font's ligatures. The
 layout finds, once per font, the sequences that draw differently as a run than letter by letter
 (fi, fl, ff, ffi, ffl, Th, st, a script's joins…), and lays each out as one cluster, since the
@@ -263,7 +275,17 @@ loop progress at which shape i is reached.
 - `path.spaced(h)` re-parameterises the arc length so text gets `h·|turn|` of extra room at
   bends (curvature smoothed over ±h).
 - Lay glyph centres out on `path.offset(centreOffset).spaced(capH / 2)` and letters stop
-  colliding on concave curves and at sharp corners (Path Flow does this).
+  colliding on concave curves and at sharp corners. This is the simple way.
+- **Collision-free lanes (Path Flow).**
+  - `path.rounded(minR, comfortR, opts)` rolls a ball along the inside of each bend and gives a
+    smoothed *carrier*: no bend is tighter than the text can follow, and fillets are kept only
+    while the drawn path stays close.
+  - `carrier.lane(d)` is an exact parallel curve of it, so lanes can never cross, and
+    `lane.srcAt(u)` maps back to arc length on the drawn path (for timing).
+  - `lane.tracked({ top, bottom, width, rotate, smooth, spread, amount, cap })` warps distance
+    so neighbouring glyphs never touch on the concave side, adding only the room needed.
+  - For path keyframes, round each key shape once and morph the rounded shapes. JSDoc in
+    `path.js`.
 
 **Easing.** `TM.ease(spec)` takes a name from `TM.EASINGS`, a cubic-bézier
 `[x1, y1, x2, y2]`, or a custom spring `'spring(stiffness, damping)'` (stiffness 10–1000,

@@ -41,7 +41,9 @@
   };
 
   /** Time of frame i, in seconds. Shared by every encoder and by the verification tools. */
-  X.frameTime = (plan, i) => plan.start + i / plan.fps;
+  // Scene time of frame i: spread over the plan's span (exactly loops × duration for loop
+  // exports), so frame `frames` would be the loop point again.
+  X.frameTime = (plan, i) => plan.start + (plan.span > 0 && plan.frames > 0 ? (i * plan.span) / plan.frames : i / plan.fps);
   /** Presentation timestamp of frame i in microseconds (WebCodecs units). */
   X.frameTimestamp = (plan, i) => Math.round((i * 1e6) / plan.fps);
 

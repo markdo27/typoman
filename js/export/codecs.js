@@ -166,10 +166,10 @@
       // Alpha: the sidecar stream is mostly flat 0/255, so it needs well under the colour bitrate.
       if (v) {
         out.push({ id: 'vp9-alpha', family: 'vp9', codec: v.codec, label: `VP9 + alpha · level ${v.level}`, level: v.level, container, mux: 'V_VP9', alphaMode: 'native', config: Object.assign(baseConfig(v.codec, plan, brV, 'vp9'), { alpha: 'keep' }) });
-        out.push({ id: 'vp9-sidecar', family: 'vp9', codec: v.codec, label: `VP9 + alpha · level ${v.level}`, level: v.level, container, mux: 'V_VP9', alphaMode: 'sidecar', config: baseConfig(v.codec, plan, brV, 'vp9'), alphaConfig: baseConfig(v.codec, plan, Math.round(brV * 0.5), 'vp9') });
+        out.push({ id: 'vp9-sidecar', family: 'vp9', codec: v.codec, label: `VP9 + alpha · level ${v.level}`, level: v.level, container, mux: 'V_VP9', alphaMode: 'sidecar', config: baseConfig(v.codec, plan, brV, 'vp9'), alphaConfig: baseConfig(v.codec, plan, brV, 'vp9') });
       }
       out.push({ id: 'vp8-alpha', family: 'vp8', codec: 'vp8', label: 'VP8 + alpha', container, mux: 'V_VP8', alphaMode: 'native', config: Object.assign(baseConfig('vp8', plan, br8, 'vp8'), { alpha: 'keep' }) });
-      out.push({ id: 'vp8-sidecar', family: 'vp8', codec: 'vp8', label: 'VP8 + alpha', container, mux: 'V_VP8', alphaMode: 'sidecar', config: baseConfig('vp8', plan, br8, 'vp8'), alphaConfig: baseConfig('vp8', plan, Math.round(br8 * 0.5), 'vp8') });
+      out.push({ id: 'vp8-sidecar', family: 'vp8', codec: 'vp8', label: 'VP8 + alpha', container, mux: 'V_VP8', alphaMode: 'sidecar', config: baseConfig('vp8', plan, br8, 'vp8'), alphaConfig: baseConfig('vp8', plan, br8, 'vp8') });
       return out;
     }
     if (v) out.push({ id: 'vp9', family: 'vp9', codec: v.codec, label: `VP9 profile 0 · level ${v.level}`, level: v.level, container, mux: 'V_VP9', alphaMode: null, config: baseConfig(v.codec, plan, brV, 'vp9') });

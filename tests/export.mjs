@@ -205,24 +205,27 @@ await run(async (cleanup) => {
     const s = sizeFor(180);
     const [a, b] = await refFrames(page, SCENES.solid, s, [0, SCENES.solid.duration], 'hash');
     R.check('engine: render(duration) === render(0) (the loop point)', a === b);
-    // A loop export must span exactly loops × duration, or the file restarts a fraction of a
-    // frame early or late (a hitch). Every loop length the inspector offers (0.5–20 s in 0.1 s
-    // steps) × scene fps × each format's export fps, planned with TM.Export.plan (pure).
+    // A loop export must span exactly loops × duration of scene time, or the file restarts a
+    // fraction of a frame early or late (a hitch): the frame after the last must be the loop
+    // point again, and the file itself must last within half a frame of the loop. Every loop
+    // length the inspector offers (0.5–20 s in 0.1 s steps) × scene fps × each format's export
+    // fps, planned with TM.Export.plan (pure).
     const fit = await page.evaluate(() => {
       const bad = [];
       let total = 0;
       for (let d10 = 5; d10 <= 200; d10++) for (const sceneFps of TM.Scene.FPS_OPTIONS) {
         const scene = TM.Scene.normalize({ duration: d10 / 10, fps: sceneFps });
-        for (const format of ['mp4', 'gif']) for (const fps of TM.Export.FORMATS[format].fps) {
+        for (const format of ['mp4', 'gif']) for (const fps of TM.Export.FORMATS[format].fps) for (const loops of [1, 3]) {
           total++;
-          const plan = TM.Export.plan(scene, { format, fps, loops: 1 });
-          if (Math.abs(plan.duration - scene.duration) > 1e-6) bad.push(`${scene.duration} s ${format} @ ${fps} fps → ${plan.frames} frames = ${plan.duration.toFixed(3)} s`);
+          const plan = TM.Export.plan(scene, { format, fps, loops });
+          const end = TM.Export.frameTime(plan, plan.frames), want = loops * scene.duration;
+          if (Math.abs(end - want) > 1e-9 || Math.abs(plan.duration - want) > 0.5 / fps + 1e-9) bad.push(`${scene.duration} s ×${loops} ${format} @ ${fps} fps → ${plan.frames} frames end at ${end.toFixed(4)} s, file ${plan.duration.toFixed(3)} s`);
         }
       }
       return { total, bad };
     });
-    R.known('N14', 'loop exports span exactly one loop at every export frame rate', fit.bad.length === 0,
-      `${fit.bad.length} of ${fit.total} length × fps combinations don't, e.g. ${fit.bad.filter((b) => /^2\.7 s|^3\.3 s/.test(b)).slice(0, 3).join('; ')}`);
+    R.check('N14: loop exports span exactly whole loops at every export frame rate', fit.bad.length === 0,
+      `${fit.bad.length} of ${fit.total} combinations don't${fit.bad.length ? ', e.g. ' + fit.bad.slice(0, 3).join('; ') : ''}`);
   }
 
   // Cancelling: an aborted export rejects with AbortError at once; the exports below then show
