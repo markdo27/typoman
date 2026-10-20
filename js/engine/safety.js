@@ -70,7 +70,9 @@
           let u = 0, d = 0;
           for (let j = 0; j < tol; j++) {
             const h = hits[(((k - j) % n + n) % n) * G * G + y * G + x];
-            if (h > 0) u = 1; else if (h < 0) d = 1;
+            // The latest change in the window only: a cell flipping every frame (a per-frame
+            // strobe at 50/60 fps) must read as alternating turns, not as both at once.
+            if (h) { if (h > 0) u = 1; else d = 1; break; }
           }
           ru += u; rd += d;
           up[(y + 1) * N1 + x + 1] = up[y * N1 + x + 1] + ru;

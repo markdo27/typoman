@@ -263,8 +263,10 @@ const results = await page.evaluate(async () => {
       return TM.Safety.flashes(TM.Scene.normalize(s));
     };
     const [hz2, hz4, spot, bar, plain] = [await check({ hz: 2 }), await check({ hz: 4 }), await check({ hz: 6, area: 0.01 }), await check({ sweeps: 20 }), await TM.Safety.flashes(sceneFor('rise'))];
+    // A strobe flipping every frame at 60 fps (30 Hz) must read as 30 flashes a second, not 0.
+    const perFrame = await (async () => { const s = TM.Scene.defaults(); s.duration = 2; s.fps = 60; s.bg = { type: 'solid', color: '#000000' }; s.layers[0].preset = 'smoke-strobe'; s.layers[0].params = Object.assign(TM.presetDefaults('smoke-strobe'), { hz: 30 }); return TM.Safety.flashes(TM.Scene.normalize(s)); })();
     delete TM.presets['smoke-strobe']; TM.presetOrder.splice(TM.presetOrder.indexOf('smoke-strobe'), 1);
-    return { ok: hz2.ok && hz2.flashes === 2 && !hz4.ok && hz4.flashes === 4 && spot.ok && bar.flashes === 5 && plain.ok, hz2: hz2.flashes, hz4: hz4.flashes, bar: bar.flashes };
+    return { ok: hz2.ok && hz2.flashes === 2 && !hz4.ok && hz4.flashes === 4 && spot.ok && bar.flashes === 5 && plain.ok && perFrame.flashes >= 25, hz2: hz2.flashes, hz4: hz4.flashes, bar: bar.flashes, perFrame: perFrame.flashes };
   })();
 
   // Starter templates: every one builds a valid multi-layer scene that renders the same twice,
@@ -343,7 +345,7 @@ const st = results.styles;
 console.log(`italics + obliques: true italic ${st.italic ? 'ok' : 'FAIL'} · slant onto slnt axis ${st.slnt ? 'ok' : 'FAIL'}`);
 if (!st.italic || !st.slnt) fails.push('italic instances or slnt slant broken');
 const sf = results.safety;
-console.log(`photosensitivity check: ${sf.ok ? 'ok' : 'FAIL'} (2 Hz strobe ${sf.hz2}/s · 4 Hz ${sf.hz4}/s · fast bar ${sf.bar}/s)`);
+console.log(`photosensitivity check: ${sf.ok ? 'ok' : 'FAIL'} (2 Hz strobe ${sf.hz2}/s · 4 Hz ${sf.hz4}/s · fast bar ${sf.bar}/s · per-frame 60 fps ${sf.perFrame}/s)`);
 if (!sf.ok) fails.push('flash detector miscounts (TM.Safety)');
 const fl = results.fontLoads;
 console.log(`catalogue fonts: ${fl.total - fl.failed.length}/${fl.total} load${fl.failed.length ? ' · FAILED: ' + fl.failed.join(', ') : ''}`);
