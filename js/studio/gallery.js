@@ -159,6 +159,7 @@
       const ids = TM.presetOrder.slice();
       const insp = this.view === 'inspiration', tpl = this.view === 'templates';
       const tpls = TM.Templates ? TM.Templates.list() : [];
+      if (tpl && !tpls.length) { this.view = 'presets'; return this.build(); } // no templates loaded
       const all = looks.all();
       this.tabs.querySelectorAll('[role="tab"]').forEach((b) => {
         const on = b.dataset.view === this.view;
