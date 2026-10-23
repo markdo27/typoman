@@ -1,6 +1,6 @@
-/* Native AE export: one editable text layer per studio layer. Motion uses native
- * text paths, text animators and named controls; only authored transform/path
- * poses become keys. AE itself creates the binary .aep when the JSX is run. */
+/* AE export: one text layer per studio layer. The default transfers preview curves
+ * with two timing keys. Optional native controls rebuild supported presets using
+ * text paths and animators. AE itself creates the .aep when the JSX is run. */
 (function (TM) {
   'use strict';
   const X = TM.Export;
@@ -53,6 +53,11 @@
   }
 
   X.encodeAfterEffects = async function (plan, scene, hooks = {}) {
+    if (plan.aeMode !== 'native') {
+      const { layers, notes } = await X.AEMotion.build(plan, scene, hooks);
+      layers.forEach((l) => { l.color = rgb(l.color); l.strokeColor = rgb(l.strokeColor); });
+      return file(plan, scene, layers, notes, 'ae-preview');
+    }
     const notes = [
       'One editable AE text layer per Typoman layer. Change Source Text, Effect Controls and Text > Animators / Path Options. Motion is expression-driven, with no per-frame or per-letter keys and no parent nulls.',
       'Native motion adapters: Path Flow, Wave, Rise and Typewriter. These use AE spacing and simplified motion curves, so appearance can differ. Other presets keep their text without preset motion.',
@@ -158,12 +163,16 @@
       if (hooks.onProgress) hooks.onProgress({ phase: 'prepare', fraction: layers.length / scene.layers.length * 0.96 });
       await X.breathe();
     }
+    return file(plan, scene, layers, notes, 'ae-native');
+  };
+
+  function file(plan, scene, layers, notes, engine) {
     const data = { name: scene.name, width: plan.width, height: plan.height, fps: plan.fps, duration: plan.duration,
       bg: scene.bg.type === 'transparent' ? null : rgb(scene.bg.color), layers, notes };
-    const source = '// TYPOMAN native editable After Effects export: one text layer per studio layer.\n' +
+    const source = '// TYPOMAN editable After Effects export: one text layer per studio layer.\n' +
       '(function () {\nvar data = ' + json(data) + ';\n(' + importProject.toString() + ')(data);\n})();\n';
-    return { blob: new Blob([source], { type: 'text/javascript' }), info: { label: 'After Effects / native text', engine: 'ae-native', layers: layers.length, notes } };
-  };
+    return { blob: new Blob([source], { type: 'text/javascript' }), info: { label: engine === 'ae-preview' ? 'After Effects / preview motion' : 'After Effects / native text', engine, layers: layers.length, notes } };
+  }
 
   // ES3-compatible ExtendScript. Indexed groups are always reacquired after additions.
   function importProject(d) {
@@ -198,7 +207,7 @@
         stage = 'creating text layer ' + l.name;
         layer = comp.layers.addText(l.text);
         layer.name = l.name; layer.enabled = l.visible;
-        layer.comment = 'TYPOMAN ' + l.preset + '. Edit Source Text, Effect Controls, Text > Animators and Path Options.\n' + d.notes.join('\n');
+        layer.comment = 'TYPOMAN ' + l.preset + (l.matchPreview ? '. Retime the two Motion progress keys. Re-export detailed motion or copy changes to preserve layout.\n' : '. Edit Source Text, Effect Controls, Text > Animators and Path Options.\n') + d.notes.join('\n');
         prop = layer.property('ADBE Text Properties').property('ADBE Text Document');
         stage = 'styling ' + l.name;
         doc = prop.value;
@@ -210,7 +219,8 @@
         doc.applyFill = l.stroke !== 'outline'; doc.applyStroke = l.stroke === 'outline' || l.stroke === 'both';
         prop.setValue(doc);
         layer.property('ADBE Transform Group').property('ADBE Position').setValue(l.anchor);
-        if (l.path) layer.property('ADBE Transform Group').property('ADBE Anchor Point').setValue([0, 0]);
+        if (l.matchPreview) layer.property('ADBE Text Properties').property('ADBE Text More Options').property('ADBE Text Anchor Point Align').setValue([0, -50]);
+        if (l.path || l.matchPreview) layer.property('ADBE Transform Group').property('ADBE Anchor Point').setValue([0, 0]);
         else layer.property('ADBE Transform Group').property('ADBE Anchor Point').expression =
           'var r=sourceRectAtTime(0,false);[r.left+r.width/2,r.top+r.height/2];';
         stage = 'adding motion controls to ' + l.name;
@@ -219,6 +229,7 @@
           var effect = layer.property('ADBE Effect Parade').addProperty('ADBE Slider Control');
           effect.name = name;
           effect.property('ADBE Slider Control-0001').setValue(l.controls[name]);
+          if (name === 'Motion progress (%)' && l.progressKeys) authoredKeys(effect.property('ADBE Slider Control-0001'), l.progressKeys.times, l.progressKeys.values, false);
         }
         if (l.sourceExpression) prop.expression = l.sourceExpression;
         stage = 'adding text animators to ' + l.name;
@@ -230,6 +241,7 @@
           attribute.setValue(a.value);
           if (a.propertyExpression) attribute.expression = a.propertyExpression;
           var selector = animator.property('ADBE Text Selectors').addProperty('ADBE Text Expressible Selector');
+          if (l.matchPreview) selector.property('ADBE Text Range Type2').setValue(1); // characters, including spaces
           selector.property('ADBE Text Expressible Amount').expression = a.amount;
         }
         if (l.path) {

@@ -14,7 +14,7 @@ try {
       scene.name = 'Editable "type"\n</script>\\test';
       scene.duration = 2;
       Object.assign(scene.layers[0], { preset, text: 'TYPE IN MOTION', name: id }, patch);
-      const out = await TM.Export.run(scene, { format: 'ae', fps: 24, resolution: 720, ...opts });
+      const out = await TM.Export.run(scene, { format: 'ae', aeMode: 'native', fps: 24, resolution: 720, ...opts });
       results[id] = { source: await out.blob.text(), name: out.name, info: out.info };
     }
     await exportScene('wave', 'wave', { params: { weightWave: false } });
@@ -37,8 +37,52 @@ try {
     await exportScene('timing', 'wave', { time: { delay: 0.5, cycles: 2, mode: 'once' } }, { fps: 24 });
     const multi = TM.Scene.defaults();
     multi.layers = [multi.layers[0], { name: 'Second', preset: 'rise', text: 'SECOND' }, { name: 'Hidden', visible: false, text: 'HIDDEN' }];
-    const out = await TM.Export.run(multi, { format: 'ae', resolution: 720 });
+    const out = await TM.Export.run(multi, { format: 'ae', aeMode: 'native', resolution: 720 });
     results.multi = { source: await out.blob.text(), info: out.info };
+    results.matched = {};
+    for (const [id, preset, patch] of [
+      ['path', 'path-flow', {}],
+      ['multiline', 'path-flow', { text: 'TYPE IN\nMOTION' }],
+      ['timed', 'path-flow', { time: { delay: 0.17, cycles: 3, mode: 'once' } }],
+      ['morph', 'path-flow', { params: { wave: 0.3 }, pathMorph: { enabled: true, target: TM.Path.preset('circle') } }],
+      ['bounce', 'wave', { params: { mode: 'bounce', weightWave: false, squash: 1.2, scale: 0.3 } }],
+      ['rise', 'rise', { params: { order: 'words', jitter: 0.4, easeIn: 'springSnappy', easeOut: 'inQuart' } }],
+      ['assemble', 'assemble', {}],
+      ['typewriter', 'typewriter', {}],
+      ['transform', 'wave', { params: { weightWave: false }, transform: { enabled: true, keys: [
+        { t: 0, x: 0, y: 0, scale: 1, rot: 0, opacity: 1, ease: [0.2, 0.1, 0.4, 1] },
+        { t: 1, x: 0.1, y: 0.15, scale: 1.4, rot: 25, opacity: 0.5, ease: 'linear' }
+      ] } }]
+    ]) {
+      let scene = TM.Scene.defaults(); scene.duration = 1;
+      Object.assign(scene.layers[0], { name: id, text: 'TYPE IN MOTION', preset }, patch);
+      scene = TM.Scene.normalize(scene);
+      let diagnostics;
+      const opts = { format: 'ae', resolution: 720, fps: 24 };
+      const result = await TM.Export.run(scene, opts, { onMotionCurves: (d) => { diagnostics = d; } });
+      // Independent reference: inspect the canvas matrices left by the real drawGlyph,
+      // rather than translating its options with the export sampler's implementation.
+      const plan = TM.Export.plan(scene, opts), renderer = TM.Export.makeRenderer(scene, plan);
+      renderer.frame.motionCapture = true;
+      const draw = renderer.frame.drawGlyph, reference = [];
+      let frameIndex;
+      renderer.frame.drawGlyph = function (g, o = {}) {
+        draw.call(this, g, o);
+        const alpha = (o.alpha == null ? 1 : o.alpha) * this.alpha;
+        if (g.isSpace || alpha <= 0.002) return;
+        const m = this.ctx.getTransform();
+        let x = m.e, y = m.f;
+        if (o.anchor === 'baseline') { x -= m.c * this.layout.capH / 2; y -= m.d * this.layout.capH / 2; }
+        const xf = renderer._transformAt(this.layer, TM.Export.frameTime(plan, frameIndex), plan.width, plan.height);
+        if (xf) { const px = x; x = xf.a * px + xf.c * y + xf.e; y = xf.b * px + xf.d * y + xf.f; }
+        reference.push({ frame: frameIndex, id: (o.motionSlot == null ? 0 : o.motionSlot) + ':' + (g.motionLine == null ? g.line || 0 : g.motionLine) + ':' + g.i,
+          position: [x, y], opacity: alpha * (xf ? xf.opacity : 1),
+          rotation: (o.rot || 0) * 180 / Math.PI + (xf ? Math.atan2(xf.b, xf.a) * 180 / Math.PI : 0),
+          scale: [Math.hypot(m.a, m.b), Math.hypot(m.c, m.d)].map((v) => v * (xf ? Math.hypot(xf.a, xf.b) : 1)) });
+      };
+      for (frameIndex = 0; frameIndex <= plan.frames; frameIndex++) renderer.render(TM.Export.frameTime(plan, frameIndex));
+      results.matched[id] = { source: await result.blob.text(), info: result.info, diagnostics, reference };
+    }
     const cancel = new AbortController(); cancel.abort();
     try { await TM.Export.run(multi, { format: 'ae' }, { signal: cancel.signal }); } catch (e) { results.abort = e.name; }
     return results;
@@ -111,7 +155,7 @@ try {
           assert.ok(['ADBE Text Position 3D', 'ADBE Text Scale 3D', 'ADBE Text Rotation', 'ADBE Text Opacity'].includes(name));
           const p = new Property(name, this.layer); this.items.set(name, p); return p;
         } else if (this.kind === 'selectors') {
-          assert.equal(name, 'ADBE Text Expressible Selector'); g.field('ADBE Text Expressible Amount');
+          assert.equal(name, 'ADBE Text Expressible Selector'); g.field('ADBE Text Expressible Amount'); g.field('ADBE Text Range Type2');
         } else if (this.kind === 'masks') {
           assert.equal(name, 'ADBE Mask Atom'); g.field('ADBE Mask Shape');
         } else assert.fail('Unknown indexed group');
@@ -123,6 +167,7 @@ try {
         super(); this.layer = this; this.kind = kind; this.text = text; this.source = {}; this.enabled = true;
         const tx = this.group('ADBE Text Properties');
         tx.field('ADBE Text Document'); tx.group('ADBE Text Animators', new IndexedGroup(this, 'animators'));
+        tx.group('ADBE Text More Options').field('ADBE Text Anchor Point Align');
         const path = tx.group('ADBE Text Path Options');
         for (const name of ['ADBE Text Path', 'ADBE Text Perpendicular To Path', 'ADBE Text First Margin']) path.field(name);
         const transform = this.group('ADBE Transform Group');
@@ -237,5 +282,36 @@ try {
   assert.match(failed.error.message, /Test Source Text read failure/);
   assert.match(failed.alerts.at(-1), /while styling wave/);
   assert.equal(failed.saves.length, 0);
+  const errors = { position: 0, scale: 0, rotation: 0, opacity: 0 };
+  for (const [id, out] of Object.entries(exported.matched)) {
+    assert.equal(out.info.engine, 'ae-preview', 'Match preview is the default transfer mode');
+    const result = importScript(out.source);
+    assert.equal(result.text.length, 1, id + ': preview motion stays in one text layer');
+    assert.deepEqual(result.allProperties.filter((p) => p.numKeys).map((p) => p.numKeys), [2], id + ': exactly two shared progress keys');
+    const layer = result.text[0], progress = effectProperty(layer, 'Motion progress (%)');
+    const animators = [...layer.property('ADBE Text Properties').property('ADBE Text Animators').items.values()];
+    const amounts = (property, index) => animators.filter((a) => a.property('ADBE Text Animator Properties').items.has(property))
+      .map((a) => evaluate(a.property('ADBE Text Selectors').property(1).property('ADBE Text Expressible Amount'), layer, 0, index));
+    assert.ok(out.reference.length > 0, id + ': reference renderer actually drew text');
+    for (const ref of out.reference) {
+      const slot = out.diagnostics.bases.find((b) => b.id === ref.id);
+      assert.ok(slot, id + ': stable glyph / repeat identity ' + ref.id);
+      progress.setValue(ref.frame / out.diagnostics.frames * 100);
+      const pos = amounts('ADBE Text Position 3D', slot.start).reduce((sum, v) => sum.map((x, i) => x + v[i]), [0, 0, 0]);
+      const scale = amounts('ADBE Text Scale 3D', slot.start).reduce((sum, v) => sum.map((x, i) => x * (1 + v[i] / 100)), [1, 1, 1]);
+      const rotation = amounts('ADBE Text Rotation', slot.start).reduce((sum, v) => sum + v[0], 0);
+      const opacity = amounts('ADBE Text Opacity', slot.start).reduce((sum, v) => sum * (1 - v[0] / 100), 1);
+      const target = pos.slice(0, 2).map((v, i) => v + slot.base[i] + out.diagnostics.anchor[i]);
+      errors.position = Math.max(errors.position, ...target.map((v, i) => Math.abs(v - ref.position[i])));
+      errors.scale = Math.max(errors.scale, ...scale.slice(0, 2).map((v, i) => Math.abs(v - ref.scale[i])));
+      errors.rotation = Math.max(errors.rotation, Math.abs(((rotation - ref.rotation + 180) % 360 + 360) % 360 - 180));
+      errors.opacity = Math.max(errors.opacity, Math.abs(opacity - ref.opacity));
+    }
+  }
+  assert.ok(errors.position <= 0.501, 'preview position agrees with canvas transforms: ' + errors.position);
+  assert.ok(errors.scale <= 0.00501, 'preview scale agrees with canvas transforms: ' + errors.scale);
+  assert.ok(errors.rotation <= 0.501, 'preview rotation agrees with canvas transforms: ' + errors.rotation);
+  assert.ok(errors.opacity <= 0.00501, 'preview visibility agrees with canvas transforms: ' + errors.opacity);
+  console.log('PASS: preview motion agrees with renderer at all checked export frames:', errors);
   console.log('PASS: 13 native exports; one text layer per studio layer; no per-frame keys; editable paths, selectors, controls and source text; sparse authored keys; timing, fallback notes, save/cancel, abort and error cleanup.');
 } finally { await browser.close(); await server.close(); }

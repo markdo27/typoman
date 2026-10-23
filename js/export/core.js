@@ -87,6 +87,7 @@
       matte: TM.color.isHex(opts.matte) ? opts.matte.toLowerCase() : null,
       dither: !!opts.dither,
       engine: opts.engine === 'recorder' ? 'recorder' : 'auto',
+      aeMode: opts.aeMode === 'native' ? 'native' : 'match',
     };
   };
 

@@ -125,10 +125,10 @@
             const start = r * unit + shift;
             for (const gi of line.glyphs) {
               const g = L.glyphs[gi];
-              place(f, G, path, g, start + (g.x - x0) + g.w / 2, null);
+              place(f, G, path, g, start + (g.x - x0) + g.w / 2, null, r);
             }
             if (f.cache.sep) {
-              place(f, G, path, { ch: f.cache.sep, w: f.cache.sepW, vi: -1, isSpace: false, x: 0 }, start + line.width + gapPx / 2 + f.cache.sepW / 2, f.cache.sep);
+              place(f, G, path, { ch: f.cache.sep, w: f.cache.sepW, vi: -1, i: -1, motionLine: li, isSpace: false, x: 0 }, start + line.width + gapPx / 2 + f.cache.sepW / 2, f.cache.sep, r);
             }
           }
         } else {
@@ -245,7 +245,7 @@
     return false;
   }
 
-  function place(f, G, path, g, s, ch) {
+  function place(f, G, path, g, s, ch, slot = 0) {
     if (g.isSpace) return;
     const P = f.params, size = f.size;
     let alpha = 1;
@@ -253,7 +253,7 @@
       // Fade glyphs out as they leave an open path instead of letting them fly off.
       const edge = size * 0.6;
       alpha = smoothstep(-edge, edge * 0.2, s) * (1 - smoothstep(path.length - edge * 0.2, path.length + edge, s));
-      if (alpha <= 0.002) return;
+      if (alpha <= 0.002 && !f.motionCapture) return;
     }
     // Tangent averaged over about a glyph, so letters swing round a turn instead of snapping.
     const win = rotWin(P.cornerSmooth) * size;
@@ -269,6 +269,7 @@
       alpha,
       ch: ch || undefined,
       anchor: 'center',
+      motionSlot: f.motionCapture ? slot : undefined,
     });
   }
 

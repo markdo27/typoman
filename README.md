@@ -67,7 +67,26 @@ is added to your open project; use an empty project if you want a separate proje
 
 Each studio layer becomes **one editable AE text layer**, with its whole text in
 Source Text. There are no per-letter layers, parent nulls or per-frame keyframes.
-Motion uses native AE tools:
+
+**Match preview** is the default. It transfers the renderer's character position,
+rotation, scale, visibility and layer-transform timing, including springs, custom
+easing, staggering and path deformation. Reduced motion curves live in text-selector
+expressions. Each text layer has just **two Motion progress (%) keyframes**, from 0
+to 100 across the exported duration. Move those keys or change their easing to retime
+the whole motion. Effect Controls also offers motion strength and position/rotation
+offsets. Detailed motion and copy changes should be edited in Typoman and
+re-exported; these character curves are not separate editable timeline keys.
+
+At sampled export frames, reduction keeps position within 0.5 px per axis, rotation
+within 0.5 degrees, and scale/opacity within 0.5%. This checks motion data, not AE's
+rendered pixels: font metrics, ligatures, complex scripts, character-anchor behaviour
+and clipping can differ. Repeated path text stays in the same text layer. Dense exports
+may require a shorter duration or lower frame rate to fit AE's expression limits.
+Canvas-only/custom text layouts, such as Stack, Particles or Lens, report an error
+in this mode instead of exporting static or missing text.
+
+Choose **Native controls (approximate)** when you want to rebuild the animation using
+AE paths and parameter controls instead of transferred preview curves:
 
 - **Path Flow:** an editable mask under Masks → Motion path, native Text → Path
   Options, and scroll speed, offset and repeat controls. Edit the original Source Text
@@ -76,21 +95,22 @@ Motion uses native AE tools:
 - **Rise:** native text animators with travel, tilt, scale, stagger and easing controls.
 - **Typewriter:** character visibility in one text layer, keeping the source text editable.
 
-Adjust motion through **Effect Controls** and **Text → Animators**. The named controls
+In Native controls mode, adjust motion through **Effect Controls** and **Text → Animators**. The named controls
 can be keyframed normally in AE. Only transform poses and path poses authored in the
 studio become sparse native keys; these use linear interpolation and can be edited
 directly. Cycle, delay and loop controls drive preset motion; authored key times are
 independent of later changes to those controls. The browser writes JSX; After Effects
 creates the `.aep` when it runs the script.
 
-Native motion is an editable approximation: AE text spacing, reveal easing and wave
+Native-controls motion is an editable approximation: AE text spacing, reveal easing and wave
 variants can differ. Other presets retain their complete text **without preset motion**,
 with a warning identifying the layer. Echoes, custom artwork, track mattes, glow, shadow,
 blur, extrusion, grain, vignette and font-axis animation are not transferred.
 Gradients/palettes use a solid colour, and fonts can differ. The export dialog and
 generated composition list these limits. Use a PNG sequence for exact appearance.
-Desktop After Effects is required to verify final appearance; `npm run test:ae` checks
-browser export, native layer structure and generated expressions against an API test double.
+Desktop After Effects is required to verify final appearance; `npm run test:ae` compares
+transferred preview curves with the renderer's canvas transforms, and checks native
+layer structure and generated expressions against an API test double.
 
 ## Embedding
 
