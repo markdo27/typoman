@@ -161,6 +161,13 @@
         for (const kind of Object.keys(curves)) { raw[kind].push(values[kind]); curves[kind].push(A.reduce(values[kind], TOL[kind])); }
       }
       const ranges = slots.map((slot) => [slot.start, slot.end]);
+      // Keep selector Amount in its normal percentage range; the animator
+      // property's magnitude carries the physical displacement/rotation.
+      const positionSpan = [100, 100], scaleSpan = [1, 1];
+      let rotationSpan = 100;
+      for (const curve of curves.position) for (const point of curve) for (let k = 0; k < 2; k++) positionSpan[k] = Math.max(positionSpan[k], Math.abs(point[k + 1]));
+      for (const curve of curves.scale) for (const point of curve) for (let k = 0; k < 2; k++) scaleSpan[k] = Math.max(scaleSpan[k], Math.abs(point[k + 1] - 1));
+      for (const curve of curves.rotation) for (const point of curve) rotationSpan = Math.max(rotationSpan, Math.abs(point[1]));
       const animators = [];
       function add(kind, property, value, result) {
         // Keep each expression small without adding layers or timeline keys.
@@ -179,9 +186,9 @@
       }
       // Scale, then rotate about the character centre, then translate. Applying
       // translation first would let subsequent animators distort the motion path.
-      add('scale', 'ADBE Text Scale 3D', [200, 200, 100], 'v?[(v[0]-1)*100*strength,(v[1]-1)*100*strength,0]:[0,0,0];');
-      add('rotation', 'ADBE Text Rotation', 100, 'var a=v?v[0]*strength+effect("Rotation offset (deg)")(1):0;[a,a,a];');
-      add('position', 'ADBE Text Position 3D', [100, 100, 0], 'v?[v[0]*strength+effect("Horizontal offset (px)")(1),v[1]*strength+effect("Vertical offset (px)")(1),0]:[0,0,0];');
+      add('scale', 'ADBE Text Scale 3D', [100 + 100 * scaleSpan[0], 100 + 100 * scaleSpan[1], 100], 'v?[(v[0]-1)*100*strength/' + scaleSpan[0] + ',(v[1]-1)*100*strength/' + scaleSpan[1] + ',0]:[0,0,0];');
+      add('rotation', 'ADBE Text Rotation', rotationSpan, 'var a=v?(v[0]*strength+effect("Rotation offset (deg)")(1))*100/' + rotationSpan + ':0;[a,a,a];');
+      add('position', 'ADBE Text Position 3D', [...positionSpan, 0], 'v?[(v[0]*strength+effect("Horizontal offset (px)")(1))*100/' + positionSpan[0] + ',(v[1]*strength+effect("Vertical offset (px)")(1))*100/' + positionSpan[1] + ',0]:[0,0,0];');
       add('opacity', 'ADBE Text Opacity', 0, 'var a=v?(1-v[0])*100:0;[a,a,a];');
       // Expose test diagnostics without adding native keys or file sidecars.
       if (hooks.onMotionCurves) hooks.onMotionCurves({ layer: layerIndex, raw, curves, bases, anchor, frames: plan.frames });

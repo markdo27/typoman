@@ -291,7 +291,15 @@ try {
     const layer = result.text[0], progress = effectProperty(layer, 'Motion progress (%)');
     const animators = [...layer.property('ADBE Text Properties').property('ADBE Text Animators').items.values()];
     const amounts = (property, index) => animators.filter((a) => a.property('ADBE Text Animator Properties').items.has(property))
-      .map((a) => evaluate(a.property('ADBE Text Selectors').property(1).property('ADBE Text Expressible Amount'), layer, 0, index));
+      .map((a) => {
+        const amount = evaluate(a.property('ADBE Text Selectors').property(1).property('ADBE Text Expressible Amount'), layer, 0, index);
+        assert.ok(amount.every((v) => Math.abs(v) <= 100.001), 'selector amounts stay in the conventional percentage range');
+        const target = a.property('ADBE Text Animator Properties').property(property).value;
+        if (property === 'ADBE Text Position 3D') return amount.map((v, i) => v * target[i] / 100);
+        if (property === 'ADBE Text Scale 3D') return amount.map((v, i) => v * (target[i] / 100 - 1));
+        if (property === 'ADBE Text Rotation') return amount.map((v) => v * target / 100);
+        return amount;
+      });
     assert.ok(out.reference.length > 0, id + ': reference renderer actually drew text');
     for (const ref of out.reference) {
       const slot = out.diagnostics.bases.find((b) => b.id === ref.id);
