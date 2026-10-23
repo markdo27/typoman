@@ -12,6 +12,7 @@
   // ───────────────────────────── formats ─────────────────────────────
   // res: short-side presets (the long side follows the scene aspect). maxLong caps the long side.
   X.FORMATS = {
+    ae: { id: 'ae', ext: 'jsx', mime: 'text/javascript', label: 'After Effects', video: false, alpha: true, fps: [24, 25, 30, 50, 60], res: [720, 1080, 1440, 2160], defRes: 1080, maxLong: 4096 },
     mp4: { id: 'mp4', ext: 'mp4', mime: 'video/mp4', label: 'MP4', video: true, alpha: false, fps: [24, 25, 30, 50, 60], res: [720, 1080, 1440, 2160], defRes: 1080, maxLong: 4096 },
     webm: { id: 'webm', ext: 'webm', mime: 'video/webm', label: 'WebM', video: true, alpha: true, fps: [24, 25, 30, 50, 60], res: [720, 1080, 1440, 2160], defRes: 1080, maxLong: 4096 },
     gif: { id: 'gif', ext: 'gif', mime: 'image/gif', label: 'GIF', video: false, alpha: true, fps: [10, 12, 15, 20, 24, 25, 30], res: [240, 320, 360, 480, 540, 720], defRes: 360, maxLong: 1280, defFps: 25 },

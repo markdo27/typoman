@@ -20,6 +20,7 @@
     X.throwIfAborted(hooks.signal);
     let out;
     switch (plan.format) {
+      case 'ae': out = await X.encodeAfterEffects(plan, s, hooks); break;
       case 'mp4':
       case 'webm': out = await X.encodeVideo(plan, s, hooks); break;
       case 'gif': out = await X.encodeGIF(plan, s, hooks); break;

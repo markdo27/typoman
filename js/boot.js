@@ -83,6 +83,7 @@
     'js/export/zip.js',
     'js/export/png.js',
     'js/export/standalone.js',
+    'js/export/after-effects.js',
     'js/export/run.js',
   ];
 
