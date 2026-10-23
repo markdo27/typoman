@@ -99,6 +99,7 @@
   function importProject(d) {
     var destination = File.saveDialog('Save After Effects project', '*.aep');
     if (destination && !/\.aep$/i.test(destination.name)) destination = new File(destination.fsName + '.aep');
+    var stage = 'creating composition';
     app.beginUndoGroup('Import TYPOMAN');
     try {
       if (!app.project) app.newProject();
@@ -127,6 +128,7 @@
         bg.source.parentFolder = folder;
       }
       for (i = 0; i < d.groups.length; i++) {
+        stage = 'creating layer group ' + d.groups[i].name;
         layer = comp.layers.addNull(d.duration);
         layer.source.parentFolder = folder;
         layer.name = d.groups[i].name;
@@ -136,6 +138,7 @@
       }
       for (i = 0; i < d.tracks.length; i++) {
         tr = d.tracks[i];
+        stage = 'creating text layer ' + tr.name;
         layer = comp.layers.addText(tr.name);
         layer.name = d.groups[tr.group].name + ' / ' + tr.name;
         layer.setParentWithJump(parents[tr.group]);
@@ -145,18 +148,25 @@
         for (j = 0; j < tr.frames.length; j++) {
           row = tr.frames[j];
           t = row.frame / d.fps;
-          doc = new TextDocument(row.text);
+          stage = 'styling ' + layer.name + ' at frame ' + row.frame;
+          // Style a fresh, layer-backed value for every key. Some AE versions
+          // reject style setters on an unattached new TextDocument(text).
+          doc = prop.value;
+          doc.text = row.text;
           doc.font = tr.font;
           doc.fontSize = row.size;
           doc.justification = ParagraphJustification.LEFT_JUSTIFY;
           doc.tracking = row.tracking;
-          doc.applyFill = row.stroke !== 'outline';
           doc.fillColor = row.color;
-          doc.applyStroke = row.stroke === 'outline' || row.stroke === 'both';
           doc.strokeColor = row.strokeColor;
           doc.strokeWidth = row.strokeWidth;
+          // AE enables fill/stroke when their colours are assigned. Apply the
+          // requested paint modes last so fill-only and outline-only survive.
+          doc.applyFill = row.stroke !== 'outline';
+          doc.applyStroke = row.stroke === 'outline' || row.stroke === 'both';
           times.push(t); values.push(doc); indices.push(row.frame); rows.push(row); anchors.push(row.anchor);
         }
+        stage = 'writing keyframes for ' + layer.name;
         keys(prop, times, values);
         transforms(layer, rows, indices);
         keys(layer.property('ADBE Transform Group').property('ADBE Anchor Point'), times, anchors);
@@ -170,10 +180,11 @@
       }
       comp.openInViewer();
       // Saving a copy protects any project that was already open in After Effects.
+      stage = 'saving project';
       if (destination) app.project.save(destination);
       alert('TYPOMAN imported.\n\n' + d.notes.join('\n\n'));
     } catch (error) {
-      alert('TYPOMAN import failed: ' + error.toString());
+      alert('TYPOMAN import failed while ' + stage + ': ' + error.toString());
       throw error;
     } finally { app.endUndoGroup(); }
   }
