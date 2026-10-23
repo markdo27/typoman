@@ -65,19 +65,32 @@ the `.aep` project. Install the scene's fonts on that computer first. If you can
 save dialog, the composition is still created without saving a file. The composition
 is added to your open project; use an empty project if you want a separate project.
 
-Text is exported as editable glyph or text-run layers, grouped under a parent for each
-studio layer. Position, scale, rotation, opacity, colour and source text are baked into
-HOLD keyframes at the export frame rate, including layer timing, path-driven text motion,
-echoes and layer transform keys. The browser does not write native `.aep` files itself;
-After Effects creates them when it runs the script.
+Each studio layer becomes **one editable AE text layer**, with its whole text in
+Source Text. There are no per-letter layers, parent nulls or per-frame keyframes.
+Motion uses native AE tools:
 
-This is an editable transfer, with limits: canvas masks, particles and custom artwork,
-glow, shadow, blur, extrusion, grain, vignette, animated font axes and changing glyph
-overlap order are not reproduced. Gradients use solid colours, and fonts can differ.
-The export dialog and generated composition list these limits. Use a PNG sequence when
-you need the rendered appearance. After Effects itself is required to verify the final
-project's appearance; the automated `npm run test:ae` checks browser export and the
-generated script's project/layer/keyframe operations against an API test double.
+- **Path Flow:** an editable mask under Masks → Motion path, native Text → Path
+  Options, and scroll speed, offset and repeat controls. Edit the original Source Text
+  once; an expression repeats it when using Fill & scroll.
+- **Wave:** native text animators with height, wavelength, speed, lean and scale controls.
+- **Rise:** native text animators with travel, tilt, scale, stagger and easing controls.
+- **Typewriter:** character visibility in one text layer, keeping the source text editable.
+
+Adjust motion through **Effect Controls** and **Text → Animators**. The named controls
+can be keyframed normally in AE. Only transform poses and path poses authored in the
+studio become sparse native keys; these use linear interpolation and can be edited
+directly. Cycle, delay and loop controls drive preset motion; authored key times are
+independent of later changes to those controls. The browser writes JSX; After Effects
+creates the `.aep` when it runs the script.
+
+Native motion is an editable approximation: AE text spacing, reveal easing and wave
+variants can differ. Other presets retain their complete text **without preset motion**,
+with a warning identifying the layer. Echoes, custom artwork, track mattes, glow, shadow,
+blur, extrusion, grain, vignette and font-axis animation are not transferred.
+Gradients/palettes use a solid colour, and fonts can differ. The export dialog and
+generated composition list these limits. Use a PNG sequence for exact appearance.
+Desktop After Effects is required to verify final appearance; `npm run test:ae` checks
+browser export, native layer structure and generated expressions against an API test double.
 
 ## Embedding
 

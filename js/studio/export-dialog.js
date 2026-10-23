@@ -123,9 +123,9 @@
     ['gif', 'GIF', 'Animated image'],
     ['png', 'PNG', 'Still frame'],
     ['pngseq', 'PNG seq', 'Frames · ZIP'],
-    ['ae', 'After Effects', 'Editable keys · JSX → AEP'],
+    ['ae', 'After Effects', 'Native text · JSX → AEP'],
   ];
-  const PHASE = { fonts: 'Loading fonts…', palette: 'Building the GIF palette…', finalize: 'Finishing the file…', encode: 'Encoding PNG…' };
+  const PHASE = { fonts: 'Loading fonts…', prepare: 'Preparing editable text…', palette: 'Building the GIF palette…', finalize: 'Finishing the file…', encode: 'Encoding PNG…' };
 
   // ───────────────────────────── export dialog ─────────────────────────────
   function createExportDialog(store) {
@@ -312,12 +312,13 @@
     let costTimer = 0, costToken = 0, costKey = '', costCanvas = null, costRenderer = null;
     const SLOW_MS = 60000;
     function scheduleCost() {
-      const key = JSON.stringify([store.scene, plan.width, plan.height, plan.frames, plan.transparent, plan.matte]);
+      const key = JSON.stringify([store.scene, plan.format, plan.width, plan.height, plan.frames, plan.transparent, plan.matte]);
       if (key === costKey) return;
       costKey = key;
+      ++costToken; // stop an estimate already in flight when changing formats
       costBox.hidden = true;
       clearTimeout(costTimer);
-      if (plan.frames < 2) return; // a still renders in moments
+      if (plan.frames < 2 || plan.format === 'ae') return; // native AE export does not render frames
       costTimer = setTimeout(() => estimateCost(++costToken), 350);
     }
     /**
@@ -413,9 +414,11 @@
       if (f.id === 'gif') return infoBox('', 'GIF89a · one palette for the whole loop', null, ['Up to 256 colours, loops forever, changed areas only. Best under ~800 px; for crisp HD use MP4 or WebM.', p.fps > 25 ? 'Some apps cap GIF playback near 25 fps.' : '']);
       if (f.id === 'png') return infoBox('', 'PNG still · lossless', null, [p.transparent ? 'RGBA with the background left transparent.' : 'Exact frame from the renderer, full quality.']);
       if (f.id === 'pngseq') return infoBox('', 'PNG sequence · lossless frames in a ZIP', null, [`${p.frames} numbered PNGs${p.transparent ? ' with alpha' : ''} plus a README with the frame rate. Imports into After Effects, Premiere, Resolve and ffmpeg.`]);
-      if (f.id === 'ae') return infoBox('warn', 'After Effects · editable text and baked keyframes', null, [
+      if (f.id === 'ae') return infoBox('warn', 'After Effects · one text layer, native motion controls', null, [
         'Download the JSX, then run it in After Effects using File → Scripts → Run Script File. Choose where to save the .aep project. Install the scene fonts on that computer first.',
-        'Exports glyph/run position, scale, rotation, opacity, colour and source-text keys at the selected frame rate. Canvas masks, particles, custom drawing, layer effects, gradients, animated font axes and overlap order are not reproduced. Use PNG sequence for exact appearance.'
+        'Each Typoman layer stays one editable text layer. Path Flow uses an editable mask path; Wave, Rise and Typewriter use native text animators. Adjust speed, timing and strength in Effect Controls. No per-letter layers or per-frame keys.',
+        'Native motions are approximations. Other presets keep their text without preset motion. Custom artwork, effects, mattes, gradients and animated font axes are not transferred. Only authored transform/path poses become sparse keys, with linear interpolation. Use PNG sequence for exact appearance.',
+        ...X.afterEffectsNotes(store.scene)
       ]);
       const caps = X.caps();
       if (!caps.webcodecs) {
@@ -475,7 +478,8 @@
       result.textContent = '';
       const i = res.info;
       const isVideo = res.plan.format === 'mp4' || res.plan.format === 'webm';
-      const details = [X.formatBytes(i.bytes), `${i.width}×${i.height}`, i.frames > 1 ? `${i.frames} frames @ ${i.fps} fps` : null, i.label, `done in ${X.formatDuration(ms)}`].filter(Boolean).join(' · ');
+      const timing = res.plan.format === 'ae' ? `${i.layers} text layer${i.layers === 1 ? '' : 's'} · ${i.duration.toFixed(2)} s @ ${i.fps} fps` : i.frames > 1 ? `${i.frames} frames @ ${i.fps} fps` : null;
+      const details = [X.formatBytes(i.bytes), `${i.width}×${i.height}`, timing, i.label, `done in ${X.formatDuration(ms)}`].filter(Boolean).join(' · ');
       const msg = h('div', { class: 'msg' }, h('b', null, '✓ ' + res.name), h('span', null, details));
       if (i.notes && i.notes.length) msg.append(h('ul', null, ...i.notes.map((n) => h('li', null, n))));
       const again = h('a', { class: 'btn small', href: lastURL, download: res.name }, 'Download again');
