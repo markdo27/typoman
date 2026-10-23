@@ -125,11 +125,11 @@
     ['pngseq', 'PNG seq', 'Frames · ZIP'],
     ['ae', 'After Effects', 'Native text · JSX → AEP'],
   ];
-  const PHASE = { fonts: 'Loading fonts…', prepare: 'Preparing editable text…', palette: 'Building the GIF palette…', finalize: 'Finishing the file…', encode: 'Encoding PNG…' };
+  const PHASE = { fonts: 'Loading fonts…', motion: 'Transferring preview motion…', prepare: 'Preparing editable text…', palette: 'Building the GIF palette…', finalize: 'Finishing the file…', encode: 'Encoding PNG…' };
 
   // ───────────────────────────── export dialog ─────────────────────────────
   function createExportDialog(store) {
-    const prefs = Object.assign({ format: 'mp4', resBy: {}, fpsBy: {}, lengthMode: 'loops', loops: 1, seconds: 0, quality: 'high', dither: false, matte: null }, loadPrefs());
+    const prefs = Object.assign({ format: 'mp4', aeMode: 'match', resBy: {}, fpsBy: {}, lengthMode: 'loops', loops: 1, seconds: 0, quality: 'high', dither: false, matte: null }, loadPrefs());
     let transparent = null; // per open: defaults to the scene's own background
     let frameIndex = 0;
     let busy = false, job = null, lastURL = null, raf = 0, negToken = 0, plan = null, prevKey = '';
@@ -162,6 +162,11 @@
     const resSel = h('select', { id: 'tm-x-res' });
     resSel.addEventListener('change', () => { prefs.resBy[prefs.format] = +resSel.value; set({}); });
     const resRow = h('div', { class: 'tm-field' }, h('label', { class: 'tm-lbl', for: 'tm-x-res' }, 'Resolution'), resSel);
+    const aeMode = h('select', { id: 'tm-x-ae-mode' },
+      h('option', { value: 'match' }, 'Match preview (2 timing keys)'),
+      h('option', { value: 'native' }, 'Native controls (approximate)'));
+    aeMode.addEventListener('change', () => set({ aeMode: aeMode.value }));
+    const aeRow = h('div', { class: 'tm-field' }, h('label', { class: 'tm-lbl', for: 'tm-x-ae-mode' }, 'After Effects motion'), aeMode);
 
     const fpsSeg = seg('Frame rate', 'tm-x-fps', (v) => { prefs.fpsBy[prefs.format] = +v; set({}); });
 
@@ -210,7 +215,7 @@
     // Render-time estimate, measured before you start: a heavy effect stack at 1080p60 can take
     // a quarter of an hour, and the progress ETA only appears once rendering has begun.
     const costBox = h('div', { class: 'tm-info warn tm-cost', role: 'note', hidden: true });
-    const optsSet = h('fieldset', { class: 'tm-opts', style: 'border:0;margin:0;min-width:0' }, formats, flashBox, resRow, fpsSeg.el, lenRow, frameRow, qualSeg.el, alphaRow, matteRow, ditherRow, info, costBox);
+    const optsSet = h('fieldset', { class: 'tm-opts', style: 'border:0;margin:0;min-width:0' }, formats, flashBox, aeRow, resRow, fpsSeg.el, lenRow, frameRow, qualSeg.el, alphaRow, matteRow, ditherRow, info, costBox);
     m.body.append(optsSet);
 
     // ── footer ──
@@ -238,19 +243,20 @@
         format: f.id, resolution: res, fps, lengthMode: prefs.lengthMode, loops: prefs.loops, seconds: prefs.seconds || s.duration,
         quality: prefs.quality, transparent: transparent == null ? s.bg.type === 'transparent' : transparent,
         matte: prefs.matte || (s.bg.type === 'transparent' ? (f.id === 'gif' ? '#ffffff' : '#000000') : s.bg.color),
-        dither: prefs.dither, time: frameIndex / fps,
+        dither: prefs.dither, time: frameIndex / fps, aeMode: prefs.aeMode,
       };
     }
 
     function set(patch) {
       Object.assign(prefs, patch);
-      savePrefs({ format: prefs.format, resBy: prefs.resBy, fpsBy: prefs.fpsBy, lengthMode: prefs.lengthMode, loops: prefs.loops, quality: prefs.quality, dither: prefs.dither });
+      savePrefs({ format: prefs.format, aeMode: prefs.aeMode, resBy: prefs.resBy, fpsBy: prefs.fpsBy, lengthMode: prefs.lengthMode, loops: prefs.loops, quality: prefs.quality, dither: prefs.dither });
       refresh();
     }
 
     function refresh() {
       const s = store.scene, f = fmt(), o = options();
       plan = X.plan(s, o);
+      aeRow.hidden = f.id !== 'ae'; aeMode.value = plan.aeMode;
       fmtInputs.forEach((i) => { i.checked = i.value === f.id; });
       // resolution
       const resKey = f.id + s.size.w + 'x' + s.size.h;
@@ -414,6 +420,11 @@
       if (f.id === 'gif') return infoBox('', 'GIF89a · one palette for the whole loop', null, ['Up to 256 colours, loops forever, changed areas only. Best under ~800 px; for crisp HD use MP4 or WebM.', p.fps > 25 ? 'Some apps cap GIF playback near 25 fps.' : '']);
       if (f.id === 'png') return infoBox('', 'PNG still · lossless', null, [p.transparent ? 'RGBA with the background left transparent.' : 'Exact frame from the renderer, full quality.']);
       if (f.id === 'pngseq') return infoBox('', 'PNG sequence · lossless frames in a ZIP', null, [`${p.frames} numbered PNGs${p.transparent ? ' with alpha' : ''} plus a README with the frame rate. Imports into After Effects, Premiere, Resolve and ffmpeg.`]);
+      if (f.id === 'ae' && p.aeMode === 'match') return infoBox('warn', 'After Effects · match preview motion', null, [
+        'One text layer per Typoman layer. The preview’s position, rotation, scale and visibility are transferred into text animators. Two Motion progress keys control timing; retime or ease those keys in After Effects.',
+        'Detailed letter motion lives in selector expressions, with global strength and offset controls. Change detailed motion or copy in Typoman and re-export to preserve layout. Choose Native controls if you prefer to rebuild motion in AE.',
+        'Run the downloaded JSX through File → Scripts → Run Script File. Install the same fonts. AE typography and canvas effects can differ; this transfers text motion, not exact pixels. PNG sequence preserves exact appearance.'
+      ]);
       if (f.id === 'ae') return infoBox('warn', 'After Effects · one text layer, native motion controls', null, [
         'Download the JSX, then run it in After Effects using File → Scripts → Run Script File. Choose where to save the .aep project. Install the scene fonts on that computer first.',
         'Each Typoman layer stays one editable text layer. Path Flow uses an editable mask path; Wave, Rise and Typewriter use native text animators. Adjust speed, timing and strength in Effect Controls. No per-letter layers or per-frame keys.',
