@@ -1,5 +1,5 @@
-// Browser export plus execution of the generated ExtendScript against a strict AE API double.
-// Actual Adobe rendering still requires validation in desktop After Effects.
+// Browser JSX export and native AE operations checked against an API double.
+// This checks structure and expressions, not Adobe's desktop rendering.
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { loadChromium, serve, openHarness } from './lib/harness.mjs';
@@ -7,134 +7,235 @@ const server = await serve();
 const browser = await (await loadChromium()).launch();
 try {
   const page = await openHarness(await browser.newContext(), server);
-  const out = await page.evaluate(async () => {
-    const scene = TM.Scene.defaults();
-    scene.name = 'Editable "type"\n</script>\\test';
-    scene.duration = 1;
-    scene.layers[0].text = 'Hi';
-    scene.layers[0].preset = 'wave';
-    scene.layers[0].params = TM.presetDefaults('wave');
-    scene.layers[0].transform = { enabled: true, keys: [{ t: 0, x: 0, y: 0, scale: 1, rot: 0, opacity: 0.5, ease: 'linear' }, { t: 1, x: 0.2, y: 0.1, scale: 1.5, rot: 30, opacity: 1, ease: 'linear' }] };
-    const result = await TM.Export.run(scene, { format: 'ae', fps: 24, resolution: 720 });
-    scene.layers[0].preset = 'scramble';
-    scene.layers[0].params = TM.presetDefaults('scramble');
-    scene.layers[0].stroke.mode = 'outline';
-    const changingText = await TM.Export.run(scene, { format: 'ae', fps: 24, resolution: 720 });
-    const cancelled = new AbortController(); cancelled.abort();
-    let abort;
-    try { await TM.Export.run(scene, { format: 'ae' }, { signal: cancelled.signal }); } catch (e) { abort = e.name; }
-    return { source: await result.blob.text(), changingText: await changingText.blob.text(), name: result.name, info: result.info, abort };
-  });
-  assert.equal(out.abort, 'AbortError');
-  assert.match(out.name, /\.jsx$/);
-  assert.equal(out.info.frames, 24);
-  assert.equal(out.info.engine, 'ae-keyframes');
-  const layers = [], saves = [], alerts = [];
-  let undo = 0, readTextError = false;
-  class TextDocument {
-    constructor(text, layer = null) {
-      this.text = text;
-      this.layer = layer;
-      this.style = {};
+  const exported = await page.evaluate(async () => {
+    const results = {};
+    async function exportScene(id, preset, patch = {}, opts = {}) {
+      const scene = TM.Scene.defaults();
+      scene.name = 'Editable "type"\n</script>\\test';
+      scene.duration = 2;
+      Object.assign(scene.layers[0], { preset, text: 'TYPE IN MOTION', name: id }, patch);
+      const out = await TM.Export.run(scene, { format: 'ae', fps: 24, resolution: 720, ...opts });
+      results[id] = { source: await out.blob.text(), name: out.name, info: out.info };
     }
+    await exportScene('wave', 'wave', { params: { weightWave: false } });
+    await exportScene('path', 'path-flow');
+    await exportScene('path-still', 'path-flow', { params: { mode: 'still' } });
+    await exportScene('path-travel', 'path-flow', { params: { mode: 'travel', speed: -1 } });
+    await exportScene('rise', 'rise', { stroke: { mode: 'outline' } });
+    await exportScene('typewriter', 'typewriter');
+    await exportScene('unsupported', 'particles');
+    await exportScene('transform', 'wave', { transform: { enabled: true, keys: [
+      { t: 0, x: 0, y: 0, scale: 1, rot: 0, opacity: 0.5, ease: 'linear' },
+      { t: 1, x: 0.2, y: 0.1, scale: 1.5, rot: 30, opacity: 1, ease: 'linear' }
+    ] } });
+    await exportScene('boundary', 'wave', { transform: { enabled: true, keys: [
+      { t: 0.2, x: 0, y: 0, scale: 1, rot: 0, opacity: 1, ease: 'linear' },
+      { t: 0.8, x: 0.2, y: 0.1, scale: 1.5, rot: 30, opacity: 1, ease: 'linear' }
+    ] } });
+    await exportScene('morph', 'path-flow', { pathMorph: { enabled: true, target: TM.Path.preset('circle'), mode: 'pingpong' } });
+    await exportScene('long', 'wave', { text: 'A longer line '.repeat(15) }, { fps: 60, loops: 10 });
+    await exportScene('timing', 'wave', { time: { delay: 0.5, cycles: 2, mode: 'once' } }, { fps: 24 });
+    const multi = TM.Scene.defaults();
+    multi.layers = [multi.layers[0], { name: 'Second', preset: 'rise', text: 'SECOND' }, { name: 'Hidden', visible: false, text: 'HIDDEN' }];
+    const out = await TM.Export.run(multi, { format: 'ae', resolution: 720 });
+    results.multi = { source: await out.blob.text(), info: out.info };
+    const cancel = new AbortController(); cancel.abort();
+    try { await TM.Export.run(multi, { format: 'ae' }, { signal: cancel.signal }); } catch (e) { results.abort = e.name; }
+    return results;
+  });
+  assert.equal(exported.abort, 'AbortError');
+  assert.equal(exported.wave.info.engine, 'ae-native');
+  assert.match(exported.wave.name, /\.jsx$/);
+
+  function importScript(source, { cancelSave = false, failText = false } = {}) {
+    const layers = [], allProperties = [], saves = [], alerts = [];
+    let undo = 0;
+    class TextDocument {
+      constructor(text, layer) { this.text = text; this.layer = layer; this.style = {}; }
+      toString() { return this.text; }
+    }
+    for (const name of ['font', 'fontSize', 'justification', 'tracking', 'autoLeading', 'leading', 'applyFill', 'fillColor', 'applyStroke', 'strokeColor', 'strokeWidth']) {
+      Object.defineProperty(TextDocument.prototype, name, {
+        get() { return this.style[name]; },
+        set(value) {
+          assert.ok(this.layer, 'style setters require layer-backed Source Text');
+          this.style[name] = value;
+          if (name === 'fillColor') this.style.applyFill = true;
+          if (name === 'strokeColor') this.style.applyStroke = true;
+        },
+      });
+    }
+    class Property {
+      constructor(name, layer, initial) { this.name = name; this.layer = layer; this.currentValue = initial; this.keys = []; this.expression = ''; allProperties.push(this); }
+      get value() {
+        if (this.name !== 'ADBE Text Document') return this.currentValue;
+        if (failText) throw new Error('Test Source Text read failure');
+        const doc = new TextDocument(this.layer.text, this.layer);
+        if (this.currentValue) doc.style = { ...this.currentValue.style };
+        return doc;
+      }
+      setValue(value) {
+        if (this.name === 'ADBE Text Document') { assert.equal(value.layer, this.layer); this.layer.text = value.text; }
+        this.currentValue = value;
+      }
+      get numKeys() { return this.keys.length; }
+      setValuesAtTimes(times, values) {
+        assert.equal(times.length, values.length);
+        assert.ok(times.every((t, i) => Number.isFinite(t) && (!i || t > times[i - 1])));
+        assert.ok(values.every((v) => v !== undefined));
+        this.keys = times.map((t, i) => [t, values[i]]);
+      }
+      setInterpolationTypeAtKey(k, before, after) { assert.ok(k > 0 && k <= this.numKeys); assert.equal(before, 'LINEAR'); assert.equal(after, 'LINEAR'); }
+    }
+    class Group {
+      constructor(layer) { this.layer = layer; this.items = new Map(); }
+      property(name) {
+        if (typeof name === 'number') return [...this.items.values()][name - 1];
+        assert.ok(this.items.has(name), 'known AE property: ' + name);
+        return this.items.get(name);
+      }
+      field(name, value = 0) { const p = new Property(name, this.layer, value); this.items.set(name, p); return p; }
+      group(name, g = new Group(this.layer)) { this.items.set(name, g); return g; }
+    }
+    class IndexedGroup extends Group {
+      constructor(layer, kind) { super(layer); this.kind = kind; }
+      addProperty(name) {
+        const g = new Group(this.layer);
+        if (this.kind === 'effects') {
+          assert.equal(name, 'ADBE Slider Control'); g.field('ADBE Slider Control-0001');
+        } else if (this.kind === 'animators') {
+          assert.equal(name, 'ADBE Text Animator');
+          g.group('ADBE Text Animator Properties', new IndexedGroup(this.layer, 'attributes'));
+          g.group('ADBE Text Selectors', new IndexedGroup(this.layer, 'selectors'));
+        } else if (this.kind === 'attributes') {
+          assert.ok(['ADBE Text Position 3D', 'ADBE Text Scale 3D', 'ADBE Text Rotation', 'ADBE Text Opacity'].includes(name));
+          const p = new Property(name, this.layer); this.items.set(name, p); return p;
+        } else if (this.kind === 'selectors') {
+          assert.equal(name, 'ADBE Text Expressible Selector'); g.field('ADBE Text Expressible Amount');
+        } else if (this.kind === 'masks') {
+          assert.equal(name, 'ADBE Mask Atom'); g.field('ADBE Mask Shape');
+        } else assert.fail('Unknown indexed group');
+        this.items.set(this.items.size + 1, g); return g;
+      }
+    }
+    class Layer extends Group {
+      constructor(kind, text = '') {
+        super(); this.layer = this; this.kind = kind; this.text = text; this.source = {}; this.enabled = true;
+        const tx = this.group('ADBE Text Properties');
+        tx.field('ADBE Text Document'); tx.group('ADBE Text Animators', new IndexedGroup(this, 'animators'));
+        const path = tx.group('ADBE Text Path Options');
+        for (const name of ['ADBE Text Path', 'ADBE Text Perpendicular To Path', 'ADBE Text First Margin']) path.field(name);
+        const transform = this.group('ADBE Transform Group');
+        for (const name of ['ADBE Position', 'ADBE Anchor Point', 'ADBE Scale', 'ADBE Rotate Z', 'ADBE Opacity']) transform.field(name);
+        this.group('ADBE Effect Parade', new IndexedGroup(this, 'effects'));
+        this.group('ADBE Mask Parade', new IndexedGroup(this, 'masks'));
+        layers.push(this);
+      }
+    }
+    const comp = { layers: {
+      addText: (text) => new Layer('text', text), addSolid: () => new Layer('solid'),
+      addNull: () => assert.fail('No parent nulls or per-letter helper layers')
+    }, openInViewer() {} };
+    const project = { items: { addFolder: () => ({}), addComp(name, w, h, aspect, duration, fps) {
+      assert.equal(w, 1280); assert.equal(h, 720); assert.ok(duration > 0); assert.ok([24, 60].includes(fps)); return comp;
+    } }, save(file) { saves.push(file.fsName); } };
+    function File(name) { this.fsName = name; this.name = name.split('/').pop(); }
+    File.saveDialog = () => cancelSave ? null : new File('/tmp/type');
+    const context = { app: { project, beginUndoGroup() { undo++; }, endUndoGroup() { undo--; } },
+      File, TextDocument, Shape: function () {}, MaskMode: { NONE: 'NONE' },
+      KeyframeInterpolationType: { LINEAR: 'LINEAR' }, ParagraphJustification: { LEFT_JUSTIFY: 'left', RIGHT_JUSTIFY: 'right', CENTER_JUSTIFY: 'center' },
+      alert: (s) => alerts.push(s) };
+    let error;
+    try { vm.runInNewContext(source, context); } catch (e) { error = e; }
+    assert.equal(undo, 0, 'all imports close their undo group');
+    if (!failText) assert.ifError(error);
+    const text = layers.filter((l) => l.kind === 'text');
+    return { text, allProperties, saves, alerts, error, comp };
   }
-  // AE requires a layer-backed Source Text value for styling. A standalone
-  // new TextDocument(text) is not a substitute for textProperty.value.
-  for (const name of ['font', 'fontSize', 'justification', 'tracking', 'applyFill', 'fillColor', 'applyStroke', 'strokeColor', 'strokeWidth']) {
-    Object.defineProperty(TextDocument.prototype, name, {
-      get() { return this.style[name]; },
-      set(value) {
-        if (!this.layer) throw new Error('After Effects error: Unable to set value as it is not associated with a layer.');
-        this.style[name] = value;
-        // AE colour setters also enable their paint, even for outline/fill-only text.
-        if (name === 'fillColor') this.style.applyFill = true;
-        if (name === 'strokeColor') this.style.applyStroke = true;
-      },
+  function effectProperty(layer, name) {
+    const effect = [...layer.property('ADBE Effect Parade').items.values()].find((e) => e.name === name);
+    assert.ok(effect, 'named motion control: ' + name);
+    return effect.property('ADBE Slider Control-0001');
+  }
+  function evaluate(property, layer, time = 0, textIndex = 1, textTotal = 13) {
+    return vm.runInNewContext(property.expression, {
+      time, textIndex, textTotal, value: property.value,
+      effect: (name) => () => effectProperty(layer, name).value,
+      sourceRectAtTime: () => ({ left: -100, top: -40, width: 200, height: 50 }),
+      loopOut: () => property.keys.at(-1)?.[1]
     });
   }
-  class Property {
-    constructor(name, layer) { this.name = name; this.layer = layer; this.numKeys = 0; this.keys = []; }
-    get value() {
-      if (this.name === 'ADBE Text Document') {
-        if (readTextError) throw new Error('Test Source Text read failure');
-        return new TextDocument(this.layer.text, this.layer);
+  for (const id of ['wave', 'path', 'path-still', 'path-travel', 'rise', 'typewriter', 'unsupported', 'long', 'timing']) {
+    const result = importScript(exported[id].source);
+    assert.equal(result.text.length, 1, id + ': one text layer regardless of character count');
+    assert.equal(result.text[0].text.includes('TYPE IN MOTION') || id === 'long', true);
+    assert.equal(result.allProperties.reduce((n, p) => n + p.numKeys, 0), 0, id + ': no per-frame keys');
+    assert.deepEqual(result.saves, ['/tmp/type.aep']);
+    // Execute every native expression as well as the JSX that assigns it.
+    for (const p of result.allProperties.filter((p) => p.expression)) {
+      for (const time of [0, 0.2, 0.8, 1.4, 2.3]) {
+        const value = evaluate(p, result.text[0], time, 3, 13);
+        if (typeof value === 'number') assert.ok(Number.isFinite(value));
+        if (Array.isArray(value)) assert.ok(value.every(Number.isFinite));
+        if (p.name === 'ADBE Text Expressible Amount') assert.equal(value.length, 3, 'selector amount has three dimensions');
       }
-      return this.currentValue;
-    }
-    set value(v) { this.currentValue = v; }
-    setValue(value) { this.value = value; }
-    setValuesAtTimes(times, values) {
-      assert.equal(times.length, values.length);
-      assert.ok(times.every((t) => Number.isFinite(t) && t >= 0 && t < 1));
-      assert.ok(values.every((v) => v !== undefined));
-      if (this.name === 'ADBE Text Document') {
-        assert.ok(values.every((v) => v.layer === this.layer), 'source text retains its layer association');
-        assert.equal(new Set(values).size, values.length, 'each source-text key gets an independent document');
-      }
-      // AE replaces keys at existing times.
-      const map = new Map(this.keys); times.forEach((t, i) => map.set(t, values[i]));
-      this.keys = [...map].sort((a, b) => a[0] - b[0]); this.numKeys = this.keys.length;
-    }
-    setInterpolationTypeAtKey(k, before, after) { assert.ok(k > 0 && k <= this.numKeys); assert.equal(before, 'HOLD'); assert.equal(after, 'HOLD'); }
-  }
-  class Group {
-    constructor(layer) { this.props = new Map(); this.layer = layer; }
-    property(name) {
-      if (!this.props.has(name)) this.props.set(name, /Group|Properties/.test(name) ? new Group(this.layer) : new Property(name, this.layer));
-      return this.props.get(name);
     }
   }
-  class Layer extends Group {
-    constructor(kind, text) { super(); this.layer = this; this.text = text; this.kind = kind; this.source = {}; layers.push(this); }
-    setParentWithJump(parent) { this.parent = parent; }
-  }
-  const comp = { layers: {
-    addText: (text) => new Layer('text', text), addNull: () => new Layer('null'), addSolid: () => new Layer('solid')
-  }, openInViewer() {} };
-  const project = { items: { addFolder: () => ({}), addComp(name, w, h, aspect, duration, fps) {
-    assert.equal(w, 1280); assert.equal(h, 720); assert.equal(duration, 1); assert.equal(fps, 24); return comp;
-  } }, save(file) { saves.push(file.fsName); } };
-  function File(name) { this.fsName = name; this.name = name.split('/').pop(); }
-  File.saveDialog = () => new File('/tmp/type');
-  const context = { app: { project, beginUndoGroup() { undo++; }, endUndoGroup() { undo--; } },
-    File, TextDocument,
-    KeyframeInterpolationType: { HOLD: 'HOLD' }, ParagraphJustification: { LEFT_JUSTIFY: 'left' }, alert: (s) => alerts.push(s) };
-  vm.runInNewContext(out.source, context);
-  assert.equal(undo, 0);
-  assert.deepEqual(saves, ['/tmp/type.aep']);
-  const text = layers.filter((l) => l.kind === 'text');
-  assert.equal(text.length, 2, 'one editable text layer per glyph');
-  for (const layer of text) {
-    assert.equal(layer.parent.kind, 'null');
-    const transform = layer.property('ADBE Transform Group');
-    const pos = transform.property('ADBE Position').keys;
-    assert.equal(pos.length, 24);
-    assert.ok(pos.some((p) => p[1][1] !== pos[0][1][1]), 'wave movement is baked');
-    const opacity = transform.property('ADBE Opacity').keys;
-    assert.ok(opacity[0][1] <= 50, 'layer transform opacity is applied to glyphs');
-    const docs = layer.property('ADBE Text Properties').property('ADBE Text Document').keys;
-    assert.equal(docs.length, 24);
-    assert.equal(docs[0][1].applyStroke, false);
-    assert.equal(docs[0][1].applyFill, true);
-  }
-  const parent = text[0].parent.property('ADBE Transform Group');
-  assert.ok(parent.property('ADBE Position').keys.at(-1)[1][0] > 0, 'source layer transform is baked');
-  assert.match(comp.comment, /not reproduced/);
-  const sourceBefore = out.source;
-  saves.length = 0; File.saveDialog = () => null;
-  vm.runInNewContext(sourceBefore, context);
-  assert.equal(saves.length, 0, 'save cancellation does not write a file');
-  assert.equal(undo, 0);
-  const beforeChanging = layers.length;
-  vm.runInNewContext(out.changingText, context);
-  const changingDocs = layers.slice(beforeChanging).filter((l) => l.kind === 'text')
-    .flatMap((l) => l.property('ADBE Text Properties').property('ADBE Text Document').keys.map((k) => k[1]));
-  assert.ok(new Set(changingDocs.map((d) => d.text)).size > 2, 'animated characters survive independent Source Text snapshots');
-  assert.ok(changingDocs.every((d) => d.applyStroke && !d.applyFill), 'outline text stays outline-only after colour assignment');
-  readTextError = true;
-  assert.throws(() => vm.runInNewContext(out.source, context), /Test Source Text read failure/);
-  assert.match(alerts.at(-1), /while styling .+ at frame 0: Error: Test Source Text read failure/);
-  assert.equal(saves.length, 0, 'a failed import does not save a project');
-  assert.equal(undo, 0, 'failed imports close the undo group');
-  console.log('PASS: browser JSX export, layer-backed text styling, independent animated text keys, fill/outline, motion, save/cancel, abort and failure diagnostics.');
+  const wave = importScript(exported.wave.source).text[0];
+  const wavePos = [...wave.property('ADBE Text Properties').property('ADBE Text Animators').items.values()][0];
+  const waveProperty = wavePos.property('ADBE Text Animator Properties').property('ADBE Text Position 3D');
+  const before = evaluate(waveProperty, wave);
+  effectProperty(wave, 'Wave height (px)').setValue(200);
+  assert.notEqual(evaluate(waveProperty, wave)[1], before[1], 'motion changes by editing a control, without rebaking');
+  const selector = wavePos.property('ADBE Text Selectors').property(1).property('ADBE Text Expressible Amount');
+  assert.notDeepEqual(evaluate(selector, wave, 0.2, 1), evaluate(selector, wave, 0.7, 1), 'wave animates');
+  assert.notDeepEqual(evaluate(selector, wave, 0.2, 1), evaluate(selector, wave, 0.2, 5), 'characters have distinct phases inside one text layer');
+
+  const pathResult = importScript(exported.path.source), path = pathResult.text[0];
+  const mask = path.property('ADBE Mask Parade').property(1);
+  assert.equal(mask.maskMode, 'NONE');
+  assert.ok(mask.property('ADBE Mask Shape').value.vertices.length > 1, 'editable native path anchors');
+  assert.equal(path.property('ADBE Text Properties').property('ADBE Text Path Options').property('ADBE Text Path').value, 1);
+  const sourceText = path.property('ADBE Text Properties').property('ADBE Text Document');
+  effectProperty(path, 'Repeats').setValue(2);
+  const doc = sourceText.value; doc.text = 'EDIT ME'; sourceText.setValue(doc);
+  const repeated = evaluate(sourceText, path);
+  assert.equal((repeated.match(/EDIT ME/g) || []).length, 2, 'source text remains editable with repeats');
+  const margin = path.property('ADBE Text Properties').property('ADBE Text Path Options').property('ADBE Text First Margin');
+  const startMargin = evaluate(margin, path, 0.2);
+  effectProperty(path, 'Scroll cycles').setValue(0);
+  assert.notEqual(evaluate(margin, path, 0.2), startMargin, 'native path speed is editable');
+  const reverseTravel = importScript(exported['path-travel'].source).text[0];
+  const reverseMargin = reverseTravel.property('ADBE Text Properties').property('ADBE Text Path Options').property('ADBE Text First Margin');
+  assert.ok(evaluate(reverseMargin, reverseTravel, 0.2) > evaluate(reverseMargin, reverseTravel, 0.7), 'negative travel moves from the path end towards the start');
+
+  const rise = importScript(exported.rise.source).text[0];
+  const riseDoc = rise.property('ADBE Text Properties').property('ADBE Text Document').value;
+  assert.equal(riseDoc.applyFill, false); assert.equal(riseDoc.applyStroke, true, 'outline mode survives AE colour setter side effects');
+  const unsupported = importScript(exported.unsupported.source);
+  assert.match(unsupported.comp.comment, /no native AE motion adapter/);
+  assert.equal(unsupported.text[0].property('ADBE Text Properties').property('ADBE Text Animators').items.size, 0);
+
+  const tr = importScript(exported.transform.source);
+  assert.equal(tr.text.length, 1);
+  assert.deepEqual(tr.allProperties.filter((p) => p.numKeys).map((p) => p.numKeys), [2, 2, 2, 2], 'only the two authored poses are keyed');
+  const boundary = importScript(exported.boundary.source);
+  assert.deepEqual(boundary.allProperties.filter((p) => p.numKeys).map((p) => p.numKeys), [4, 4, 4, 4], 'looping authored poses add only two boundary holds');
+  const morph = importScript(exported.morph.source);
+  const shapeKeys = morph.text[0].property('ADBE Mask Parade').property(1).property('ADBE Mask Shape').keys;
+  assert.equal(shapeKeys.length, 3, 'A→B→A uses three mask poses, not per-frame shape keys');
+  assert.ok(shapeKeys.every((k) => k[1].vertices.length === shapeKeys[0][1].vertices.length), 'native morph topology is consistent');
+  const multi = importScript(exported.multi.source);
+  assert.equal(multi.text.length, 3, 'one text layer per original studio layer');
+  assert.equal(multi.text[2].enabled, false, 'hidden source layers stay hidden');
+  const timing = importScript(exported.timing.source).text[0];
+  assert.equal(effectProperty(timing, 'Cycle (s)').value, 1);
+  assert.equal(effectProperty(timing, 'Delay (s)').value, 0.5);
+  assert.equal(effectProperty(timing, 'Loop').value, 0);
+  assert.equal(importScript(exported.wave.source, { cancelSave: true }).saves.length, 0);
+  const failed = importScript(exported.wave.source, { failText: true });
+  assert.match(failed.error.message, /Test Source Text read failure/);
+  assert.match(failed.alerts.at(-1), /while styling wave/);
+  assert.equal(failed.saves.length, 0);
+  console.log('PASS: 13 native exports; one text layer per studio layer; no per-frame keys; editable paths, selectors, controls and source text; sparse authored keys; timing, fallback notes, save/cancel, abort and error cleanup.');
 } finally { await browser.close(); await server.close(); }
