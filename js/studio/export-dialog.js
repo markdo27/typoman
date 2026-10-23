@@ -123,6 +123,7 @@
     ['gif', 'GIF', 'Animated image'],
     ['png', 'PNG', 'Still frame'],
     ['pngseq', 'PNG seq', 'Frames · ZIP'],
+    ['ae', 'After Effects', 'Editable keys · JSX → AEP'],
   ];
   const PHASE = { fonts: 'Loading fonts…', palette: 'Building the GIF palette…', finalize: 'Finishing the file…', encode: 'Encoding PNG…' };
 
@@ -412,6 +413,10 @@
       if (f.id === 'gif') return infoBox('', 'GIF89a · one palette for the whole loop', null, ['Up to 256 colours, loops forever, changed areas only. Best under ~800 px; for crisp HD use MP4 or WebM.', p.fps > 25 ? 'Some apps cap GIF playback near 25 fps.' : '']);
       if (f.id === 'png') return infoBox('', 'PNG still · lossless', null, [p.transparent ? 'RGBA with the background left transparent.' : 'Exact frame from the renderer, full quality.']);
       if (f.id === 'pngseq') return infoBox('', 'PNG sequence · lossless frames in a ZIP', null, [`${p.frames} numbered PNGs${p.transparent ? ' with alpha' : ''} plus a README with the frame rate. Imports into After Effects, Premiere, Resolve and ffmpeg.`]);
+      if (f.id === 'ae') return infoBox('warn', 'After Effects · editable text and baked keyframes', null, [
+        'Download the JSX, then run it in After Effects using File → Scripts → Run Script File. Choose where to save the .aep project. Install the scene fonts on that computer first.',
+        'Exports glyph/run position, scale, rotation, opacity, colour and source-text keys at the selected frame rate. Canvas masks, particles, custom drawing, layer effects, gradients, animated font axes and overlap order are not reproduced. Use PNG sequence for exact appearance.'
+      ]);
       const caps = X.caps();
       if (!caps.webcodecs) {
         return infoBox('warn', 'Real-time capture (MediaRecorder)', X.recorderMime(f.id) || null, [

@@ -57,6 +57,28 @@ No install, no account, no build step. It's static files on GitHub Pages.
   download a single self-contained HTML file. Share a remix link so others can open your
   scene in the studio.
 
+## After Effects projects
+
+Choose **Export → After Effects** to download a `.jsx` script. In desktop After Effects,
+use **File → Scripts → Run Script File**, select the script, then choose where to save
+the `.aep` project. Install the scene's fonts on that computer first. If you cancel the
+save dialog, the composition is still created without saving a file. The composition
+is added to your open project; use an empty project if you want a separate project.
+
+Text is exported as editable glyph or text-run layers, grouped under a parent for each
+studio layer. Position, scale, rotation, opacity, colour and source text are baked into
+HOLD keyframes at the export frame rate, including layer timing, path-driven text motion,
+echoes and layer transform keys. The browser does not write native `.aep` files itself;
+After Effects creates them when it runs the script.
+
+This is an editable transfer, with limits: canvas masks, particles and custom artwork,
+glow, shadow, blur, extrusion, grain, vignette, animated font axes and changing glyph
+overlap order are not reproduced. Gradients use solid colours, and fonts can differ.
+The export dialog and generated composition list these limits. Use a PNG sequence when
+you need the rendered appearance. After Effects itself is required to verify the final
+project's appearance; the automated `npm run test:ae` checks browser export and the
+generated script's project/layer/keyframe operations against an API test double.
+
 ## Embedding
 
 ```html
