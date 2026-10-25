@@ -138,7 +138,7 @@
     const m = modal({
       id: 'tm-export', title: 'Export', cls: 'tm-export',
       onRequestClose: () => { if (busy) { cancel(); return false; } return true; },
-      onClose: () => { cancelAnimationFrame(raf); raf = 0; if (flashJob) flashJob.abort(); flashJob = null; flashBox._flashKey = ''; },
+      onClose: () => { cancelAnimationFrame(raf); raf = 0; if (flashJob) flashJob.abort(); flashJob = null; flashBox._flashKey = ''; gateKey = ''; gateConfirmedKey = ''; gateUnknown = false; gateBox.hidden = true; },
     });
 
     // ── preview ──
@@ -210,12 +210,91 @@
     const ditherRow = h('div', { class: 'tm-field' }, h('span', { class: 'tm-lbl' }, 'Colours'), ditherSw.el);
 
     const info = h('div', { class: 'tm-info', 'aria-live': 'polite' });
-    // Photosensitivity (WCAG 2.3.1): a warning, never a block.
+    // Photosensitivity (WCAG 2.3.1): the note, plus the gate below it, which blocks.
     const flashBox = h('div', { class: 'tm-info warn tm-flash', role: 'note', hidden: true });
+    // Flash gate: when the measured check is over 3/s, Export stays disabled until the
+    // user separately confirms, with the measured rate in the confirmation itself — never
+    // a silent default — and a safe alternative spelled out. The confirmation is per
+    // scene: editing the scene clears it, and closing/reopening the dialog clears it too.
+    const gateTitle = h('div', { class: 'ttl' }, 'Export blocked: flashes above the limit');
+    const gateRate = h('p', null);
+    const gateSafe = h('p', null, 'Safer option: close this dialog, slow the flashing layer (lower its rate, or turn off its fast-flash option) or switch it to a safer preset, then export again — the check will pass and this gate will clear.');
+    const gateSw = switchCtl('Export anyway', (v) => { gateConfirmedKey = v ? gateKey : ''; syncGo(); });
+    // Retry for the unknown-measurement gate only: a failed check is re-run, never
+    // confirmed away (see applyUnknownGate). Hidden for measured over-limit scenes.
+    const gateRetry = h('button', { type: 'button', class: 'btn small', hidden: true, onclick: () => updateGate(store.scene) }, 'Retry flash check');
+    const gateBox = h('div', { class: 'tm-info warn tm-flash', role: 'note', hidden: true }, gateTitle, gateRate, gateSafe, gateSw.el, gateRetry);
+    let gateKey = '', gateConfirmedKey = '', gateUnknown = false;
+    const GATE_SAFE_TEXT = gateSafe.textContent;
+    function gateSceneKey(scene) {
+      const S = Studio.safety;
+      return S && S.keyOf ? S.keyOf(scene) : JSON.stringify(scene);
+    }
+    // An unknown measurement blocks even if this scene was previously confirmed:
+    // a stale confirmation was for a measured rate, not for "no measurement".
+    function gateBlocked() { return !!gateKey && gateKey === gateSceneKey(store.scene) && (gateUnknown || gateConfirmedKey !== gateKey); }
+    function syncGo() { go.disabled = busy || gateBlocked(); }
+    function applyGate(ok, rate, limit, scene) {
+      gateUnknown = false;
+      gateRetry.hidden = true;
+      gateSw.el.hidden = false;
+      gateSafe.textContent = GATE_SAFE_TEXT;
+      if (ok) { gateKey = ''; gateBox.hidden = true; syncGo(); return; }
+      gateKey = gateSceneKey(scene);
+      gateTitle.textContent = 'Export blocked: flashes above the limit';
+      gateRate.textContent = 'This scene flashes ' + Studio.flashText(rate) + ', above the limit of ' + limit + ' a second in WCAG 2.3.1. Export stays blocked until you confirm it below.';
+      gateSw.el.querySelector('span').textContent = 'Export anyway — I understand this flashes ' + Studio.flashText(rate);
+      gateSw.input.checked = gateConfirmedKey === gateKey;
+      gateBox.hidden = false;
+      syncGo();
+    }
+    // Round 7 unknown measurement: the flash check failed outright, so there is no
+    // measured rate to confirm against. Export stays blocked — the "Export anyway"
+    // switch is hidden, so an unknown scene cannot be confirmed away — and the
+    // only way out is a successful re-check (the Retry button, or reopening the
+    // dialog, which re-checks). This deliberately replaces the old start() path
+    // where a failed check fell back to preset estimates and, when those were
+    // silent, let the export proceed behind a "Couldn't check" note.
+    function applyUnknownGate(scene) {
+      gateKey = gateSceneKey(scene);
+      gateUnknown = true;
+      gateTitle.textContent = 'Export blocked: flashes could not be checked';
+      gateRate.textContent = 'The flash check failed, so this scene has no measured flash rate. Export stays blocked until a check succeeds — an unmeasured scene could flash above the limit of 3 a second in WCAG 2.3.1.';
+      gateSafe.textContent = 'Try the check again below. If it keeps failing, close this dialog and reopen it to re-check, or simplify the scene and try again — do not export an unmeasured scene.';
+      gateSw.el.hidden = true;
+      gateRetry.hidden = false;
+      gateBox.hidden = false;
+      syncGo();
+    }
+    function updateGate(scene) {
+      const S = Studio.safety;
+      if (!S || !S.available()) {
+        const risks = Studio.flashRisks ? Studio.flashRisks(scene) : [];
+        if (!risks.length) { applyGate(true, 0, Studio.FLASH_LIMIT, scene); return; }
+        applyGate(false, Math.max(...risks.map((r) => r.rate)), Studio.FLASH_LIMIT, scene);
+        return;
+      }
+      const hit = S.cached(scene);
+      if (hit) { applyGate(hit.ok, Math.max(hit.flashes || 0, hit.red || 0), hit.limit || Studio.FLASH_LIMIT, scene); return; }
+      // No result yet: flashNote has already started the same check (Studio.safety
+      // deduplicates by scene), and start() re-checks before exporting, so the gate
+      // stays out of the way until a failing result is known.
+      S.check(scene, { signal: flashJob && flashJob.signal }).then((res) => {
+        if (!m.isOpen || gateSceneKey(store.scene) !== gateSceneKey(scene)) return;
+        if (!res) { applyUnknownGate(scene); return; }
+        applyGate(res.ok, Math.max(res.flashes || 0, res.red || 0), res.limit || Studio.FLASH_LIMIT, scene);
+      }, (e) => {
+        if (e && e.name === 'AbortError') return;
+        console.warn('[studio] flash gate', e);
+        // A failed check is an unknown measurement, not a pass: block, with retry.
+        // (Stale results are ignored, as in the success branch above.)
+        if (m.isOpen && gateSceneKey(store.scene) === gateSceneKey(scene)) applyUnknownGate(scene);
+      });
+    }
     // Render-time estimate, measured before you start: a heavy effect stack at 1080p60 can take
     // a quarter of an hour, and the progress ETA only appears once rendering has begun.
     const costBox = h('div', { class: 'tm-info warn tm-cost', role: 'note', hidden: true });
-    const optsSet = h('fieldset', { class: 'tm-opts', style: 'border:0;margin:0;min-width:0' }, formats, flashBox, aeRow, resRow, fpsSeg.el, lenRow, frameRow, qualSeg.el, alphaRow, matteRow, ditherRow, info, costBox);
+    const optsSet = h('fieldset', { class: 'tm-opts', style: 'border:0;margin:0;min-width:0' }, formats, flashBox, gateBox, aeRow, resRow, fpsSeg.el, lenRow, frameRow, qualSeg.el, alphaRow, matteRow, ditherRow, info, costBox);
     m.body.append(optsSet);
 
     // ── footer ──
@@ -310,6 +389,8 @@
       if (key !== prevKey) { prevKey = key; pvScene = X.sceneFor(s, plan); pvRenderer.setScene(pvScene); sizePreview(); TM.prepare(pvScene); }
       updateInfo();
       Studio.flashNote(flashBox, s, undefined, flashJob && flashJob.signal);
+      updateGate(s);
+      syncGo();
       scheduleCost();
       if (f.still) drawPreview(plan.start);
     }
@@ -459,7 +540,7 @@
     function setBusy(on) {
       busy = on;
       optsSet.disabled = on;
-      go.disabled = on;
+      syncGo();
       progress.hidden = !on;
       pvTag.hidden = !on;
       if (on) { result.hidden = true; bar.value = 0; status.textContent = 'Starting…'; cancelBtn.focus(); }
@@ -514,7 +595,36 @@
 
     async function start() {
       if (busy) return;
+      go.disabled = true; // held while the gate re-checks, so a second click can't race it
       const scene = TM.Scene.clone(store.scene);
+      // Flash gate, checked again here (not just when the note appeared): a check that
+      // was still pending when the dialog opened must not let an over-limit export slip
+      // through, and a scene edited since the note appeared must be re-measured. This
+      // runs before setBusy, so a blocked attempt never starts (or cancels) a render.
+      const S = Studio.safety;
+      let allowed = true;
+      if (S && S.available()) {
+        try {
+          const res = await S.check(scene, { signal: flashJob && flashJob.signal });
+          if (res) { applyGate(res.ok, Math.max(res.flashes || 0, res.red || 0), res.limit || Studio.FLASH_LIMIT, store.scene); allowed = res.ok || gateConfirmedKey === gateKey; }
+          // No result despite a checker being available is also an unknown measurement.
+          else { applyUnknownGate(store.scene); allowed = false; }
+        } catch (e) {
+          if (e && e.name === 'AbortError') return;
+          console.warn('[studio] flash gate', e);
+          // Failed check: unknown measurement, blocked with a retry — not the old
+          // preset-estimate fallback, and never silently allowed when the estimates
+          // happen to be silent. (The S-unavailable branch below is untouched: with
+          // no checker at all there is no check to have failed, so the estimate
+          // gate remains the only signal there.)
+          applyUnknownGate(store.scene);
+          allowed = false;
+        }
+      } else {
+        const risks = Studio.flashRisks ? Studio.flashRisks(scene) : [];
+        if (risks.length) { applyGate(false, Math.max(...risks.map((r) => r.rate)), Studio.FLASH_LIMIT, store.scene); allowed = gateConfirmedKey === gateKey; }
+      }
+      if (!allowed) { syncGo(); (gateUnknown ? gateRetry : gateSw.input).focus(); return; }
       const o = options();
       if (lastURL) { URL.revokeObjectURL(lastURL); lastURL = null; }
       job = new AbortController();
@@ -547,6 +657,7 @@
         if (!flashJob) flashJob = new AbortController();
         frameIndex = playheadFrame();
         prevKey = '';
+        gateKey = ''; gateConfirmedKey = ''; gateUnknown = false; gateBox.hidden = true; // a fresh confirmation per opening
         result.hidden = busy ? result.hidden : true;
         m.open(() => fmtInputs.find((i) => i.value === prefs.format));
         refresh();
@@ -564,7 +675,7 @@
    * decides (through Studio.safety: cached, shared with the Motion panel's background check).
    * Calling it again for the same scene is free; `signal` aborts the wait (close the dialog).
    */
-  Studio.flashNote = function (box, scene, advice = 'Consider slowing it before you publish; the export still works.', signal) {
+  Studio.flashNote = function (box, scene, advice = 'This export is blocked until you confirm it below; slowing it is the safer choice.', signal) {
     const S = Studio.safety;
     if (S && S.available()) {
       const key = S.keyOf(scene);

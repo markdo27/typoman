@@ -112,11 +112,30 @@
           // stretched so a whole number of repeats fits exactly — no seam where the path closes.
           const gapPx = P.gap * size;
           const sepW = f.cache.sep ? f.cache.sepW + gapPx : 0;
-          let unit = line.width + gapPx + sepW;
-          let reps = Math.max(1, Math.ceil(path.length / unit) + 1);
-          if (path.closed) {
-            reps = Math.max(1, Math.round(path.length / unit));
+          const unit0 = line.width + gapPx + sepW;
+          // Closed-lane fit (Round 5, extended in Round 6): a tracked lane's length IS
+          // its text capacity — the tracking re-parameterisation has already spent the
+          // bends' room. A line longer than that (Star: ~700 px on a ~506 px lane at
+          // 65 px type) used to wrap in at() and pile its overflow onto the start.
+          // Scale the whole repeat — glyph sizes and advances, as Draw On's fit pass
+          // does — to the lane capacity instead, so one repeat fills the loop exactly
+          // and nothing wraps onto itself. Open paths keep fit = 1: their overflow is
+          // meant to scroll off and fade at the ends.
+          // Round 6 reps fix: the repeat count is chosen from the UNfitted unit, and
+          // the fit is then capped by the whole tiled run (reps * unit0), not by one
+          // unit. Previously, when round(lane/unit) rounded UP (e.g. Circle short:
+          // lane/unit ~1.7 -> 2 repeats), the unit was compressed to lane/reps while
+          // glyphs stayed full size, so the separator of one repeat landed on the
+          // first glyph of the next (2.8 px apart on Circle). Now the repeat shrinks
+          // proportionally instead, so repeats tile exactly at the fitted size; when
+          // reps * unit0 <= lane, fit stays 1 and the gap stretches as before.
+          let fit = 1, reps = 1, unit = unit0;
+          if (path.closed && unit0 > 0) {
+            reps = Math.max(1, Math.round(path.length / unit0));
+            fit = Math.min(1, path.length / (reps * unit0));
             unit = path.length / reps;
+          } else {
+            reps = Math.max(1, Math.ceil(path.length / unit0) + 1);
           }
           const shift = mod(P.offset * path.length + dir * P.speed * f.p * unit, unit);
           // Open paths need a repeat before the start and one past the end; a closed path wraps,
@@ -125,10 +144,10 @@
             const start = r * unit + shift;
             for (const gi of line.glyphs) {
               const g = L.glyphs[gi];
-              place(f, G, path, g, start + (g.x - x0) + g.w / 2, null, r);
+              place(f, G, path, g, start + ((g.x - x0) + g.w / 2) * fit, null, r, fit);
             }
             if (f.cache.sep) {
-              place(f, G, path, { ch: f.cache.sep, w: f.cache.sepW, vi: -1, i: -1, motionLine: li, isSpace: false, x: 0 }, start + line.width + gapPx / 2 + f.cache.sepW / 2, f.cache.sep, r);
+              place(f, G, path, { ch: f.cache.sep, w: f.cache.sepW, vi: -1, i: -1, motionLine: li, isSpace: false, x: 0 }, start + (line.width + gapPx / 2 + f.cache.sepW / 2) * fit, f.cache.sep, r, fit);
             }
           }
         } else {
@@ -147,9 +166,17 @@
           } else {
             s0 = P.offset * path.length - (path.closed ? 0 : line.width * P.offset);
           }
+          // Closed-lane fit (Round 6): extend the Round 5 Fill fit to single runs. A
+          // tracked lane's length is its text capacity, so a run longer than it wraps in
+          // at() and piles its overflow onto its start. Scale the run's advances and
+          // glyph sizes about its start s0 by fit = lane.length / line.width (capped at
+          // 1), exactly as Fill scales a repeat. s0 itself is untouched, so the travel
+          // start position and the still offset keep their meaning, and open paths keep
+          // fit = 1: their overflow is meant to scroll off and fade at the ends.
+          const fit = path.closed && line.width > 0 ? Math.min(1, path.length / line.width) : 1;
           for (const gi of line.glyphs) {
             const g = L.glyphs[gi];
-            place(f, G, path, g, s0 + (g.x - x0) + g.w / 2, null);
+            place(f, G, path, g, s0 + ((g.x - x0) + g.w / 2) * fit, null, 0, fit);
           }
         }
       });
@@ -245,7 +272,7 @@
     return false;
   }
 
-  function place(f, G, path, g, s, ch, slot = 0) {
+  function place(f, G, path, g, s, ch, slot = 0, scale = 1) {
     if (g.isSpace) return;
     const P = f.params, size = f.size;
     let alpha = 1;
@@ -267,6 +294,7 @@
       y: pt.y + pt.ny * off,
       rot: pt.angle * clamp(P.rotate, 0, 1),
       alpha,
+      scale,
       ch: ch || undefined,
       anchor: 'center',
       motionSlot: f.motionCapture ? slot : undefined,

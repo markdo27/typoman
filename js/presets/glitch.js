@@ -255,7 +255,100 @@
 
     /** Large-area luminance flashes per second this layer makes (0 when it cannot flash). */
     flashes(layer, scene) {
-      return clock(K.frameOf(layer, scene, TM.getPreset('glitch')), layer, scene.bg).rate;
+      const fr = K.frameOf(layer, scene, TM.getPreset('glitch'));
+      const P = fr.params, L = fr.layout;
+      if (!L || !L.glyphs || !L.glyphs.length || !(fr.W > 0) || !(fr.H > 0)) return 0;
+      // The old estimate's gate (below) is still the right one when it passes: there the
+      // render's own clock really is slowed by clock(), so clock().rate is the estimate.
+      // It is NOT the right gate when it fails. It compares the type's ink with the whole
+      // frame (12 %), but TM.Safety counts a flash in one 10° field (a third of the frame
+      // by a third). A headline at 6.6 % of the frame — glitch-drop's DROP/01 — still
+      // covers 96 % of a field (K.fieldShare), so the old estimate returned 0 for a layer
+      // TM.Safety measures at 3.5/s. That is the Round 5 discrepancy, fixed here without
+      // touching render: clock() and clockFor() are unchanged, so the render still runs
+      // at the full rate in this regime and this estimate models that render, not a
+      // hypothetical slowed one.
+      let ink = 0;
+      for (const g of L.glyphs) if (!g.isSpace) ink += K.inkOf(fr.layer.font.family, fr.layer.font.weight, g.ch, L.sizePx);
+      ink *= K.inkSpread(layer);
+      const inks = K.inkColors(layer), backs = K.backdrops(scene.bg);
+      if (ink / (fr.W * fr.H) >= 0.12 && K.swing(1, inks, backs)) return clock(fr, layer, scene.bg).rate;
+      // Below the old gate, a glitch frame can still be a large field transition only if
+      // the ink concentrated in its box covers a field at high contrast. fieldShare is
+      // the established MotionKit measure for exactly that (strobe-cut uses it the same
+      // way); low-contrast type still cannot flash, whatever its size.
+      const share = K.fieldShare(ink, L.width, L.height, fr.W, fr.H);
+      if (!K.swing(share, inks, backs)) return 0;
+      // Step model: replay the render's own seeded intensity, one value per glitch step,
+      // exactly as render() computes it (constant mode's rnd(901) draw, bursts mode's
+      // envelope, and the in/out flicker windows), then count Safety-style turns on it.
+      // A turn is a move of at least 0.1 — TM.Safety's luminance delta — from the last
+      // extreme followed by a reversal, counted in the worst 1.06 s window and halved,
+      // as K.flashRate does. The intensity is scaled by the type's size in TM.Safety
+      // cells: a Safety cell is a frame/24 wide, so a nominal 0.1-em stroke covers
+      // 0.1 * sizePx / (W/24) of a cell. At glitch-drop's 7.2 cells/em that is ~0.72 of
+      // a cell (nearly full strength); at the default scene's 2.2 cells/em it is ~0.22,
+      // so the same intensity swing crosses the 0.1 delta far less often — which is why
+      // the default VHS look (rate 12, constant) measures 0/s while glitch-drop at
+      // rate 8 measures 3.5/s, despite both being constant mode. The 0.1 stroke factor
+      // is a nominal mid-weight value, not fitted to the 3.5/s reading: heavy faces
+      // will read a little low, light faces a little high (see the notes file).
+      const rate = P.rate, steps = Math.max(1, Math.round(rate * fr.dur));
+      if (!(rate > 0)) return 0;
+      const { inDur, outDur } = K.windows(P);
+      const loop = P.timing === 'loop';
+      const amp = Math.min(1, 0.1 * L.sizePx * 24 / fr.W);
+      const vals = [];
+      for (let s = 0; s < steps; s++) {
+        const p = (s + 0.5) / steps;
+        const rnd = (salt) => fr.rand(salt, s);
+        let I = 0;
+        if (P.mode === 'constant') {
+          I = 0.3 + 0.7 * Math.pow(rnd(901), 2.2);
+        } else {
+          for (let b = 0; b < P.bursts; b++) {
+            const centre = fract(0.42 + b / P.bursts + (b ? fr.srand(b, 902) * 0.3 / P.bursts : 0));
+            const len = (P.burstLen * (b ? 0.7 + 0.6 * fr.rand(b, 903) : 1)) / fr.dur;
+            const u = fract(p - (centre - len * 0.3)) / len;
+            if (u >= 1) continue;
+            const env = smoothstep(0, 0.06, u) * Math.pow(1 - u, 1.3) * (rnd(904 + b) < 0.78 ? 1 : 0.12);
+            I = Math.max(I, env);
+          }
+        }
+        if (!loop) {
+          const rin = inDur > 0 ? 1 - smoothstep(inDur * 0.7, inDur * 1.05, p) : 0;
+          const rout = outDur > 0 ? smoothstep(1 - outDur * 1.05, 1 - outDur * 0.7, p) : 0;
+          I = Math.max(I, 0.85 * Math.max(rin, rout));
+        }
+        vals.push(I * (P.intensity || 0) * amp);
+      }
+      // Safety-style turns, walked twice so the loop seam counts, recorded on the
+      // second pass (the same construction as TM.Safety's transitions()).
+      const turns = [];
+      let lo = vals[0], hi = vals[0], ext = vals[0], trend = 0;
+      for (let k = 1; k < vals.length * 2; k++) {
+        const v = vals[k % vals.length], t = ((k % vals.length) / steps) * fr.pass;
+        if (trend === 0) {
+          if (v < lo) lo = v;
+          if (v > hi) hi = v;
+          if (hi - lo >= 0.1) { trend = v === hi ? 1 : -1; ext = v; }
+        } else if (trend > 0 ? v > ext : v < ext) {
+          ext = v;
+        } else if (Math.abs(v - ext) >= 0.1) {
+          trend = -trend;
+          if (k >= vals.length) turns.push(t);
+          ext = v;
+        }
+      }
+      if (!turns.length) return 0;
+      const ext2 = turns.concat(turns.map((t) => t + fr.pass));
+      let best = 0;
+      for (let i = 0; i < turns.length; i++) {
+        let c = 0;
+        for (const t of ext2) if (t >= turns[i] && t < turns[i] + 1.06) c++;
+        if (c > best) best = c;
+      }
+      return best / 2;
     },
   });
 
