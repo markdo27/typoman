@@ -68,6 +68,14 @@
     'js/presets/focus-pull.js',
     'js/presets/shutter.js',
     'js/presets/zoom-through.js',
+    'js/presets/ticker.js',
+    'js/presets/blob-reveal.js',
+    'js/presets/floor-plane.js',
+    'js/presets/ink-pen.js',
+    'js/presets/odometer.js',
+    'js/presets/axis-drift.js',
+    'js/presets/anaglyph.js',
+    'js/presets/spiral.js',
   ];
 
   // ── Export & embed runtime (owner: export team) ──
