@@ -3,7 +3,10 @@
  * Tabs: Embed (responsive iframe snippet with a live preview), Web component
  * (<typoman-player>), HTML file (self-contained download) and Links (remix + player). Options
  * (autoplay, loop, controls, transparent, fit) apply to the snippets, the player link, the
- * HTML file and the live preview, which runs the local embed.html.
+ * HTML file and the live preview, which runs the local embed.html. Embed extras — play on
+ * hover, scroll scrub and per-layer page text — apply to the iframe and web-component codes
+ * only; they are features player.js and embed.html already support, surfaced here rather than
+ * hidden in their docs.
  *
  * Uploaded fonts live only in this browser. Iframes, the web component and links carry the
  * scene alone, so viewers get the default face, and those tabs say so. The HTML file inlines
@@ -39,7 +42,7 @@
   const WAYS = { embed: 'An iframe embed', component: 'The web component', links: 'A link' };
 
   function createShareDialog(store) {
-    const opt = { autoplay: true, loop: true, controls: false, transparent: false, fit: 'contain' };
+    const opt = { autoplay: true, loop: true, controls: false, transparent: false, fit: 'contain', hover: false, scrub: false, pageText: [] };
     let code = '', tab = 'embed', building = false;
     // Preview state: a counter that forces a fresh player (autoplay / loop changes), and the
     // real HTML file (a blob URL) when the HTML tab previews uploaded fonts.
@@ -90,7 +93,7 @@
     // ── options ──
     const toggles = h('div', { class: 'tm-toggles' });
     const sw = {};
-    [['autoplay', 'Autoplay'], ['loop', 'Loop'], ['controls', 'Controls'], ['transparent', 'Transparent background']].forEach(([key, text]) => {
+    [['autoplay', 'Autoplay'], ['loop', 'Loop'], ['controls', 'Controls'], ['transparent', 'Transparent background'], ['hover', 'Play on hover'], ['scrub', 'Scroll scrub']].forEach(([key, text]) => {
       const input = h('input', { type: 'checkbox', role: 'switch' });
       input.addEventListener('change', () => {
         opt[key] = input.checked;
@@ -101,7 +104,37 @@
       toggles.append(h('label', { class: 'tm-switch' }, input, h('span', null, text)));
     });
     const fitSeg = Studio.segField('Fit', 'tm-s-fit', (v) => { opt.fit = v; update(); });
-    const optionsBox = h('div', { class: 'tm-panel' }, toggles, fitSeg.el,
+    // ── embed extras: per-layer page text (player.js text / text-2 … text-6, up to 6 layers).
+    // Inputs hold the override, not the scene text: blank means "keep the scene's text", and
+    // the snippet only carries layers the user actually overrode. Values are never inserted
+    // as HTML: the iframe code URL-encodes them and the component code escapes them (see
+    // snippets() below), and labels/placeholders are set as text, never innerHTML.
+    const pageTextInputs = [], pageTextLabels = [], pageTextRows = [];
+    for (let i = 0; i < 6; i++) {
+      const lab = h('span', { class: 'tm-lbl' }, 'Layer ' + (i + 1));
+      const input = h('input', { type: 'text', 'aria-label': 'Page text for layer ' + (i + 1), placeholder: '' });
+      input.addEventListener('input', () => { opt.pageText[i] = input.value; update(); });
+      pageTextLabels.push(lab); pageTextInputs.push(input);
+      pageTextRows.push(h('div', { class: 'tm-field' }, lab, input));
+    }
+    let pageTextSig = '';
+    function syncPageText(s) {
+      const sig = s.layers.slice(0, 6).map((l) => (l.name || '') + '\u0001' + (l.text || '')).join('\u0002');
+      if (sig === pageTextSig) return;
+      pageTextSig = sig;
+      s.layers.slice(0, 6).forEach((l, i) => {
+        pageTextLabels[i].textContent = 'Layer ' + (i + 1) + (l.name ? ' — ' + l.name : '');
+        pageTextInputs[i].placeholder = String(l.text || '').split('\n')[0].slice(0, 40);
+        pageTextRows[i].hidden = false;
+      });
+      for (let i = s.layers.length; i < 6; i++) pageTextRows[i].hidden = true;
+    }
+    const extrasBox = h('div', { class: 'tm-panel' },
+      h('b', null, 'Per-page text'),
+      h('p', { class: 'tm-note' }, 'One design, different copy on every page: the web component uses text, text-2 … text-6; the iframe uses text, text2 … text6. Leave a layer blank to keep the scene’s text.'),
+      ...pageTextRows,
+      h('p', { class: 'tm-note' }, 'These extras apply to the iframe and web-component codes only, not the HTML file or links. Play on hover and scroll scrub take over from autoplay on the web component; for an iframe, scroll scrub needs the script in the Embed tab, and the preview here still plays normally.'));
+    const optionsBox = h('div', { class: 'tm-panel' }, toggles, fitSeg.el, extrasBox,
       h('p', { class: 'tm-note' }, 'Viewers who prefer reduced motion see a still frame with a play button, and the player pauses while it is off screen. Without Loop it plays once and stops on its last frame; with Controls, its corner button turns into Replay.'));
 
     // ── snippet panels ──
@@ -115,6 +148,37 @@
     }
     const embedTA = snippetPanel('embed', 'Iframe embed code', 'Responsive: fills its container\'s width and keeps the scene\'s aspect ratio. Paste into any HTML, Webflow, WordPress or Notion embed block.');
     const compTA = snippetPanel('component', 'Web component', 'Load player.js once per page, then use as many <typoman-player> tags as you like. It is a block element: set a width and the height follows the aspect ratio.');
+    // Scroll scrub for an iframe is not a URL flag: embed.html has no scrub parameter, so
+    // the page drives it with the postMessage API embed.html already accepts
+    // ({ typoman: 'progress', value: 0..1 }), using the same viewport formula the web
+    // component's own scrub="scroll" uses. Shown only while Scroll scrub is on; the iframe
+    // above gets id="typoman-embed" at the same time so this script can find it.
+    function scrubScript() {
+      return [
+        '<script>',
+        '(function () {',
+        "  var frame = document.getElementById('typoman-embed');",
+        '  function send() {',
+        '    if (!frame || !frame.contentWindow) return;',
+        '    var r = frame.getBoundingClientRect();',
+        '    var vh = window.innerHeight || document.documentElement.clientHeight || 1;',
+        '    var value = Math.min(1, Math.max(0, (vh - r.top) / (vh + r.height)));',
+        "    frame.contentWindow.postMessage({ typoman: 'progress', value: value }, '*');",
+        '  }',
+        "  window.addEventListener('scroll', send, { passive: true });",
+        "  window.addEventListener('resize', send);",
+        '  send();',
+        '})();',
+        '</script>',
+      ].join('\n');
+    }
+    const scrubTA = h('textarea', { class: 'tm-snippet', readonly: true, spellcheck: 'false', rows: 13, 'aria-label': 'Scroll scrub script for the iframe' });
+    const scrubCopy = h('button', { type: 'button', class: 'btn primary small' }, 'Copy script');
+    scrubCopy.addEventListener('click', () => Studio.copyText(scrubTA.value, scrubCopy));
+    scrubTA.addEventListener('focus', () => scrubTA.select());
+    const scrubBox = h('div', { class: 'tm-panel' }, h('div', { class: 'tm-row-head' }, h('b', null, 'Scroll scrub script'), scrubCopy), scrubTA,
+      h('p', { class: 'tm-note' }, 'Paste this after the iframe code. It posts the iframe’s scroll progress as the page scrolls, so the scroll drives the frame instead of it playing.'));
+    panels.embed.append(scrubBox);
 
     const htmlInfo = h('p', { class: 'tm-note' });
     const htmlBtn = h('button', { type: 'button', class: 'btn primary' }, 'Download HTML');
@@ -153,6 +217,10 @@
       let s = '#c=' + code + '&autoplay=' + (o.autoplay ? 1 : 0) + '&loop=' + (o.loop ? 1 : 0) + '&controls=' + (o.controls ? 1 : 0);
       if (o.transparent) s += '&bg=transparent';
       if (o.fit === 'cover') s += '&fit=cover';
+      if (o.hover) s += '&trigger=hover';
+      // Per-layer page text, embed.html's spelling: text, text2 … text6 (URL-encoded, so
+      // any characters the user typed are safe in the link).
+      (o.pageText || []).forEach((v, i) => { if (v) s += '&' + (i === 0 ? 'text' : 'text' + (i + 1)) + '=' + encodeURIComponent(v); });
       return s;
     }
     /** Options the HTML file is built with: without autoplay it always shows its controls. */
@@ -164,10 +232,13 @@
       const iframeStyle = 'position:absolute;inset:0;width:100%;height:100%;border:0' + (opt.transparent ? ';color-scheme:normal;background:transparent' : '');
       const embed = [
         `<div style="position:relative;width:100%;aspect-ratio:${s.size.w}/${s.size.h}">`,
-        `  <iframe src="${pub}embed.html${hashFor(opt)}" title="${title}" style="${iframeStyle}" loading="lazy" allow="autoplay"></iframe>`,
+        `  <iframe${opt.scrub ? ' id="typoman-embed"' : ''} src="${pub}embed.html${hashFor(opt)}" title="${title}" style="${iframeStyle}" loading="lazy" allow="autoplay"></iframe>`,
         '</div>',
       ].join('\n');
-      const attrs = [opt.autoplay && 'autoplay', opt.loop && 'loop', opt.controls && 'controls', opt.transparent && 'bg="transparent"', opt.fit === 'cover' && 'fit="cover"'].filter(Boolean);
+      const attrs = [opt.autoplay && 'autoplay', opt.loop && 'loop', opt.controls && 'controls', opt.transparent && 'bg="transparent"', opt.fit === 'cover' && 'fit="cover"', opt.hover && 'trigger="hover"', opt.scrub && 'scrub="scroll"'].filter(Boolean);
+      // Per-layer page text, the component's spelling: text, text-2 … text-6. Newlines go
+      // out as the literal \n the player turns back into line breaks; the rest is escaped.
+      (opt.pageText || []).forEach((v, i) => { if (v) attrs.push((i === 0 ? 'text' : 'text-' + (i + 1)) + '="' + esc(String(v).replace(/\n/g, '\\n')) + '"'); });
       const comp = [
         `<script src="${pub}player.js" async></script>`,
         `<typoman-player scene="${code}"${attrs.length ? ' ' + attrs.join(' ') : ''} label="${esc(s.name || 'Animated type')}"></typoman-player>`,
@@ -182,6 +253,9 @@
       const out = snippets();
       embedTA.value = out.embed;
       compTA.value = out.comp;
+      scrubTA.value = scrubScript();
+      scrubBox.hidden = !opt.scrub;
+      syncPageText(s);
       remixIn.value = out.remix;
       playerIn.value = out.player;
       pvFrame.classList.toggle('checker', opt.transparent);
@@ -298,6 +372,10 @@
       async open() {
         if (!flashJob) flashJob = new AbortController();
         code = await TM.Scene.encode(store.scene);
+        // Page-text overrides belong to the scene they were typed for: a new opening starts
+        // blank rather than carrying another scene's copy into these snippets.
+        opt.pageText = [];
+        pageTextInputs.forEach((input) => { input.value = ''; });
         reloads++; // every opening starts the preview fresh
         select(tab);
         update();

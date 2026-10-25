@@ -351,6 +351,21 @@ await run(async (cleanup) => {
     await dlg.getByRole('group', { name: 'Quality' }).getByRole('radio', { name: /draft/i }).check();
     await dlg.getByRole('group', { name: 'Frame rate' }).getByRole('radio', { name: '24', exact: true }).check();
     await dlg.getByRole('combobox', { name: 'Resolution' }).selectOption({ index: 0 });
+    // Round 5 flash gate: this scene measures 8 flashes/s, so Export is blocked until
+    // the gate's own confirmation switch is checked — the gate, not the test, is the
+    // behaviour under test here, so confirm it and keep the real draft export below.
+    const gateSwitch = dlg.getByRole('switch', { name: /Export anyway/ });
+    const gateShown = await until(page, () => [...document.querySelectorAll('#tm-export [role="note"]')].some((w) => !w.hidden && /Export blocked/.test(w.textContent)), null, 30000);
+    const exportBtn = dlg.getByRole('button', { name: /^Export WebM/ });
+    const blockedBefore = gateShown ? await exportBtn.isDisabled().catch(() => false) : false;
+    R.check('the over-limit scene shows the flash gate and blocks Export until confirmed', gateShown && blockedBefore, await S(page, (blocked) => {
+      const w = [...document.querySelectorAll('#tm-export [role="note"]')].find((n) => /Export blocked/.test(n.textContent));
+      return (w ? w.textContent.replace(/\s+/g, ' ').trim().slice(0, 160) : 'no gate') + `, Export disabled: ${blocked}`;
+    }, blockedBefore));
+    if (gateShown) {
+      await gateSwitch.check();
+      R.check('checking the gate confirmation enables Export', await until(page, () => { const b = [...document.querySelectorAll('#tm-export button')].find((x) => /^Export WebM/.test(x.textContent)); return !!b && !b.disabled; }));
+    }
     const t0 = Date.now();
     const [dl] = await Promise.all([
       page.waitForEvent('download', { timeout: 60000 }),

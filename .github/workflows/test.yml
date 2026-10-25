@@ -13,6 +13,10 @@ permissions:
 #   embed   iframe, <typoman-player> and standalone HTML on a foreign origin
 #   sweep   every curated look and every select/toggle option of every preset
 #   studio  the studio's user flows in index.html, desktop and phone (touch)
+#   flash   every preset's defaults and looks at or below 3 flashes/s (WCAG 2.3.1),
+#           plus the long-loop aliasing documentation check (Round 5 gap 2)
+#   budget  per-preset / per-template 1080p frame-cost guardrail (Round 5 gap 3):
+#           fails only when a preset or template exceeds 200 ms/frame (median, both passes)
 jobs:
   smoke:
     runs-on: ubuntu-latest
@@ -85,3 +89,31 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - run: npm run test:studio
+
+  flash:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      # test:flash is `node tests/flashes-a.mjs all` (every preset, defaults + looks).
+      # The long-loop check is a documentation test, not a safety pass: it pins the
+      # 900-frame analysis cap, so it must run even though its ALIASED line is expected.
+      - run: npm run test:flash
+      - run: node tests/flash-long-loop.mjs
+
+  budget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: node tests/frame-budget.mjs

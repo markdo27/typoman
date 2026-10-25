@@ -35,10 +35,18 @@
     return out;
   }
   /**
-   * The text lane `up` px beside the path, on the engine's parallel curve with bend-aware
-   * spacing, path.offset(-up).spaced(capH / 2), so letters stop colliding on concave bends and
-   * at sharp corners. Tabulated by lane arc length together with the matching base-path arc
-   * length (nearest base sample, walked forward), so the pen still reaches each letter on time.
+   * The text lane `up` px beside the path. Round 5: the lane is taken off a rounded
+   * carrier — path.rounded(R, R).lane(-up) — instead of the plain offset lane
+   * path.offset(-up), then bend-spaced as before. At an acute vertex the plain offset
+   * lane turns ~90° between two adjacent glyphs, so their tall boxes touch even when
+   * spaced correctly along the lane; the carrier's fillet (radius |up| + 0.7·capH, so
+   * the lane itself keeps a radius of ~0.7·capH on its inside, deviation capped at
+   * ~2.9·capH as in Path Flow's 2 em limit) spreads that turn over an arc, so
+   * neighbours rotate gradually instead of snapping. The stroke is still drawn on the
+   * original path, so at a sharp point the lane cuts the corner by up to that
+   * deviation — the price of the smoothing, and why the lane is not rounded harder.
+   * Tabulated by lane arc length together with the matching base-path arc length
+   * (nearest base sample, walked forward), so the pen still reaches each letter on time.
    */
   const laneCache = new WeakMap();
   function laneTable(path, up, capH) {
@@ -47,11 +55,13 @@
     const key = up.toFixed(2) + '|' + capH.toFixed(1);
     let t = byUp.get(key);
     if (t) return t;
-    const lane = path.offset(-up).spaced(capH / 2);
+    const R = Math.abs(up) + capH * 0.7;
+    const carrier = R > 0 ? path.rounded(R, R, { limit: capH * 2.85 }) : path;
+    const lane = carrier.lane(-up).spaced(capH / 2);
     const Ll = lane.length;
     const l = new Float32Array(M + 1), s = new Float32Array(M + 1), x = new Float32Array(M + 1), y = new Float32Array(M + 1);
     const bx = path.xs, by = path.ys, bn = path.n, bcum = path.cum;
-    let j = 0, topY = Infinity;
+    let j = 0, topY = Infinity, bottomY = -Infinity;
     for (let i = 0; i <= M; i++) {
       l[i] = (Ll * i) / M;
       const q = lane.at(path.closed ? Math.min(l[i], Ll - 1e-3) : l[i]);
@@ -65,6 +75,7 @@
       j = bi;
       s[i] = Math.max(i ? s[i - 1] : 0, bcum[bi]);
       topY = Math.min(topY, q.y);
+      bottomY = Math.max(bottomY, q.y);
     }
     // The top of the shape: the middle of its topmost stretch (a mean of arc length weighted by
     // height, circular on closed lanes so a stretch across the lane's start isn't split), so a flat
@@ -81,7 +92,7 @@
       sn += w * Math.sin((TM.math.TAU * l[i]) / Ll);
     }
     const top = path.closed ? TM.math.mod((Math.atan2(sn, sc) / TM.math.TAU) * Ll, Ll) : sl / sw;
-    t = { s, l, x, y, length: Ll, top };
+    t = { s, l, x, y, length: Ll, top, topY, bottomY };
     if (byUp.size > 16) byUp.clear();
     byUp.set(key, t);
     return t;
@@ -99,6 +110,29 @@
     let lo = 0, hi = 1;
     for (let i = 0; i < 22; i++) { const mid = (lo + hi) / 2; if (ease(mid) < v) lo = mid; else hi = mid; }
     return (lo + hi) / 2;
+  }
+
+  /** SAT overlap depth (px) of two oriented glyph boxes, or <=0 when they separate.
+   *  Boxes are centred at (x, y), rotated by rot, half-width hw along rot, half-height hh.
+   *  A positive depth is exactly how far the later box must shrink (or move) to stop
+   *  touching its predecessor. */
+  function boxDepth(a, b) {
+    const corners = (c) => {
+      const cs = Math.cos(c.rot), sn = Math.sin(c.rot);
+      return [[-c.hw, -c.hh], [c.hw, -c.hh], [c.hw, c.hh], [-c.hw, c.hh]].map(([u, v]) => [c.x + u * cs - v * sn, c.y + u * sn + v * cs]);
+    };
+    const ca = corners(a), cb = corners(b);
+    let depth = Infinity;
+    for (const t of [a.rot, b.rot]) {
+      for (const [ax, ay] of [[Math.cos(t), Math.sin(t)], [-Math.sin(t), Math.cos(t)]]) {
+        let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
+        for (const [x, y] of ca) { const v = x * ax + y * ay; if (v < a0) a0 = v; if (v > a1) a1 = v; }
+        for (const [x, y] of cb) { const v = x * ax + y * ay; if (v < b0) b0 = v; if (v > b1) b1 = v; }
+        depth = Math.min(depth, Math.min(a1, b1) - Math.max(a0, b0));
+        if (depth <= 0) return depth;
+      }
+    }
+    return depth;
   }
 
   TM.registerPreset({
@@ -170,19 +204,38 @@
         if (P.side === 'below') return -(P.gap * size + half + li * L.lineGap * k);
         return P.gap * size + half + (lanes - 1 - li) * L.lineGap * k;
       };
+      // Off-frame clamp (Round 5): on a closed path, a lane beside the stroke can leave
+      // the frame — the Frame shape is inset only 0.085 of the short side, less than
+      // gap + cap height, so "above" text on its top edge ran off the top (lane centre
+      // ~13 px at 65 px type, glyph top ~−10 px). Pull the lane back toward the stroke
+      // just enough that the glyph top (0.6·capH: half the cap height plus pop-overshoot
+      // headroom) stays inside the frame, and symmetrically for "below" at the bottom.
+      // Only the vertical extremes are clamped, and only when they actually leave the
+      // frame, so every other shape and the pop geometry (rise, tilt, pen timing, all
+      // read from the same lane table) are unchanged. Left/right clipping on a spread
+      // marquee is not clamped here — see path-notes.md.
+      const upClamped = (li, kk) => {
+        const up0 = upOf(li, kk);
+        if (!path.closed || P.side === 'center') return up0;
+        const lane0 = laneTable(path, up0, L.capH * kk);
+        const head = L.capH * kk * 0.6;
+        if (P.side === 'above' && lane0.topY < head) return up0 - (head - lane0.topY);
+        if (P.side === 'below' && lane0.bottomY + head > f.H) return up0 + (lane0.bottomY + head - f.H);
+        return up0;
+      };
       // Fit: the longest line must fit its lane (two passes: lane length depends on the size).
       let k = 1;
       for (let pass = 0; pass < 2; pass++) {
         let fit = 1;
         L.lines.forEach((line, li) => {
-          if (line.width > 0) fit = Math.min(fit, (laneTable(path, upOf(li, k), L.capH * k).length * (path.closed ? 0.98 : 0.92)) / line.width);
+          if (line.width > 0) fit = Math.min(fit, (laneTable(path, upClamped(li, k), L.capH * k).length * (path.closed ? 0.98 : 0.92)) / line.width);
         });
         k = Math.min(1, fit);
       }
       const popOutLen = pop * 0.7;
       L.lines.forEach((line, li) => {
         if (!line.glyphs.length) return;
-        const up = upOf(li, k);
+        const up = upClamped(li, k);
         const lane = laneTable(path, up, L.capH * k);
         const Ll = lane.length;
         const w = line.width * k;
@@ -198,6 +251,7 @@
         const wrap = (lam) => (path.closed ? TM.math.mod(lam, Ll) : lam);
         const sOf = (lam) => lookup(lane.l, lane.s, wrap(lam)); // lane arc length → path arc length
         const lanePt = (lam) => ({ x: lookup(lane.l, lane.x, wrap(lam)), y: lookup(lane.l, lane.y, wrap(lam)) });
+        let prevBox = null;
         for (const gi of line.glyphs) {
           const g = L.glyphs[gi];
           if (g.isSpace) continue;
@@ -228,6 +282,25 @@
             rot += vo * tiltR * -sideSign;
             alpha *= 1 - clamp((kout - 0.75) / 0.25);
           }
+          // Vertex-local shrink (Round 6): if this glyph's box touches its predecessor's,
+          // shrink only this glyph — iterating to a 20% cap — by just enough to clear.
+          // Straight segments (depth <= 0) are untouched, the pop envelope elsewhere is
+          // untouched, and no glyph moves along the lane, so a self-crossing lane (Loop)
+          // can never be pushed onto a neighbouring branch the way spacing would.
+          // The box uses the lane angle, not the pop tilt, and the lane point, not the
+          // rise offset (both are zero at full pop, when the harness measures).
+          let shrink = 1;
+          if (prevBox) {
+            for (let iter = 0; iter < 3 && shrink > 0.8; iter++) {
+              const boxHw = (g.w * sc * shrink) / 2, boxHh = size * 0.35 * sc * shrink;
+              const d = boxDepth(prevBox, { x: c.x, y: c.y, rot: ang, hw: boxHw, hh: boxHh });
+              if (d <= 0) break;
+              const step = Math.min(0.2, (d + 0.5) / (boxHw + boxHh));
+              shrink = Math.max(0.8, shrink * (1 - step));
+            }
+            sc *= shrink;
+          }
+          prevBox = { x: c.x, y: c.y, rot: ang, hw: (g.w * sc) / 2, hh: size * 0.35 * sc };
           // Letters rise off the line: start `rise` closer to the stroke, glide out to the lane.
           f.drawGlyph(g, { x: c.x - Math.sin(ang) * drop, y: c.y + Math.cos(ang) * drop, rot, scale: sc, alpha });
         }

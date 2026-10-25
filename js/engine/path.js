@@ -203,6 +203,22 @@
      * the glyphs' centres spaces letters naturally: wider where the curve is convex and
      * tighter where it is concave, so tops don't collide on inner bends. Loops that a large
      * offset makes at tight concave corners are cut out. Cached per offset.
+     *
+     * Fold trimming: dropping backwards steps alone leaves a worse fold at sharp vertices
+     * (a zigzag vertex at 960×540: the offset curve jumps from the vertex back across its
+     * own branch, so two glyphs 30 px apart along the lane land ~5 px apart in space and
+     * overlap). When a new point lands within a few px of a kept point reached by only a
+     * short detour (≤ max(48, 3·|d|) px of curve, at least 6 samples back), the detour is
+     * cut: the curve goes from that kept point straight to the new one, i.e. through the
+     * offset lines' intersection, as a trimmed offset should. The trim is further gated
+     * on the detour containing a jump step (≥ max(12, 4× the mean sample step)): a fold
+     * left by the backwards-drop always contains one (the jump back across the branch,
+     * ~39 px on the zigzag), while a genuine self-crossing's detour is smooth steps
+     * throughout — trimming those shifted glyphs onto the wrong branch of a loop's
+     * crossing. The detour bound likewise keeps spiral arms and lissajous loops out of
+     * reach, and folds straddling the seam of a closed path are left alone (the kept
+     * array does not wrap). Only offset() is trimmed: lane() runs on rounded carriers,
+     * whose radii already rule folds out.
      */
     offset(d) {
       if (!(Math.abs(d) > 0.01) || this.n < 2) return this;
@@ -210,12 +226,40 @@
       if (!this._offsets) this._offsets = new Map();
       const hit = this._offsets.get(key);
       if (hit) return hit;
-      const xs = [], ys = [];
-      let lx = 0, ly = 0;
+      const eps = Math.min(6, Math.max(2, Math.abs(key) * 0.2));
+      const budget = Math.max(48, Math.abs(key) * 3);
+      const jump = Math.max(12, 4 * (this.length / Math.max(1, this.n)));
+      const xs = [], ys = [], keptCum = [], steps = [];
+      let lx = 0, ly = 0, keptLen = 0;
       for (let i = 0; i < this.n; i++) {
         const x = this.xs[i] - this.ty[i] * key, y = this.ys[i] + this.tx[i] * key;
         // Skip points that move backwards against the base direction (inside a swallowtail).
         if (xs.length && (x - lx) * this.tx[i] + (y - ly) * this.ty[i] <= 0) continue;
+        if (xs.length >= 6) {
+          // Closest earlier kept point within eps, reached by a short, jumpy detour only.
+          let best = -1, bestD2 = eps * eps;
+          for (let j = xs.length - 1; j >= 0 && keptLen - keptCum[j] <= budget; j--) {
+            if (xs.length - j < 6) continue;
+            const dx = x - xs[j], dy = y - ys[j], d2 = dx * dx + dy * dy;
+            if (d2 <= bestD2) { bestD2 = d2; best = j; }
+          }
+          if (best >= 0) {
+            let maxStep = xs.length ? Math.hypot(x - lx, y - ly) : 0;
+            for (let j = best + 1; j < steps.length; j++) if (steps[j] > maxStep) maxStep = steps[j];
+            if (maxStep >= jump) {
+              xs.length = best + 1;
+              ys.length = best + 1;
+              keptCum.length = best + 1;
+              steps.length = best + 1;
+              keptLen = keptCum[best];
+              lx = xs[best];
+              ly = ys[best];
+            }
+          }
+        }
+        keptLen += xs.length ? Math.hypot(x - lx, y - ly) : 0;
+        keptCum.push(keptLen);
+        steps.push(xs.length ? Math.hypot(x - lx, y - ly) : 0);
         xs.push(x);
         ys.push(y);
         lx = x;

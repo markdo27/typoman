@@ -362,6 +362,11 @@
       this.frame = new Frame(this);
       this._layer = null;
       this._accum = null;
+      // Incremented once per render(): lets _setupFor and _pathFor memoise within a
+      // single frame (echo/blur passes re-render the same layer) without ever reusing
+      // a result across an edit, since every render() call bumps it.
+      this._setupToken = 0;
+      this._pathMemo = null;
       this._setup = new Map();
       this._grain = null;
       this.stats = { renders: 0, lastMs: 0 };
@@ -389,6 +394,18 @@
         this._actx = this._accum.getContext('2d');
         this._tmp = makeCanvas(W, H);
         this._tctx = this._tmp.getContext('2d');
+      }
+    }
+
+    /** Supersampled layer buffers for transform-keyed layers (see _renderLayer). */
+    _hiBuffers(W, H) {
+      if (!this._hiLayer || this._hiLayer.width !== W || this._hiLayer.height !== H) {
+        this._hiLayer = makeCanvas(W, H);
+        this._hiLctx = this._hiLayer.getContext('2d');
+        this._hiAccum = makeCanvas(W, H);
+        this._hiActx = this._hiAccum.getContext('2d');
+        this._hiTmp = makeCanvas(W, H);
+        this._hiTctx = this._hiTmp.getContext('2d');
       }
     }
 
@@ -421,13 +438,21 @@
 
     _pathFor(layer, W, H, p) {
       if (!layer.path) return null;
-      const a = TM.Path.sample(layer.path, W, H);
       // Path keyframes: A → keys… over the loop, 'pingpong' (default; one key = the classic
       // A → B → A) or 'cycle', with per-key eases. See TM.Path.sequence.
       const pm = layer.pathMorph;
       const keys = pm && pm.enabled ? TM.Path.morphKeys(pm) : [];
-      if (!keys.length) return a;
-      return TM.Path.sequence([a].concat(keys.map((k) => TM.Path.sample(k, W, H))), pm, p);
+      if (!keys.length) {
+        // A still path is the same for every echo/blur pass of this frame, so sampling
+        // it (which stringifies the definition for its cache key) once per frame is
+        // enough. The token guards against a path edited in place between renders.
+        const m = this._pathMemo;
+        if (m && m.layer === layer && m.W === W && m.H === H) return m.path;
+        const a = TM.Path.sample(layer.path, W, H);
+        this._pathMemo = { layer, W, H, path: a };
+        return a;
+      }
+      return TM.Path.sequence([TM.Path.sample(layer.path, W, H)].concat(keys.map((k) => TM.Path.sample(k, W, H))), pm, p);
     }
 
     /**
@@ -490,16 +515,32 @@
 
     _setupFor(layer, preset, f) {
       if (!preset.setup) return null;
+      const hit = this._setup.get(layer.id);
+      // Within one render() call the key inputs cannot change (presets must not mutate
+      // the scene), so echo/blur passes reuse the setup without re-stringifying the
+      // layer. Across renders the token differs and the key is recomputed as before.
+      // (The token check runs before the stringify: that is the whole saving.)
+      if (hit && hit.token === this._setupToken && hit.preset === preset.id) return hit.value;
       const sc = this.scene;
       const key = JSON.stringify([layer.text, layer.font, layer.type, layer.params, layer.path, layer.stroke, layer.fx, layer.fill, layer.anchor, layer.time, sc.bg, sc.duration, f.W, f.H, f.seed, TM.fonts.version()]);
-      const hit = this._setup.get(layer.id);
-      if (hit && hit.key === key && hit.preset === preset.id) return hit.value;
+      if (hit && hit.key === key && hit.preset === preset.id) {
+        hit.token = this._setupToken;
+        return hit.value;
+      }
       const value = preset.setup(f);
-      this._setup.set(layer.id, { key, preset: preset.id, value });
+      this._setup.set(layer.id, { key, preset: preset.id, value, token: this._setupToken });
       return value;
     }
 
     // ── pipeline ──
+    /**
+     * Photosensitivity note (round-3 bug 9): this renderer deliberately does NOT clamp
+     * fast motion. A clamp here would silently change the art and break the determinism
+     * the flash check relies on (same scene + time must give the same pixels). The guard
+     * is TM.Safety.flashes (export group, not loaded in embeds): the studio and export
+     * run it before an export and warn above Renderer.FLASH_LIMIT flashes/s. Fast presets
+     * at short loop durations can still exceed it — see docs/benchmark/round-4/rendering-notes.md.
+     */
     render(t) {
       const scene = this.scene;
       if (!scene) return;
@@ -509,6 +550,9 @@
       // True after a render whose preview caps (blur samples, extrude steps) cut quality, so the
       // studio can label the stage as a draft; exports never set it.
       this.simplified = false;
+      // Per-frame memo token for _setupFor / _pathFor (see those methods).
+      this._setupToken = (this._setupToken | 0) + 1;
+      this._pathMemo = null;
       const ctx = this.ctx;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalAlpha = 1;
@@ -711,57 +755,109 @@
     _renderLayer(layer, index, t, W, H, target = this.ctx) {
       const preset = TM.getPreset(layer.preset);
       if (!preset) return;
-      const ctx = target, lctx = this._lctx;
-      lctx.setTransform(1, 0, 0, 1, 0, 0);
-      lctx.clearRect(0, 0, W, H);
-
-      const blur = layer.fx.blur;
-      // Preview keeps blur × echo passes bounded; exports always render at full quality.
-      const echoN = (layer.fx.echo.count | 0) + 1;
-      const samples = blur > 0 ? (this.quality === 'preview' ? clamp(Math.floor(16 / echoN), 2, 4) : Math.round(4 + blur * 12)) : 1;
-      if (blur > 0 && samples < Math.round(4 + blur * 12)) this.simplified = true;
-      this._passes = samples * echoN;
-      if (samples > 1) {
-        // Trailing motion blur: average `samples` sub-frames across the shutter interval.
-        const shutter = (blur * 4) / this.scene.fps;
-        const actx = this._actx, tctx = this._tctx;
-        actx.setTransform(1, 0, 0, 1, 0, 0);
-        actx.clearRect(0, 0, W, H);
-        actx.globalCompositeOperation = 'lighter';
-        actx.globalAlpha = 1 / samples;
-        for (let j = 0; j < samples; j++) {
-          tctx.setTransform(1, 0, 0, 1, 0, 0);
-          tctx.clearRect(0, 0, W, H);
-          this._drawPasses(tctx, layer, index, preset, t - (shutter * j) / (samples - 1), W, H);
-          actx.drawImage(this._tmp, 0, 0);
+      // Transform keyframes are pure in (layer, t), so compute them first: an invisible
+      // or degenerate transform skips the passes entirely (before, the passes were drawn
+      // into the layer buffer and then discarded).
+      const xf0 = this._transformAt(layer, t, W, H);
+      if (xf0 && (!(xf0.opacity > 0.001) || Math.abs(xf0.a * xf0.d - xf0.b * xf0.c) < 1e-9)) return;
+      // Transform-key scaling blur (round-3 F6): a key that scales the finished raster
+      // up used to upscale frame-sized pixels, softening edges ~× the scale. When a key
+      // scales up, render the layer into a supersampled buffer instead and divide the
+      // linear part of the composite transform back out (translation unchanged: buffer
+      // points are s× frame points, so M'·(s·x) = M·x needs M' = M/s with the same e, f).
+      // Shadow/glow distances and blur radii are computed from the supersampled unit,
+      // so they land with the same final size and softness as before. Mattes still work:
+      // the composite into a frame-sized matte buffer uses the same corrected transform.
+      // Limits: scale ≤ 1 is already a downscale (no loss) and is left alone; the factor
+      // caps at 2 and at 16 Mpx of buffer, so a 2160p layer still gains ~1.4×. Preset decor
+      // drawn in literal pixels (not relative to f.unit) thins by 1/s — the golden rule
+      // already forbids literal pixels, and every shipped preset sizes decor relatively.
+      // Gradient fills stay fixed in frame space: _gradient is keyed by buffer size and
+      // _paint anchors its pattern to the buffer transform, which the corrected composite
+      // then scales back down by exactly s.
+      let xf = xf0, saved = null, scale = 1;
+      if (xf0) {
+        const sc = Math.hypot(xf0.a, xf0.b);
+        if (sc > 1.05) {
+          let s = Math.min(sc, 2);
+          const MAXPX = 16000000;
+          if (W * s * H * s > MAXPX) s = Math.sqrt(MAXPX / (W * H));
+          if (s > 1.05) {
+            scale = s;
+            this._hiBuffers(Math.round(W * s), Math.round(H * s));
+            saved = { layer: this._layer, lctx: this._lctx, accum: this._accum, actx: this._actx, tmp: this._tmp, tctx: this._tctx };
+            this._layer = this._hiLayer;
+            this._lctx = this._hiLctx;
+            this._accum = this._hiAccum;
+            this._actx = this._hiActx;
+            this._tmp = this._hiTmp;
+            this._tctx = this._hiTctx;
+            xf = { a: xf0.a / s, b: xf0.b / s, c: xf0.c / s, d: xf0.d / s, e: xf0.e, f: xf0.f, opacity: xf0.opacity };
+          }
         }
-        actx.globalCompositeOperation = 'source-over';
-        actx.globalAlpha = 1;
-        lctx.drawImage(this._accum, 0, 0);
-      } else {
-        this._drawPasses(lctx, layer, index, preset, t, W, H);
       }
+      // Buffer-space size (frame size when not supersampling).
+      const W2 = Math.round(W * scale), H2 = Math.round(H * scale);
+      try {
+        const ctx = target, lctx = this._lctx;
+        lctx.setTransform(1, 0, 0, 1, 0, 0);
+        lctx.clearRect(0, 0, W2, H2);
 
-      const unit = Math.min(W, H);
-      const fx = layer.fx;
-      // Transform keyframes move the finished layer (with its shadow and glow) as one piece.
-      const xf = this._transformAt(layer, t, W, H);
-      if (xf) {
-        if (!(xf.opacity > 0.001) || Math.abs(xf.a * xf.d - xf.b * xf.c) < 1e-9) return;
-        ctx.save();
-        ctx.setTransform(xf.a, xf.b, xf.c, xf.d, xf.e, xf.f);
-        ctx.globalAlpha = xf.opacity;
+        const blur = layer.fx.blur;
+        // Preview keeps blur × echo passes bounded; exports always render at full quality.
+        const echoN = (layer.fx.echo.count | 0) + 1;
+        const samples = blur > 0 ? (this.quality === 'preview' ? clamp(Math.floor(16 / echoN), 2, 4) : Math.round(4 + blur * 12)) : 1;
+        if (blur > 0 && samples < Math.round(4 + blur * 12)) this.simplified = true;
+        this._passes = samples * echoN;
+        if (samples > 1) {
+          // Trailing motion blur: average `samples` sub-frames across the shutter interval.
+          const shutter = (blur * 4) / this.scene.fps;
+          const actx = this._actx, tctx = this._tctx;
+          actx.setTransform(1, 0, 0, 1, 0, 0);
+          actx.clearRect(0, 0, W2, H2);
+          actx.globalCompositeOperation = 'lighter';
+          actx.globalAlpha = 1 / samples;
+          for (let j = 0; j < samples; j++) {
+            tctx.setTransform(1, 0, 0, 1, 0, 0);
+            tctx.clearRect(0, 0, W2, H2);
+            this._drawPasses(tctx, layer, index, preset, t - (shutter * j) / (samples - 1), W2, H2);
+            actx.drawImage(this._tmp, 0, 0);
+          }
+          actx.globalCompositeOperation = 'source-over';
+          actx.globalAlpha = 1;
+          lctx.drawImage(this._accum, 0, 0);
+        } else {
+          this._drawPasses(lctx, layer, index, preset, t, W2, H2);
+        }
+
+        const unit = Math.min(W2, H2);
+        const fx = layer.fx;
+        // Transform keyframes move the finished layer (with its shadow and glow) as one piece.
+        if (xf) {
+          ctx.save();
+          ctx.setTransform(xf.a, xf.b, xf.c, xf.d, xf.e, xf.f);
+          ctx.globalAlpha = xf.opacity;
+        }
+        if (fx.shadow.amount > 0) {
+          const a = fx.shadow.angle * DEG, dist = fx.shadow.distance * unit;
+          this._softPass(ctx, TM.color.rgba(fx.shadow.color, 0.25 + 0.75 * fx.shadow.amount), Math.max(1, fx.shadow.amount * unit * 0.035), Math.cos(a) * dist, Math.sin(a) * dist);
+        }
+        if (fx.glow.amount > 0) {
+          const passes = fx.glow.amount > 0.5 ? 2 : 1;
+          for (let k = 0; k < passes; k++) this._softPass(ctx, fx.glow.color, unit * (0.012 + fx.glow.amount * 0.05) * (k + 1), 0, 0);
+        }
+        ctx.drawImage(this._layer, 0, 0);
+        if (xf) ctx.restore();
+      } finally {
+        if (saved) {
+          this._layer = saved.layer;
+          this._lctx = saved.lctx;
+          this._accum = saved.accum;
+          this._actx = saved.actx;
+          this._tmp = saved.tmp;
+          this._tctx = saved.tctx;
+        }
       }
-      if (fx.shadow.amount > 0) {
-        const a = fx.shadow.angle * DEG, dist = fx.shadow.distance * unit;
-        this._softPass(ctx, TM.color.rgba(fx.shadow.color, 0.25 + 0.75 * fx.shadow.amount), Math.max(1, fx.shadow.amount * unit * 0.035), Math.cos(a) * dist, Math.sin(a) * dist);
-      }
-      if (fx.glow.amount > 0) {
-        const passes = fx.glow.amount > 0.5 ? 2 : 1;
-        for (let k = 0; k < passes; k++) this._softPass(ctx, fx.glow.color, unit * (0.012 + fx.glow.amount * 0.05) * (k + 1), 0, 0);
-      }
-      ctx.drawImage(this._layer, 0, 0);
-      if (xf) ctx.restore();
     }
 
     /**
@@ -895,6 +991,9 @@
 
   TM.Renderer = Renderer;
   TM.Frame = Frame;
+  // Flashes/s above which the studio/export must warn (WCAG 2.3.1, TM.Safety.LIMIT).
+  // The renderer itself does not enforce it — see the note on render().
+  Renderer.FLASH_LIMIT = 3;
   Renderer.familyFor = familyFor;
   Renderer.typeset = typeset;
   Renderer.wrapFor = wrapFor;
